@@ -53,6 +53,21 @@ jobs:
           npm ci
           npm install --global eas-cli
 
+      # Self-healing: ensure the backend has the release-management key that
+      # protects POST /mobile/releases. Idempotent upsert via Railway API.
+      - name: Ensure release key exists on Railway
+        run: |
+          curl -fsS -X POST https://backboard.railway.com/graphql/v2 \
+            -H "Project-Access-Token: ${{ secrets.RAILWAY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d @- <<'EOF'
+          {"query":"mutation($input: VariableCollectionUpsertInput!){ variableCollectionUpsert(input:$input) }",
+           "variables":{"input":{"projectId":"66e1faf2-e392-4a01-8359-0358fac9cc71",
+             "environmentId":"80956b9c-acd0-4aba-ba60-cd9bcd664ad3",
+             "serviceId":"636558e2-851b-439a-8546-c63842f2dc4f",
+             "variables":{"RELEASE_MANAGEMENT_API_KEY":"${{ secrets.RELEASE_MANAGEMENT_API_KEY }}"}}}}
+          EOF
+
       - name: Read current release metadata
         id: current
         run: |
