@@ -8,7 +8,7 @@ RUN npm ci
 COPY . .
 
 # Baked into the JS bundle at build time — public API base, never a secret.
-ARG VITE_API_URL=https://airos-backend-production.up.railway.app/api/v1
+ARG VITE_API_URL=https://employee-api-production-c0e3.up.railway.app/api/v1
 ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
