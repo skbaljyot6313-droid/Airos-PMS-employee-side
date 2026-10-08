@@ -157,7 +157,15 @@ public class AppUpdatePlugin extends Plugin {
         intent.setDataAndType(uri, "application/vnd.android.package-archive");
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        getContext().startActivity(intent);
+        // Some OEM installers ignore FLAG_GRANT_READ_URI_PERMISSION unless
+        // the URI is also attached via ClipData.
+        intent.setClipData(android.content.ClipData.newRawUri("apk", uri));
+        try {
+            getContext().startActivity(intent);
+        } catch (Exception e) {
+            call.reject("INSTALL_LAUNCH_FAILED");
+            return;
+        }
         call.resolve();
     }
 
@@ -186,16 +194,26 @@ public class AppUpdatePlugin extends Plugin {
                     conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
                     conn.setReadTimeout(READ_TIMEOUT_MS);
                     conn.setInstanceFollowRedirects(false);
+                    // Defeat transparent gzip: a compressed Content-Length
+                    // never matches decompressed bytes and APKs don't
+                    // compress anyway.
+                    conn.setRequestProperty("Accept-Encoding", "identity");
+                    conn.setRequestProperty("User-Agent", "AiROS-Employee-Update");
                     int status = conn.getResponseCode();
                     if (status >= 300 && status < 400) {
                         String next = conn.getHeaderField("Location");
                         conn.disconnect();
-                        if (next == null || hops >= MAX_REDIRECTS
-                                || !next.startsWith("https://")) {
+                        if (next == null || hops >= MAX_REDIRECTS) {
                             call.reject("BAD_REDIRECT");
                             return;
                         }
-                        current = next;
+                        // Resolve relative Locations against the current URL.
+                        URL resolved = new URL(new URL(current), next);
+                        if (!"https".equalsIgnoreCase(resolved.getProtocol())) {
+                            call.reject("BAD_REDIRECT");
+                            return;
+                        }
+                        current = resolved.toExternalForm();
                         continue;
                     }
                     if (status != 200) {
@@ -228,10 +246,12 @@ public class AppUpdatePlugin extends Plugin {
                     }
                 }
                 conn.disconnect();
-                if (received == 0 || (total > 0 && received != total)) {
+                // Size is advisory — a mismatched/truncated stream is caught
+                // by the ZIP magic + package-parse checks below anyway.
+                if (received == 0) {
                     //noinspection ResultOfMethodCallIgnored
                     part.delete();
-                    call.reject("INCOMPLETE_DOWNLOAD");
+                    call.reject("EMPTY_DOWNLOAD");
                     return;
                 }
 

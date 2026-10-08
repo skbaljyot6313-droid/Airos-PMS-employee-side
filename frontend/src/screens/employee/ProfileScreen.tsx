@@ -11,6 +11,7 @@ import {
   InstalledInfo,
 } from '../../services/updateService';
 import { NativeUpdate, PendingApk } from '../../services/updateInstaller';
+import { Capacitor } from '@capacitor/core';
 import {
   User,
   Phone,
@@ -252,6 +253,12 @@ export const ProfileScreen: React.FC = () => {
                 <span className="text-[#8D999C]">Latest code</span>
                 <span className="font-medium text-[#20292C]">
                   {getUpdateState().info?.latest_version_code ?? '—'}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Update plugin</span>
+                <span className="font-medium text-[#20292C]">
+                  {Capacitor.isPluginAvailable('AirosUpdate') ? 'available' : 'NOT AVAILABLE'}
                 </span>
               </div>
               <div className="py-2 flex justify-between">
