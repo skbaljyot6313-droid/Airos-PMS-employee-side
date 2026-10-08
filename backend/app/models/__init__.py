@@ -55,3 +55,4 @@ from app.models.notifications import (  # noqa: E402, F401
     LocationEvent,
     Notification,
 )
+from app.models.mobile_release import MobileRelease  # noqa: E402, F401

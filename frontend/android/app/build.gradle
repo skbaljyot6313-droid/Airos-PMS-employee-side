@@ -11,6 +11,16 @@ if (keystorePropertiesFile.exists()) {
     logger.warn("keystore.properties missing — release builds will be unsigned")
 }
 
+// Single authoritative version source: frontend/app.json
+//   expo.version            -> versionName
+//   expo.android.versionCode -> versionCode (monotonically increasing)
+// The release workflow (release-android.yml) bumps app.json; Gradle and
+// the update-check flow both read from it — no second version source.
+def appJson = new groovy.json.JsonSlurper()
+        .parse(rootProject.file("../app.json"))
+def appVersionName = appJson.expo.version
+def appVersionCode = appJson.expo.android.versionCode as Integer
+
 android {
     namespace "com.airos.staff"
     compileSdk rootProject.ext.compileSdkVersion
@@ -18,8 +28,8 @@ android {
         applicationId "com.theairco.airos.employee"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0.0"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

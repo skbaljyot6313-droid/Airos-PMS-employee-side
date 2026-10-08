@@ -1,0 +1,118 @@
+name: Release Android APK
+
+# Production mobile release pipeline:
+#   bump app.json (single version source) → commit → EAS APK build →
+#   register the release in the backend (POST /mobile/releases).
+# Release metadata is updated ONLY after the APK artifact exists — a failed
+# build never changes what employees see as the latest version.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (X.Y.Z), e.g. 1.0.1"
+        required: true
+      release_notes:
+        description: "Release notes shown in the update dialog"
+        required: false
+        default: "Bug fixes and performance improvements."
+      minimum_version:
+        description: "Minimum supported version (blank = keep current minimum)"
+        required: false
+        default: ""
+      minimum_version_code:
+        description: "Minimum supported versionCode (blank = keep current)"
+        required: false
+        default: ""
+      force_update:
+        description: "Force update for all installs below this release"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      API_BASE: https://employee-api-production-c0e3.up.railway.app/api/v1
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      RELEASE_KEY: ${{ secrets.RELEASE_MANAGEMENT_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies + EAS CLI
+        run: |
+          npm ci
+          npm install --global eas-cli
+
+      - name: Read current release metadata
+        id: current
+        run: |
+          set -e
+          BODY=$(curl -fsS "$API_BASE/mobile/version?platform=android" || echo '{}')
+          echo "$BODY" | jq -r '
+            "latest_code=\(.latest_version_code // 0)",
+            "min_version=\(.minimum_version // "")",
+            "min_code=\(.minimum_version_code // 0)"
+          ' >> "$GITHUB_OUTPUT"
+
+      # app.json is the single authoritative version source — Gradle reads
+      # versionName/versionCode from it (android/app/build.gradle).
+      - name: Bump version in app.json
+        run: node scripts/bump-version.mjs "${{ inputs.version }}" "${{ steps.current.outputs.latest_code }}"
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app.json
+          git commit -m "chore(release): bump android to ${{ inputs.version }} [skip ci]"
+          git push
+
+      - name: Build production APK on EAS
+        id: eas
+        run: |
+          eas build --platform android --profile production --non-interactive 2>&1 | tee /tmp/eas-build.out
+          BUILD_ID=$(grep -oE 'builds/[0-9a-f-]{36}' /tmp/eas-build.out | head -1 | cut -d/ -f2)
+          test -n "$BUILD_ID"
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve APK artifact URL
+        id: artifact
+        run: |
+          APK_URL=$(eas build:view "${{ steps.eas.outputs.build_id }}" --json | jq -r '.artifacts.buildUrl // empty')
+          test -n "$APK_URL"
+          echo "apk_url=$APK_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release metadata
+        run: |
+          MIN_VERSION="${{ inputs.minimum_version }}"
+          MIN_CODE="${{ inputs.minimum_version_code }}"
+          [ -z "$MIN_VERSION" ] && MIN_VERSION="${{ steps.current.outputs.min_version }}"
+          [ -z "$MIN_VERSION" ] && MIN_VERSION="${{ inputs.version }}"
+          [ -z "$MIN_CODE" ] && MIN_CODE="${{ steps.current.outputs.min_code }}"
+          [ -z "$MIN_CODE" ] || [ "$MIN_CODE" = "0" ] && MIN_CODE=$(jq -r '.expo.android.versionCode' app.json)
+          NEW_CODE=$(jq -r '.expo.android.versionCode' app.json)
+          jq -n \
+            --arg v "${{ inputs.version }}" \
+            --argjson c "$NEW_CODE" \
+            --arg mv "$MIN_VERSION" \
+            --argjson mc "$MIN_CODE" \
+            --arg url "${{ steps.artifact.outputs.apk_url }}" \
+            --arg notes "${{ inputs.release_notes }}" \
+            --argjson force "${{ inputs.force_update }}" \
+            '{platform:"android", version:$v, version_code:$c,
+              minimum_version:$mv, minimum_version_code:$mc,
+              download_url:$url, release_notes:$notes, force_update:$force}' \
+          | curl -fsS -X POST "$API_BASE/mobile/releases" \
+              -H "Authorization: Bearer $RELEASE_KEY" \
+              -H "Content-Type: application/json" \
+              -d @-

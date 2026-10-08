@@ -1,9 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import {
   startLocationTracking,
   stopLocationTracking,
 } from './services/locationTracker';
+import {
+  checkForUpdates,
+  getUpdateState,
+  subscribe,
+  UpdateState,
+} from './services/updateService';
+import { UpdateDialog } from './components/common/UpdateDialog';
 import { DeviceFrame } from './components/common/DeviceFrame';
 import { BottomNav, TabType } from './components/common/BottomNav';
 import { LoginScreen } from './screens/auth/LoginScreen';
@@ -151,11 +160,47 @@ const AppNavigator: React.FC = () => {
   );
 };
 
+/**
+ * Update checks: once after a session is established, then on every native
+ * app resume (throttled to 24h inside the service). A `required` state is
+ * never snoozable — the dialog covers the whole frame and stays mounted.
+ */
+const UpdateManager: React.FC = () => {
+  const { isAuthenticated } = useAuth();
+  const [update, setUpdate] = useState<UpdateState>(getUpdateState());
+  const [snoozed, setSnoozed] = useState(false);
+
+  useEffect(() => subscribe(setUpdate), []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setSnoozed(false);
+      void checkForUpdates(true);
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const sub = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) void checkForUpdates();
+    });
+    return () => {
+      sub.then((h) => h.remove());
+    };
+  }, []);
+
+  const visible =
+    update.kind === 'required' || (update.kind === 'optional' && !snoozed);
+  if (!visible) return null;
+  return <UpdateDialog state={update} onLater={() => setSnoozed(true)} />;
+};
+
 export default function App() {
   return (
     <AuthProvider>
       <DeviceFrame>
         <AppNavigator />
+        <UpdateManager />
       </DeviceFrame>
     </AuthProvider>
   );

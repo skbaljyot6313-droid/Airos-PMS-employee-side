@@ -64,6 +64,11 @@ class Settings(BaseSettings):
     # constant-time. Unset = the endpoint fails closed with a 503.
     LOCATION_SERVICE_API_KEY: str | None = None
 
+    # Release management — shared bearer key protecting POST
+    # /mobile/releases* (used by the CI release pipeline, NOT the
+    # employee app). Unset = those endpoints fail closed with a 503.
+    RELEASE_MANAGEMENT_API_KEY: str | None = None
+
     # Redis — cache / rate limiting / job queue. When unset the app degrades
     # gracefully: in-memory rate limiting, no cache, embedded scheduler.
     REDIS_URL: str | None = None
@@ -136,6 +141,7 @@ class Settings(BaseSettings):
         "SUPABASE_DB_NAME",
         "SUPABASE_DB_USER",
         "LOCATION_SERVICE_API_KEY",
+        "RELEASE_MANAGEMENT_API_KEY",
         mode="before",
     )
     @classmethod

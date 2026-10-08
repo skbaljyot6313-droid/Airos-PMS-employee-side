@@ -132,3 +132,33 @@ async def require_location_service(
         credentials.credentials, expected
     ):
         raise Unauthenticated()
+
+
+_release_key_warned = False
+
+
+async def require_release_service(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> None:
+    """Shared-key gate for release management (POST /mobile/releases*).
+
+    Same contract as require_location_service: a deployment pipeline or
+    operator holds RELEASE_MANAGEMENT_API_KEY — no JWT, no User, no DB
+    session on the auth path. Fails closed with 503 when unconfigured.
+    """
+    global _release_key_warned
+    expected = settings.RELEASE_MANAGEMENT_API_KEY
+    if not expected:
+        if not _release_key_warned:
+            logger.warning(
+                "RELEASE_MANAGEMENT_API_KEY is unset — release-management "
+                "endpoints are disabled (failing closed with 503)"
+            )
+            _release_key_warned = True
+        raise LiveLocationUnavailable(
+            "Release management API is not configured on this server."
+        )
+    if credentials is None or not secrets.compare_digest(
+        credentials.credentials, expected
+    ):
+        raise Unauthenticated()
