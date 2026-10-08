@@ -23,6 +23,10 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -42,6 +46,10 @@ public class AppUpdatePlugin extends Plugin {
     private static final int CONNECT_TIMEOUT_MS = 30000;
     private static final int READ_TIMEOUT_MS = 60000;
     private static final int MAX_REDIRECTS = 5;
+    /** The APK may only come from Expo's artifact hosts — the backend URL is
+     *  treated as untrusted input until it lands on one of these. */
+    private static final Set<String> TRUSTED_HOSTS = new HashSet<>(Arrays.asList(
+            "expo.dev", "eascdn.net", "storage.googleapis.com"));
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile boolean downloading = false;
@@ -55,6 +63,44 @@ public class AppUpdatePlugin extends Plugin {
 
     private SharedPreferences prefs() {
         return getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    private static boolean trustedHost(String urlStr) {
+        try {
+            String host = new URL(urlStr).getHost();
+            if (host == null) return false;
+            host = host.toLowerCase(Locale.US);
+            for (String h : TRUSTED_HOSTS) {
+                if (host.equals(h) || host.endsWith("." + h)) return true;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Our own installed versionCode — the downloaded APK must exceed it. */
+    private long installedCode() {
+        try {
+            PackageInfo info = getContext().getPackageManager()
+                    .getPackageInfo(getContext().getPackageName(), 0);
+            return PackageInfoCompat.getLongVersionCode(info);
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    /** Keep at most one pending update — wipe anything else in updates/. */
+    private void cleanStale() {
+        String keep = prefs().getString(KEY_PATH, null);
+        File[] files = updatesDir().listFiles();
+        if (files == null) return;
+        for (File f : files) {
+            if (keep == null || !f.getAbsolutePath().equals(keep)) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+        }
     }
 
     /** Parse an APK on disk; returns null when it isn't our package. */
@@ -149,6 +195,13 @@ public class AppUpdatePlugin extends Plugin {
             call.reject("INVALID_APK");
             return;
         }
+        long installed = installedCode();
+        if (installed > 0
+                && PackageInfoCompat.getLongVersionCode(info) <= installed) {
+            clearPending();
+            call.reject("NOT_AN_UPGRADE");
+            return;
+        }
         Uri uri = FileProvider.getUriForFile(
                 getContext(),
                 getContext().getPackageName() + ".fileprovider",
@@ -173,8 +226,8 @@ public class AppUpdatePlugin extends Plugin {
     public void downloadApk(PluginCall call) {
         String url = call.getString("url");
         int expectedCode = call.getInt("expectedVersionCode", -1);
-        if (url == null || !url.startsWith("https://")) {
-            call.reject("BAD_URL");
+        if (url == null || !url.startsWith("https://") || !trustedHost(url)) {
+            call.reject("UNTRUSTED_URL");
             return;
         }
         if (downloading) {
@@ -183,6 +236,7 @@ public class AppUpdatePlugin extends Plugin {
         }
         downloading = true;
         executor.execute(() -> {
+            cleanStale();
             File target = new File(updatesDir(), "airos-update-" + expectedCode + ".apk");
             File part = new File(updatesDir(), "airos-update.part");
             HttpURLConnection conn = null;
@@ -209,8 +263,9 @@ public class AppUpdatePlugin extends Plugin {
                         }
                         // Resolve relative Locations against the current URL.
                         URL resolved = new URL(new URL(current), next);
-                        if (!"https".equalsIgnoreCase(resolved.getProtocol())) {
-                            call.reject("BAD_REDIRECT");
+                        if (!"https".equalsIgnoreCase(resolved.getProtocol())
+                                || !trustedHost(resolved.toExternalForm())) {
+                            call.reject("UNTRUSTED_REDIRECT");
                             return;
                         }
                         current = resolved.toExternalForm();
@@ -282,6 +337,14 @@ public class AppUpdatePlugin extends Plugin {
                     //noinspection ResultOfMethodCallIgnored
                     target.delete();
                     call.reject("WRONG_VERSION_CODE");
+                    return;
+                }
+                // Downgrade guard — never install a build that isn't newer.
+                long installed = installedCode();
+                if (installed > 0 && code <= installed) {
+                    //noinspection ResultOfMethodCallIgnored
+                    target.delete();
+                    call.reject("NOT_AN_UPGRADE");
                     return;
                 }
                 savePending(target, info);

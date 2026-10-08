@@ -21,7 +21,10 @@ import { getMobileVersion, MobileVersionInfo } from '../api/mobile';
 import { NativeUpdate } from './updateInstaller';
 
 const LAST_CHECK_KEY = 'airos_update_last_check';
-const THROTTLE_MS = 24 * 60 * 60 * 1000;
+// Resume checks are throttled to every 4h; app-start and login checks are
+// always forced, so a freshly published release is discovered on the next
+// cold start regardless of when the last check ran.
+const THROTTLE_MS = 4 * 60 * 60 * 1000;
 
 export interface UpdateState {
   kind: 'none' | 'optional' | 'required';
@@ -125,11 +128,23 @@ function stampLastCheck(now = Date.now()): void {
   }
 }
 
+let checkInFlight: Promise<UpdateState> | null = null;
+
 /**
- * Run one update check. Safe to call from login/app-resume paths; resolves
- * silently on any failure. Pass force=true to bypass the 24h throttle.
+ * Run one update check. Safe to call from startup/login/app-resume paths;
+ * resolves silently on any failure. Pass force=true to bypass the throttle.
+ * Concurrent callers share a single in-flight request — startup + resume +
+ * manual checks can never produce parallel API calls.
  */
-export async function checkForUpdates(force = false): Promise<UpdateState> {
+export function checkForUpdates(force = false): Promise<UpdateState> {
+  if (checkInFlight) return checkInFlight;
+  checkInFlight = doCheck(force).finally(() => {
+    checkInFlight = null;
+  });
+  return checkInFlight;
+}
+
+async function doCheck(force: boolean): Promise<UpdateState> {
   if (!shouldCheckNow(force)) return state;
   try {
     const code = await installedVersionCode();

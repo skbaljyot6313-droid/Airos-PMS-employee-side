@@ -152,6 +152,17 @@ describe('checkForUpdates', () => {
     expect(getUpdateState().kind).toBe('required');
     expect(shouldCheckNow(false)).toBe(true);
   });
+
+  it('concurrent checks share a single in-flight request', async () => {
+    installed(2);
+    vi.mocked(getMobileVersion).mockResolvedValue(release());
+    await Promise.all([checkForUpdates(true), checkForUpdates(true), checkForUpdates(true)]);
+    expect(getMobileVersion).toHaveBeenCalledTimes(1);
+  });
+
+  it('installed newer than latest produces no update', () => {
+    expect(evaluateUpdate(4, release()).kind).toBe('none');
+  });
 });
 
 describe('download/install flow', () => {

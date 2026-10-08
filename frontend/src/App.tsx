@@ -178,11 +178,18 @@ const UpdateManager: React.FC = () => {
   useEffect(() => subscribe(setUpdate), []);
   useEffect(() => subscribeFlow(setFlow), []);
 
+  // Cold-start check — once per process, not gated on authentication.
+  // The version endpoint is public and a required update must gate even
+  // before login.
+  useEffect(() => {
+    void reconcilePending();
+    void checkForUpdates(true);
+  }, []);
+
   useEffect(() => {
     if (isAuthenticated) {
       setSnoozed(false);
-      void reconcilePending();
-      void checkForUpdates(true);
+      void checkForUpdates();
     }
   }, [isAuthenticated]);
 
