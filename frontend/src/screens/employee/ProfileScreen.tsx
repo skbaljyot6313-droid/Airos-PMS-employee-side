@@ -265,6 +265,12 @@ export const ProfileScreen: React.FC = () => {
                 </span>
               </div>
               <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Download error</span>
+                <span className="font-medium text-[#20292C]">
+                  {getUpdateFlow().error ?? '—'}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
                 <span className="text-[#8D999C]">Pending APK</span>
                 <span className="font-medium text-[#20292C]">
                   {pending?.exists ? `v${pending.versionCode} (${pending.versionName})` : 'none'}

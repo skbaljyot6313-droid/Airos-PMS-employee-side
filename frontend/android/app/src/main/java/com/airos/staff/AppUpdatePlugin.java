@@ -280,7 +280,7 @@ public class AppUpdatePlugin extends Plugin {
             } catch (Exception e) {
                 //noinspection ResultOfMethodCallIgnored
                 part.delete();
-                call.reject("DOWNLOAD_ERROR");
+                call.reject("DOWNLOAD_ERROR:" + e.getClass().getSimpleName());
             } finally {
                 if (conn != null) conn.disconnect();
                 downloading = false;
