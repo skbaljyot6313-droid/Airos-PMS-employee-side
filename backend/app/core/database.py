@@ -7,6 +7,7 @@ the `get_db` dependency (see app/dependencies/db.py).
 
 import asyncio
 import socket
+import uuid
 import ssl as ssl_module
 from collections.abc import AsyncGenerator
 
@@ -45,7 +46,16 @@ def _pgbouncer_connect_args() -> dict:
     try:
         parsed = make_url(settings.database_url)
         if parsed.host and "pooler" in parsed.host:
-            return {"statement_cache_size": 0}
+            # Dialect-level args (not raw asyncpg kwargs): disable the
+            # prepared-statement cache AND give every statement a unique
+            # name — pooler transaction mode shares server connections, so
+            # default "__asyncpg_stmt_N__" names collide across clients.
+            return {
+                "prepared_statement_cache_size": 0,
+                "prepared_statement_name_func": (
+                    lambda: f"__asyncpg_stmt_{uuid.uuid4().hex}__"
+                ),
+            }
     except Exception:
         pass
     return {}

@@ -6,6 +6,7 @@ alembic.ini, so credentials stay out of version control.
 """
 
 import asyncio
+import uuid
 from logging.config import fileConfig
 
 from alembic import context
@@ -24,12 +25,21 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+# SQLAlchemy asyncpg dialect args for pgbouncer transaction pooling:
+# unique statement names prevent "__asyncpg_stmt_1__ already exists"
+# collisions on shared pooler server connections.
+_PGBOUNCER_ARGS = {
+    "prepared_statement_cache_size": 0,
+    "prepared_statement_name_func": lambda: f"__asyncpg_stmt_{uuid.uuid4().hex}__",
+}
+
+
 def _pgbouncer_connect_args() -> dict:
     """Disable asyncpg prepared-statement cache when using a pgbouncer pooler."""
     try:
         parsed = make_url(settings.database_url)
         if parsed.host and "pooler" in parsed.host:
-            return {"prepared_statement_cache_size": 0}
+            return _PGBOUNCER_ARGS
     except Exception:
         pass
     return {}
