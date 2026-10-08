@@ -347,14 +347,37 @@ export interface LocationUpdateWire {
   accuracy: number;
   speed?: number;
   heading?: number;
-  timestamp: number; // device epoch seconds
+  timestamp?: number; // device epoch seconds — legacy field
+  captured_at?: string; // ISO-8601 UTC — preferred
+  speed_mps?: number;
+  bearing_deg?: number;
+  altitude_m?: number;
+  tracking_session_id?: string;
+  sequence_number?: number;
+  source?: string;
+}
+
+export interface LocationStartWire {
+  tracking_session_id: string;
+  started_at: string;
+  tracking_interval_seconds: number;
+}
+
+export interface LocationStopWire {
+  stopped: boolean;
+  stopped_at: string;
 }
 
 /** POST /location/current response — small ack, no echoed coordinates. */
 export interface LocationAckWire {
+  accepted: boolean;
   recorded: boolean;
+  received_at: string;
+  location_timestamp: string;
   server_timestamp: number;
   expires_in: number;
+  duplicate: boolean;
+  quality: 'valid' | 'low_accuracy' | 'delayed' | 'suspicious_speed';
 }
 
 /** GET /location/current — the caller's OWN latest fix only.
@@ -368,7 +391,13 @@ export interface LiveLocationWire {
   accuracy: number | null;
   speed: number | null;
   heading: number | null;
+  altitude_m?: number | null;
   device_timestamp: number | null;
   server_timestamp: number | null;
+  captured_at?: string | null;
+  received_at?: string | null;
+  tracking_session_id?: string | null;
+  sequence_number?: number | null;
+  quality?: string | null;
   age_seconds: number | null;
 }

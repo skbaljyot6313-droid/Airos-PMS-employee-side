@@ -64,6 +64,33 @@ class Settings(BaseSettings):
     # constant-time. Unset = the endpoint fails closed with a 503.
     LOCATION_SERVICE_API_KEY: str | None = None
 
+    # Location tracking — current fix + history live in Redis only;
+    # PostgreSQL holds session metadata, never raw GPS points.
+    # Seconds a "live" position stays fresh before it self-evicts.
+    LOCATION_CURRENT_TTL_SECONDS: int = 120
+    # Days a daily history partition (ZSET + GEO) is retained.
+    LOCATION_HISTORY_RETENTION_DAYS: int = 90
+    # Oldest capture age accepted for delayed/offline points.
+    LOCATION_MAX_EVENT_AGE_SECONDS: int = 86400
+    # Device-clock skew tolerated into the future.
+    LOCATION_MAX_FUTURE_SKEW_SECONDS: int = 300
+    # History API caps — max time range and max returned points
+    # (larger result sets are stride-downsampled, never truncated mid-route).
+    LOCATION_MAX_HISTORY_POINTS: int = 10_000
+    LOCATION_MAX_HISTORY_RANGE_DAYS: int = 31
+    # Per-employee ingestion limit — tolerates normal 15–30 s tracking
+    # plus reconnect burst queues; rejects floods.
+    LOCATION_RATE_LIMIT_PER_MINUTE: int = 120
+    # Dedup window for (employee, session, sequence) event ids.
+    LOCATION_EVENT_DEDUP_TTL_SECONDS: int = 86400
+    # A session key lives this long without refresh (each accepted fix
+    # re-arms it); app restarts inside the window resume the session.
+    LOCATION_SESSION_TTL_SECONDS: int = 43200
+    # Quality thresholds — flagged, never dropped (GPS noise is data too).
+    LOCATION_LOW_ACCURACY_M: float = 500.0
+    # Implied speed above this (m/s ≈ 288 km/h) → suspicious_speed flag.
+    LOCATION_MAX_SPEED_MPS: float = 80.0
+
     # Release management — shared bearer key protecting POST
     # /mobile/releases* (used by the CI release pipeline, NOT the
     # employee app). Unset = those endpoints fail closed with a 503.

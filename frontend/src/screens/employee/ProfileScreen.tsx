@@ -11,6 +11,10 @@ import {
   InstalledInfo,
 } from '../../services/updateService';
 import { NativeUpdate, PendingApk } from '../../services/updateInstaller';
+import {
+  NativeLocation,
+  NativeTrackerState,
+} from '../../services/nativeLocation';
 import { Capacitor } from '@capacitor/core';
 import {
   User,
@@ -47,11 +51,13 @@ export const ProfileScreen: React.FC = () => {
   const UPDATE_DEBUG = import.meta.env.VITE_UPDATE_DEBUG === 'true';
   const [installed, setInstalled] = useState<InstalledInfo | null>(null);
   const [pending, setPending] = useState<PendingApk | null>(null);
+  const [tracker, setTracker] = useState<NativeTrackerState | null>(null);
   const [diagTick, setDiagTick] = useState(0);
   useEffect(() => {
     if (!UPDATE_DEBUG) return;
     void installedInfo().then(setInstalled);
     void NativeUpdate.getPendingApk().then(setPending).catch(() => setPending(null));
+    void NativeLocation.getState().then(setTracker).catch(() => setTracker(null));
   }, [UPDATE_DEBUG, diagTick]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -286,6 +292,44 @@ export const ProfileScreen: React.FC = () => {
               <div className="py-2 flex justify-between">
                 <span className="text-[#8D999C]">Last check result</span>
                 <span className="font-medium text-[#20292C]">{getUpdateDiag()}</span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Tracker plugin</span>
+                <span className="font-medium text-[#20292C]">
+                  {Capacitor.isPluginAvailable('AirosLocation') ? 'available' : 'NOT AVAILABLE'}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Tracking service</span>
+                <span className="font-medium text-[#20292C]">
+                  {tracker === null ? '—' : tracker.running ? 'running' : 'stopped'}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Track session</span>
+                <span className="font-medium text-[#20292C] truncate max-w-[55%]">
+                  {tracker?.sessionId ?? '—'}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Fixes sent / queued</span>
+                <span className="font-medium text-[#20292C]">
+                  {tracker === null ? '—' : `${tracker.sequenceNumber} / ${tracker.queuedCount}`}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Last fix uploaded</span>
+                <span className="font-medium text-[#20292C]">
+                  {tracker?.lastFixAt
+                    ? new Date(tracker.lastFixAt).toLocaleTimeString()
+                    : '—'}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Tracker error</span>
+                <span className="font-medium text-[#20292C]">
+                  {tracker?.lastError ?? '—'}
+                </span>
               </div>
             </div>
             <SecondaryButton

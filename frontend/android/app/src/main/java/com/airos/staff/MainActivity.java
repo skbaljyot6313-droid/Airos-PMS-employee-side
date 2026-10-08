@@ -9,5 +9,6 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         registerPlugin(AppUpdatePlugin.class);
+        registerPlugin(LocationTrackerPlugin.class);
     }
 }

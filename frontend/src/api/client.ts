@@ -17,6 +17,10 @@ import { ApiError, ApiFieldError } from '../types';
 const ACCESS_KEY = 'airos_staff_access_token';
 const REFRESH_KEY = 'airos_staff_refresh_token';
 
+/** Dispatched after a successful access-token refresh — the native
+ *  location service listens so its upload auth stays fresh. */
+export const TOKEN_REFRESHED_EVENT = 'airos_token_refreshed';
+
 export const secureStorage = {
   getToken: (): string | null => {
     try {
@@ -153,6 +157,9 @@ async function refreshAccessToken(): Promise<boolean> {
     const data = (await res.json()) as { access_token?: string };
     if (!data?.access_token) return false;
     secureStorage.setAccessToken(data.access_token);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(TOKEN_REFRESHED_EVENT));
+    }
     return true;
   } catch {
     return false;

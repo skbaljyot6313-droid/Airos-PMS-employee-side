@@ -1,34 +1,60 @@
 /**
- * Live location tracker — foreground-only, ~10 s cadence.
+ * Location tracking orchestrator — the JS half of background tracking.
  *
- * Runs while an employee session is authenticated (wired in App.tsx).
- * Native-only: skipped entirely on web dev so the browser never prompts.
- * No background tracking, no wake locks — the OS may suspend the loop
- * when the app is backgrounded; the next foreground tick resumes it.
+ * Capture/upload live ENTIRELY in the native LocationTrackingService
+ * (foreground service + Fused Location Provider + on-disk retry queue).
+ * This module only:
+ *   1. mints/stops backend tracking sessions (/location/start|stop),
+ *   2. hands the native service its upload config (URL + tokens),
+ *   3. adopts an already-running service after app restart,
+ *   4. keeps native credentials fresh after token refresh.
  *
- * Failure model — every failure skips the cycle, never breaks the app:
- *   permission denied   → request once at first start, log once, stop
- *   GPS unavailable     → getCurrentPosition rejects → skip cycle
- *   network/API failure → postCurrentLocation throws → skip cycle
+ * No setInterval, no WebView-dependent capture — the OS owns the loop.
+ * Web dev is a no-op (plugin absent). Every failure degrades silently:
+ * tracking is observability, it must never break the app.
  */
 
 import { Capacitor } from '@capacitor/core';
 import { Geolocation } from '@capacitor/geolocation';
-import { postCurrentLocation } from '../api/location';
+import {
+  startTrackingSession,
+  stopTrackingSession,
+} from '../api/location';
+import {
+  API_BASE,
+  secureStorage,
+  TOKEN_REFRESHED_EVENT,
+} from '../api/client';
+import { NativeLocation } from './nativeLocation';
 
-export const LOCATION_INTERVAL_MS = 10_000;
-const POSITION_TIMEOUT_MS = 8_000;
+/** localStorage key for the active backend session — lets a relaunched
+ *  app adopt the service's session instead of minting a duplicate. */
+const SESSION_KEY = 'airos_tracking_session';
 
-let running = false;
-let timer: ReturnType<typeof setTimeout> | null = null;
-/** True once the OS permission prompt has been shown this app run —
- *  denial must never re-prompt on later start() calls. */
+let starting = false;
 let permissionAsked = false;
 let denialLogged = false;
+let listenersArmed = false;
 
-/** Ensure fine-location permission. Requests once per app run; after a
- *  denial, later calls re-CHECK only (a grant via system settings is
- *  picked up without another prompt). */
+function storedSession(): string | null {
+  try {
+    return localStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredSession(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(SESSION_KEY, id);
+    else localStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* storage unavailable — tracking still runs natively */
+  }
+}
+
+/** Fine-location permission — requested once per app run; later calls
+ *  only re-check (a grant via system settings is picked up). */
 async function ensurePermission(): Promise<boolean> {
   try {
     let status = await Geolocation.checkPermissions();
@@ -44,11 +70,10 @@ async function ensurePermission(): Promise<boolean> {
     }
     if (!denialLogged) {
       denialLogged = true;
-      console.warn('Location permission denied — live tracking disabled');
+      console.warn('Location permission denied — tracking disabled');
     }
     return false;
   } catch (err) {
-    // System location services off / plugin missing — same degrade path.
     if (!denialLogged) {
       denialLogged = true;
       console.warn('Location permission check failed:', err);
@@ -57,60 +82,93 @@ async function ensurePermission(): Promise<boolean> {
   }
 }
 
-/** One fix → one POST. All errors are swallowed: a bad cycle is a skip,
- *  not a crash — the next scheduled tick retries on its own. */
-async function tick(): Promise<void> {
+/** Push current credentials to the service — it also self-refreshes on
+ *  401, but pushing fresh tokens after a WebView refresh avoids a wasted
+ *  request cycle. */
+async function pushAuth(): Promise<void> {
+  const accessToken = secureStorage.getToken();
+  if (!accessToken) return;
   try {
-    const pos = await Geolocation.getCurrentPosition({
-      enableHighAccuracy: true,
-      timeout: POSITION_TIMEOUT_MS,
-    });
-    const c = pos.coords;
-    if (
-      !Number.isFinite(c.latitude) ||
-      !Number.isFinite(c.longitude) ||
-      !Number.isFinite(c.accuracy)
-    ) {
-      return; // malformed fix — nothing worth sending
-    }
-    await postCurrentLocation({
-      latitude: c.latitude,
-      longitude: c.longitude,
-      accuracy: c.accuracy,
-      ...(Number.isFinite(c.speed) ? { speed: c.speed as number } : {}),
-      ...(Number.isFinite(c.heading) ? { heading: c.heading as number } : {}),
-      timestamp: Math.floor((pos.timestamp || Date.now()) / 1000),
+    await NativeLocation.updateAuth({
+      accessToken,
+      ...(secureStorage.getRefreshToken()
+        ? { refreshToken: secureStorage.getRefreshToken()! }
+        : {}),
     });
   } catch {
-    // GPS timeout, revoked permission, offline, 503 (Redis down) — skip.
+    /* service absent/stopped — next start() carries tokens anyway */
   }
 }
 
-/** Self-scheduling loop — the NEXT tick is armed only after the current
- *  one settles, so a slow GPS fix can never overlap a later cycle. */
-async function loop(): Promise<void> {
-  await tick();
-  if (running) {
-    timer = setTimeout(() => void loop(), LOCATION_INTERVAL_MS);
-  }
+function armListeners(): void {
+  if (listenersArmed || typeof window === 'undefined') return;
+  listenersArmed = true;
+  window.addEventListener(TOKEN_REFRESHED_EVENT, () => {
+    void pushAuth();
+  });
 }
 
-/** Start the foreground loop. Idempotent; a no-op on web and a silent
- *  no-op when permission is denied. */
+/**
+ * Start tracking. Idempotent and restart-safe:
+ *  - service already running → adopt its session, done;
+ *  - otherwise → mint a backend session, configure, launch the service.
+ */
 export async function startLocationTracking(): Promise<void> {
-  if (running) return;
-  if (!Capacitor.isNativePlatform()) return; // native-only this phase
-  if (!(await ensurePermission())) return;
-  running = true;
-  void loop();
+  if (!Capacitor.isNativePlatform()) return;
+  if (starting) return;
+  starting = true;
+  try {
+    armListeners();
+    const accessToken = secureStorage.getToken();
+    if (!accessToken) return;
+
+    const state = await NativeLocation.getState();
+    if (state.running && state.sessionId) {
+      setStoredSession(state.sessionId);
+      void pushAuth(); // tokens may have rotated while the app was dead
+      return;
+    }
+    if (!(await ensurePermission())) return;
+
+    const { tracking_session_id, tracking_interval_seconds } =
+      await startTrackingSession();
+    await NativeLocation.start({
+      apiBase: API_BASE,
+      accessToken,
+      ...(secureStorage.getRefreshToken()
+        ? { refreshToken: secureStorage.getRefreshToken()! }
+        : {}),
+      sessionId: tracking_session_id,
+      intervalSeconds: tracking_interval_seconds,
+    });
+    setStoredSession(tracking_session_id);
+  } catch {
+    // Backend down / plugin missing — the app still works; the next
+    // reconcile (resume or auth change) retries.
+  } finally {
+    starting = false;
+  }
 }
 
-/** Stop the loop (logout / unmount). A tick already in flight finishes
- *  but is dropped by the running flag before scheduling continues. */
-export function stopLocationTracking(): void {
-  running = false;
-  if (timer) {
-    clearTimeout(timer);
-    timer = null;
+/**
+ * Stop tracking — service first (so no further fixes upload), then the
+ * backend session. Both best-effort: a dead network must not wedge logout.
+ */
+export async function stopLocationTracking(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await NativeLocation.stop();
+  } catch {
+    /* plugin absent or already stopped */
+  }
+  const sid = storedSession();
+  setStoredSession(null);
+  if (sid) {
+    try {
+      await stopTrackingSession(sid);
+    } catch {
+      // Server-side the marker TTL expires; the session row stays an
+      // accurate 'still open at last contact' record.
+    }
   }
 }

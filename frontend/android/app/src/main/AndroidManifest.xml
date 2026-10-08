@@ -34,14 +34,26 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Continuous work-shift tracking — keeps running after the UI
+             closes; the persistent notification is the disclosure. -->
+        <service
+            android:name=".LocationTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Live location — foreground tracking only; no background/service perms -->
+    <!-- Live location — while-in-use is enough: the service starts while
+         the app is foregrounded and runs on after the UI closes. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Android 13+ — the persistent tracking notification needs this. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- In-app APK updates — hands the downloaded package to Android's
          package installer; user still confirms the install. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

@@ -179,7 +179,7 @@ async def test_unset_key_fails_closed_503(api, no_service_key, fake_redis):
 async def test_empty_index_returns_empty_list(api, service_key, fake_redis):
     res = await api.get(ADMIN, headers=_key_auth())
     assert res.status_code == 200
-    assert res.json() == {"employees": []}
+    assert res.json() == {"locations": []}
 
 
 async def test_posted_fix_appears_with_exact_fields(
@@ -192,7 +192,7 @@ async def test_posted_fix_appears_with_exact_fields(
     )
     res = await api.get(ADMIN, headers=_key_auth())
     assert res.status_code == 200
-    employees = res.json()["employees"]
+    employees = res.json()["locations"]
     assert len(employees) == 1
     emp = employees[0]
     assert emp["employee_id"] == str(seed["employee"].id)
@@ -213,7 +213,7 @@ async def test_absent_optional_fields_are_null(
 ):
     await api.post(POST, json=_payload(), headers=_user_auth(seed["emp_user"]))
     res = await api.get(ADMIN, headers=_key_auth())
-    emp = res.json()["employees"][0]
+    emp = res.json()["locations"][0]
     assert emp["speed"] is None and emp["heading"] is None
 
 
@@ -223,7 +223,7 @@ async def test_expired_member_excluded_and_purged(
     stale = uuid.uuid4()
     await _seed_fix(fake_redis, stale, live=False)  # score in the past
     res = await api.get(ADMIN, headers=_key_auth())
-    assert res.json() == {"employees": []}
+    assert res.json() == {"locations": []}
     # The read purged the dead member — index stays small.
     assert await fake_redis.zcard(LIVE_INDEX_KEY) == 0
 
@@ -239,7 +239,7 @@ async def test_member_whose_hash_expired_is_skipped(
     )  # no hash written
     res = await api.get(ADMIN, headers=_key_auth())
     assert res.status_code == 200
-    assert res.json() == {"employees": []}
+    assert res.json() == {"locations": []}
 
 
 async def test_multiple_employees_listed(api, seed, service_key, fake_redis):
@@ -249,7 +249,7 @@ async def test_multiple_employees_listed(api, seed, service_key, fake_redis):
         POST, json=_payload(), headers=_user_auth(seed["emp_user"])
     )
     res = await api.get(ADMIN, headers=_key_auth())
-    employees = res.json()["employees"]
+    employees = res.json()["locations"]
     ids = {e["employee_id"] for e in employees}
     assert ids == {str(seed["employee"].id), str(other)}
 
@@ -263,7 +263,7 @@ async def test_dead_member_filtered_from_mixed_set(
         POST, json=_payload(), headers=_user_auth(seed["emp_user"])
     )
     res = await api.get(ADMIN, headers=_key_auth())
-    ids = {e["employee_id"] for e in res.json()["employees"]}
+    ids = {e["employee_id"] for e in res.json()["locations"]}
     assert ids == {str(seed["employee"].id)}
 
 
@@ -290,7 +290,7 @@ async def test_malformed_member_skipped_not_emitted(
     )
     res = await api.get(ADMIN, headers=_key_auth())
     assert res.status_code == 200
-    employees = res.json()["employees"]
+    employees = res.json()["locations"]
     assert [e["employee_id"] for e in employees] == [
         str(seed["employee"].id)
     ]
@@ -307,7 +307,7 @@ async def test_malformed_only_member_yields_empty_list(
     )
     res = await api.get(ADMIN, headers=_key_auth())
     assert res.status_code == 200
-    assert res.json() == {"employees": []}
+    assert res.json() == {"locations": []}
 
 
 # ---------------------------------------------------------------------------
@@ -340,16 +340,15 @@ async def test_503_when_redis_read_fails(api, service_key, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_admin_route_takes_no_db_session():
-    """Neither the route nor its service-auth guard may depend on get_db
-    — the read path is Redis-only (same trick as the POST test)."""
-    for fn in (get_live_locations, require_location_service):
-        params = inspect.signature(fn).parameters
-        assert "session" not in params
-        assert all(
-            getattr(p.default, "dependency", None) is not get_db
-            for p in params.values()
-        )
+def test_admin_route_db_session_is_filter_only():
+    """The route takes a session for optional property/zone scoping —
+    the service-auth guard itself must never depend on get_db."""
+    params = inspect.signature(require_location_service).parameters
+    assert "session" not in params
+    assert all(
+        getattr(p.default, "dependency", None) is not get_db
+        for p in params.values()
+    )
 
 
 async def test_admin_performs_no_db_writes(

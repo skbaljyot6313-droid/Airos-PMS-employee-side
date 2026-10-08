@@ -56,3 +56,4 @@ from app.models.notifications import (  # noqa: E402, F401
     Notification,
 )
 from app.models.mobile_release import MobileRelease  # noqa: E402, F401
+from app.models.location_session import LocationTrackingSession  # noqa: E402, F401

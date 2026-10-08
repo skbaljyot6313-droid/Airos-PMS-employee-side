@@ -44,12 +44,20 @@ const AppNavigator: React.FC = () => {
   const [todoCount, setTodoCount] = useState<number>(0);
   const [maintenanceCount, setMaintenanceCount] = useState<number>(0);
 
-  // Foreground-only live location loop — runs while an employee session
-  // is authenticated; native-only (web dev skips), never backgrounds.
+  // Background location tracking — the native foreground service owns
+  // capture/upload (survives UI close); this only mints the backend
+  // session and adopts a still-running service on resume/restart.
   useEffect(() => {
     if (!isAuthenticated) return;
     void startLocationTracking();
-    return () => stopLocationTracking();
+    if (!Capacitor.isNativePlatform()) return;
+    const sub = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive) void startLocationTracking(); // idempotent reconcile
+    });
+    return () => {
+      void stopLocationTracking();
+      sub.then((h) => h.remove());
+    };
   }, [isAuthenticated]);
 
   if (isLoading) {
