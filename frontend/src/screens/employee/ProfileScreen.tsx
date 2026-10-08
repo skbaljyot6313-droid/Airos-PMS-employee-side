@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { PrimaryButton, SecondaryButton, DangerButton } from '../../components/common/Buttons';
 import { errorMessage } from '../../api/client';
+import {
+  checkForUpdates,
+  getUpdateDiag,
+  getUpdateState,
+  installedInfo,
+  InstalledInfo,
+} from '../../services/updateService';
 import {
   User,
   Phone,
@@ -32,6 +39,14 @@ export const ProfileScreen: React.FC = () => {
 
   // Sign out confirmation dialog
   const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
+
+  // Diagnostics — only compiled in when built with VITE_UPDATE_DEBUG=true.
+  const UPDATE_DEBUG = import.meta.env.VITE_UPDATE_DEBUG === 'true';
+  const [installed, setInstalled] = useState<InstalledInfo | null>(null);
+  const [diagTick, setDiagTick] = useState(0);
+  useEffect(() => {
+    if (UPDATE_DEBUG) void installedInfo().then(setInstalled);
+  }, [UPDATE_DEBUG]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,6 +221,50 @@ export const ProfileScreen: React.FC = () => {
         <p className="text-center text-[11px] text-[#8D999C] pt-2">
           Update Test 1.0.2
         </p>
+
+        {/* Update diagnostics — VITE_UPDATE_DEBUG builds only. */}
+        {UPDATE_DEBUG && (
+          <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm space-y-2 text-xs">
+            <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+              App Information (Debug)
+            </h3>
+            <div className="divide-y divide-[#F0F2F1]">
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Current version</span>
+                <span className="font-medium text-[#20292C]">{installed?.version ?? '—'}</span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Version code</span>
+                <span className="font-medium text-[#20292C]">{installed?.versionCode ?? '—'}</span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Latest version</span>
+                <span className="font-medium text-[#20292C]">
+                  {getUpdateState().info?.latest_version ?? '—'}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Latest code</span>
+                <span className="font-medium text-[#20292C]">
+                  {getUpdateState().info?.latest_version_code ?? '—'}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Last check result</span>
+                <span className="font-medium text-[#20292C]">{getUpdateDiag()}</span>
+              </div>
+            </div>
+            <SecondaryButton
+              size="sm"
+              onClick={async () => {
+                await checkForUpdates(true);
+                setDiagTick((t) => t + 1);
+              }}
+            >
+              Check for updates
+            </SecondaryButton>
+          </div>
+        )}
       </div>
 
       {/* Edit Profile Modal */}
