@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "AiROS Staff",
+    "slug": "airos-employee",
+    "version": "1.0.0",
+    "extra": {
+      "eas": {
+        "projectId": "e5337b0d-b9e0-4291-8333-4498c6c4f02b"
+      }
+    }
+  }
+}
