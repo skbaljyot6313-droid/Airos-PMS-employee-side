@@ -42,4 +42,7 @@
     <!-- Live location — foreground tracking only; no background/service perms -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- In-app APK updates — hands the downloaded package to Android's
+         package installer; user still confirms the install. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>

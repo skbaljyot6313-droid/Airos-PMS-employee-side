@@ -18,6 +18,7 @@ import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 
 import { getMobileVersion, MobileVersionInfo } from '../api/mobile';
+import { NativeUpdate } from './updateInstaller';
 
 const LAST_CHECK_KEY = 'airos_update_last_check';
 const THROTTLE_MS = 24 * 60 * 60 * 1000;
@@ -173,4 +174,186 @@ export function resetUpdateState(): void {
   } catch {
     // ignore
   }
+}
+
+// ---------------------------------------------------------------------------
+// In-app download / install flow — the WebView never opens the APK URL;
+// the native AirosUpdate plugin downloads, validates, and hands the file to
+// Android's package installer.
+// ---------------------------------------------------------------------------
+
+export type UpdatePhase =
+  | 'idle'
+  | 'downloading'
+  | 'ready' // APK on disk, pending install
+  | 'installing'
+  | 'needs_permission'
+  | 'error';
+
+export interface UpdateFlow {
+  phase: UpdatePhase;
+  /** 0–100, or null when the server reports no content length. */
+  progress: number | null;
+  /** Safe failure category, never a raw server error. */
+  error: string | null;
+}
+
+const IDLE_FLOW: UpdateFlow = { phase: 'idle', progress: null, error: null };
+let flow: UpdateFlow = IDLE_FLOW;
+const flowListeners = new Set<(f: UpdateFlow) => void>();
+
+export function subscribeFlow(l: (f: UpdateFlow) => void): () => void {
+  flowListeners.add(l);
+  l(flow);
+  return () => flowListeners.delete(l);
+}
+
+const emitFlow = (f: UpdateFlow) => {
+  flow = f;
+  flowListeners.forEach((l) => l(flow));
+};
+export const getUpdateFlow = (): UpdateFlow => flow;
+
+let progressListenerBound = false;
+function bindProgressListener(): void {
+  if (progressListenerBound || !Capacitor.isNativePlatform()) return;
+  progressListenerBound = true;
+  void NativeUpdate.addListener('downloadProgress', (p) => {
+    emitFlow({
+      phase: 'downloading',
+      progress: p.percent >= 0 ? p.percent : null,
+      error: null,
+    });
+  });
+}
+
+/**
+ * Delete the pending APK once the installed build reaches/passes it — this
+ * is the loop-breaker: after Android swaps in the new version, the pending
+ * file is stale and must never trigger another install.
+ */
+export async function reconcilePending(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    const [installed, pending] = await Promise.all([
+      installedVersionCode(),
+      NativeUpdate.getPendingApk(),
+    ]);
+    if (pending.exists && installed !== null && installed >= (pending.versionCode ?? 0)) {
+      await NativeUpdate.deletePendingApk();
+      if (flow.phase !== 'idle') emitFlow(IDLE_FLOW);
+      return;
+    }
+    // A valid pending APK for a still-newer release survives.
+    if (
+      pending.exists &&
+      state.info &&
+      pending.versionCode === state.info.latest_version_code
+    ) {
+      // Returning from unknown-sources settings — resume into install.
+      if (flow.phase === 'needs_permission') {
+        await installPending();
+      } else if (flow.phase === 'installing' || flow.phase === 'ready') {
+        // The installer was dismissed without installing (a successful
+        // update kills this process, so reaching here means it didn't
+        // happen). Unstick the flow — Update now reuses the pending APK.
+        emitFlow(IDLE_FLOW);
+      }
+    }
+  } catch {
+    // plugin absent — nothing to reconcile
+  }
+}
+
+/** Skip-download check: reuse a valid pending APK for this release. */
+export async function pendingMatches(latestCode: number): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) return false;
+  try {
+    const pending = await NativeUpdate.getPendingApk();
+    return pending.exists === true && pending.versionCode === latestCode;
+  } catch {
+    return false;
+  }
+}
+
+async function installPending(): Promise<void> {
+  emitFlow({ phase: 'installing', progress: null, error: null });
+  try {
+    await NativeUpdate.installApk();
+    // Android's installer is now on top; if the user cancels it, the pending
+    // APK stays and 'Update now' retries install without re-downloading.
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    emitFlow({
+      phase: 'error',
+      progress: null,
+      error: msg.includes('NO_PENDING') ? 'APK_NOT_FOUND' : 'INSTALL_FAILED',
+    });
+  }
+}
+
+let flowBusy = false;
+
+/** "Update now" — download inside the app, then launch the installer once. */
+export async function beginUpdate(info: MobileVersionInfo): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  if (flowBusy) return;
+  if (flow.phase === 'downloading' || flow.phase === 'installing') return;
+  flowBusy = true;
+
+  bindProgressListener();
+  try {
+    if (await pendingMatches(info.latest_version_code)) {
+      await requestInstall();
+      return;
+    }
+    emitFlow({ phase: 'downloading', progress: 0, error: null });
+    await NativeUpdate.downloadApk({
+      url: info.download_url,
+      expectedVersionCode: info.latest_version_code,
+    });
+    emitFlow({ phase: 'ready', progress: 100, error: null });
+    await requestInstall();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '';
+    emitFlow({
+      phase: 'error',
+      progress: null,
+      error: msg || 'DOWNLOAD_FAILED',
+    });
+  } finally {
+    flowBusy = false;
+  }
+}
+
+async function requestInstall(): Promise<void> {
+  try {
+    const perm = await NativeUpdate.canRequestPackageInstalls();
+    if (!perm.allowed) {
+      emitFlow({ phase: 'needs_permission', progress: null, error: null });
+      return;
+    }
+    await installPending();
+  } catch {
+    await installPending();
+  }
+}
+
+/** "Allow installation" — opens the system unknown-sources settings page. */
+export async function openInstallPermissionSettings(): Promise<void> {
+  try {
+    await NativeUpdate.openInstallPermissionSettings();
+  } catch {
+    // plugin absent
+  }
+}
+
+/** Retry after a failed download — the pending file (if any) is reused. */
+export function retryUpdate(): void {
+  if (state.info) void beginUpdate(state.info);
+}
+
+/** Reset flow (used by tests and after logout). */
+export function resetUpdateFlow(): void {
+  flow = IDLE_FLOW;
 }

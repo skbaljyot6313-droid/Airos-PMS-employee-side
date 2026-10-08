@@ -18,13 +18,30 @@ vi.mock('@capacitor/app', () => ({
 vi.mock('../../api/mobile', () => ({
   getMobileVersion: vi.fn(),
 }));
+vi.mock('../updateInstaller', () => ({
+  NativeUpdate: {
+    downloadApk: vi.fn(),
+    getPendingApk: vi.fn(),
+    installApk: vi.fn(),
+    canRequestPackageInstalls: vi.fn(),
+    openInstallPermissionSettings: vi.fn(),
+    deletePendingApk: vi.fn(),
+    addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
+  },
+}));
 
 import { App } from '@capacitor/app';
 import { getMobileVersion, MobileVersionInfo } from '../../api/mobile';
+import { NativeUpdate } from '../updateInstaller';
 import {
+  beginUpdate,
   checkForUpdates,
   evaluateUpdate,
+  getUpdateFlow,
   getUpdateState,
+  pendingMatches,
+  reconcilePending,
+  resetUpdateFlow,
   resetUpdateState,
   shouldCheckNow,
 } from '../updateService';
@@ -49,8 +66,14 @@ const installed = (code: number) => {
 
 beforeEach(() => {
   resetUpdateState();
+  resetUpdateFlow();
   localStorage.clear();
   vi.clearAllMocks();
+  vi.mocked(NativeUpdate.getPendingApk).mockResolvedValue({ exists: false });
+  vi.mocked(NativeUpdate.canRequestPackageInstalls).mockResolvedValue({ allowed: true });
+  vi.mocked(NativeUpdate.downloadApk).mockResolvedValue({
+    versionCode: 3, versionName: '1.0.2', sizeBytes: 6_000_000,
+  });
 });
 
 describe('evaluateUpdate — versionCode is the authority', () => {
@@ -128,5 +151,85 @@ describe('checkForUpdates', () => {
     await checkForUpdates(true);
     expect(getUpdateState().kind).toBe('required');
     expect(shouldCheckNow(false)).toBe(true);
+  });
+});
+
+describe('download/install flow', () => {
+  const info = release({ latest_version: '1.0.2', latest_version_code: 3 });
+
+  it('downloads once then hands off to the installer', async () => {
+    await beginUpdate(info);
+    expect(NativeUpdate.downloadApk).toHaveBeenCalledTimes(1);
+    expect(NativeUpdate.downloadApk).toHaveBeenCalledWith({
+      url: info.download_url,
+      expectedVersionCode: info.latest_version_code,
+    });
+    expect(NativeUpdate.installApk).toHaveBeenCalledTimes(1);
+    expect(getUpdateFlow().phase).toBe('installing');
+  });
+
+  it('a second tap while downloading starts no second download', async () => {
+    let releaseDl!: () => void;
+    vi.mocked(NativeUpdate.downloadApk).mockImplementation(
+      () => new Promise((r) => { releaseDl = () => r({ versionCode: 3, versionName: '1.0.2', sizeBytes: 1 }); }),
+    );
+    const first = beginUpdate(info);
+    await vi.waitFor(() => expect(NativeUpdate.downloadApk).toHaveBeenCalledTimes(1));
+    const second = beginUpdate(info); // must be a no-op
+    releaseDl();
+    await Promise.all([first, second]);
+    expect(NativeUpdate.downloadApk).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses a pending APK for the same release instead of re-downloading', async () => {
+    vi.mocked(NativeUpdate.getPendingApk).mockResolvedValue({
+      exists: true, versionCode: 3, versionName: '1.0.2',
+    });
+    await beginUpdate(info);
+    expect(NativeUpdate.downloadApk).not.toHaveBeenCalled();
+    expect(NativeUpdate.installApk).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces an error state when the download rejects', async () => {
+    vi.mocked(NativeUpdate.downloadApk).mockRejectedValue(new Error('HTTP_404'));
+    await beginUpdate(info);
+    expect(getUpdateFlow().phase).toBe('error');
+    expect(getUpdateFlow().error).toContain('HTTP_404');
+    expect(NativeUpdate.installApk).not.toHaveBeenCalled();
+  });
+
+  it('routes to needs_permission when unknown-sources is blocked', async () => {
+    vi.mocked(NativeUpdate.canRequestPackageInstalls).mockResolvedValue({ allowed: false });
+    await beginUpdate(info);
+    expect(getUpdateFlow().phase).toBe('needs_permission');
+    expect(NativeUpdate.installApk).not.toHaveBeenCalled();
+  });
+});
+
+describe('pending APK lifecycle', () => {
+  it('deletes the pending APK once the installed build reaches it', async () => {
+    installed(3);
+    vi.mocked(NativeUpdate.getPendingApk).mockResolvedValue({
+      exists: true, versionCode: 3, versionName: '1.0.2',
+    });
+    await reconcilePending();
+    expect(NativeUpdate.deletePendingApk).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a pending APK that is still newer than the install', async () => {
+    installed(2);
+    vi.mocked(NativeUpdate.getPendingApk).mockResolvedValue({
+      exists: true, versionCode: 3, versionName: '1.0.2',
+    });
+    await reconcilePending();
+    expect(NativeUpdate.deletePendingApk).not.toHaveBeenCalled();
+  });
+
+  it('pendingMatches only reuses an exact versionCode match', async () => {
+    vi.mocked(NativeUpdate.getPendingApk).mockResolvedValue({
+      exists: true, versionCode: 3, versionName: '1.0.2',
+    });
+    expect(await pendingMatches(3)).toBe(true);
+    expect(await pendingMatches(4)).toBe(false);
   });
 });

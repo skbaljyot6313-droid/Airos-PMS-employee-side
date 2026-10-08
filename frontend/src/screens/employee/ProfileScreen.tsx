@@ -5,10 +5,12 @@ import { errorMessage } from '../../api/client';
 import {
   checkForUpdates,
   getUpdateDiag,
+  getUpdateFlow,
   getUpdateState,
   installedInfo,
   InstalledInfo,
 } from '../../services/updateService';
+import { NativeUpdate, PendingApk } from '../../services/updateInstaller';
 import {
   User,
   Phone,
@@ -43,10 +45,13 @@ export const ProfileScreen: React.FC = () => {
   // Diagnostics — only compiled in when built with VITE_UPDATE_DEBUG=true.
   const UPDATE_DEBUG = import.meta.env.VITE_UPDATE_DEBUG === 'true';
   const [installed, setInstalled] = useState<InstalledInfo | null>(null);
+  const [pending, setPending] = useState<PendingApk | null>(null);
   const [diagTick, setDiagTick] = useState(0);
   useEffect(() => {
-    if (UPDATE_DEBUG) void installedInfo().then(setInstalled);
-  }, [UPDATE_DEBUG]);
+    if (!UPDATE_DEBUG) return;
+    void installedInfo().then(setInstalled);
+    void NativeUpdate.getPendingApk().then(setPending).catch(() => setPending(null));
+  }, [UPDATE_DEBUG, diagTick]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -247,6 +252,22 @@ export const ProfileScreen: React.FC = () => {
                 <span className="text-[#8D999C]">Latest code</span>
                 <span className="font-medium text-[#20292C]">
                   {getUpdateState().info?.latest_version_code ?? '—'}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Download state</span>
+                <span className="font-medium text-[#20292C]">{getUpdateFlow().phase}</span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Download progress</span>
+                <span className="font-medium text-[#20292C]">
+                  {getUpdateFlow().progress === null ? '—' : `${getUpdateFlow().progress}%`}
+                </span>
+              </div>
+              <div className="py-2 flex justify-between">
+                <span className="text-[#8D999C]">Pending APK</span>
+                <span className="font-medium text-[#20292C]">
+                  {pending?.exists ? `v${pending.versionCode} (${pending.versionName})` : 'none'}
                 </span>
               </div>
               <div className="py-2 flex justify-between">

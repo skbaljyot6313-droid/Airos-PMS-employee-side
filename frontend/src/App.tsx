@@ -8,8 +8,12 @@ import {
 } from './services/locationTracker';
 import {
   checkForUpdates,
+  getUpdateFlow,
   getUpdateState,
+  reconcilePending,
   subscribe,
+  subscribeFlow,
+  UpdateFlow,
   UpdateState,
 } from './services/updateService';
 import { UpdateDialog } from './components/common/UpdateDialog';
@@ -168,13 +172,16 @@ const AppNavigator: React.FC = () => {
 const UpdateManager: React.FC = () => {
   const { isAuthenticated } = useAuth();
   const [update, setUpdate] = useState<UpdateState>(getUpdateState());
+  const [flow, setFlow] = useState<UpdateFlow>(getUpdateFlow());
   const [snoozed, setSnoozed] = useState(false);
 
   useEffect(() => subscribe(setUpdate), []);
+  useEffect(() => subscribeFlow(setFlow), []);
 
   useEffect(() => {
     if (isAuthenticated) {
       setSnoozed(false);
+      void reconcilePending();
       void checkForUpdates(true);
     }
   }, [isAuthenticated]);
@@ -182,7 +189,10 @@ const UpdateManager: React.FC = () => {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const sub = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
-      if (isActive) void checkForUpdates();
+      if (isActive) {
+        void reconcilePending();
+        void checkForUpdates();
+      }
     });
     return () => {
       sub.then((h) => h.remove());
@@ -192,7 +202,7 @@ const UpdateManager: React.FC = () => {
   const visible =
     update.kind === 'required' || (update.kind === 'optional' && !snoozed);
   if (!visible) return null;
-  return <UpdateDialog state={update} onLater={() => setSnoozed(true)} />;
+  return <UpdateDialog state={update} flow={flow} onLater={() => setSnoozed(true)} />;
 };
 
 export default function App() {
