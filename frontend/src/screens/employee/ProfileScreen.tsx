@@ -200,6 +200,12 @@ export const ProfileScreen: React.FC = () => {
             <span className="text-[#D9534F] font-semibold">Sign Out</span>
           </SecondaryButton>
         </div>
+
+        {/* Release-verification marker — harmless build identifier for the
+            1.0.2 over-the-air update test. */}
+        <p className="text-center text-[11px] text-[#8D999C] pt-2">
+          Update Test 1.0.2
+        </p>
       </div>
 
       {/* Edit Profile Modal */}
