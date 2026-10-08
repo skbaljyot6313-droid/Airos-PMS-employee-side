@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mgmt}
+      POSTGRES_USER: ${POSTGRES_USER:-mgmt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mgmt-dev-password}
+    volumes:
+      - employee_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mgmt}:${POSTGRES_PASSWORD:-mgmt-dev-password}@postgres:5432/${POSTGRES_DB:-mgmt}
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mgmt}:${POSTGRES_PASSWORD:-mgmt-dev-password}@postgres:5432/${POSTGRES_DB:-mgmt}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-insecure-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      STORAGE_BACKEND: local
+      RUN_EMBEDDED_SCHEDULER: "false"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+volumes:
+  employee_pgdata:

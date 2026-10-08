@@ -1,0 +1,108 @@
+# AiROS employee stack — everything in Docker, locally.
+#
+#   docker compose up --build          # postgres + redis + migrations + api + web
+#   docker compose --profile seed run --rm seed   # demo tenant + logins
+#
+# Frontend: http://localhost:3000   API: http://localhost:8000/api/v1
+# Demo logins after seeding: admin@demo.local / employee@demo.local,
+# password Demo!Pass123.
+#
+# Defaults target the bundled postgres; set DATABASE_URL in the shell or a
+# root .env to point the API/migrations at an external (e.g. Supabase) DB —
+# compose variable interpolation reads ./.env, NOT backend/.env.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mgmt}
+      POSTGRES_USER: ${POSTGRES_USER:-mgmt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mgmt-dev-password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Bound to localhost only — containers reach it over the compose
+    # network regardless; this port is for host tooling (psql etc.).
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    # AOF so sessions/rate-limit state survive a container restart.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  migrate:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-mgmt}:${POSTGRES_PASSWORD:-mgmt-dev-password}@postgres:5432/${POSTGRES_DB:-mgmt}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  seed:
+    build: ./backend
+    profiles: ["seed"]
+    command: ["python", "scripts/seed_demo.py"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-mgmt}:${POSTGRES_PASSWORD:-mgmt-dev-password}@postgres:5432/${POSTGRES_DB:-mgmt}}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  api:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: development
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-mgmt}:${POSTGRES_PASSWORD:-mgmt-dev-password}@postgres:5432/${POSTGRES_DB:-mgmt}}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-insecure-secret-change-me}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      STORAGE_BACKEND: local
+      UPLOAD_DIR: uploads
+      RATE_LIMIT_ENABLED: "true"
+      # Retained for config compat only — this employee API owns no
+      # scheduled jobs (see backend/docs/ENVIRONMENT.md).
+      RUN_EMBEDDED_SCHEDULER: "false"
+      LOCATION_SERVICE_API_KEY: ${LOCATION_SERVICE_API_KEY:-}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the JS bundle — the browser calls this URL, so it
+        # must be a host-reachable address, not the compose service name.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000/api/v1}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:

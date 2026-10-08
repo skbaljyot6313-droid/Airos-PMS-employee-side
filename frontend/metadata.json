@@ -1,0 +1,6 @@
+{
+  "name": "AiROS Staff",
+  "description": "Enterprise mobile application for field and property operations employees to manage tasks, checklists, photo evidence, and maintenance workflows.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

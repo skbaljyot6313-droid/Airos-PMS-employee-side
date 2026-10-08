@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Signing material / credentials — never commit
+*.keystore
+*.jks
+*.p12
+*.pem
+keystore.properties
+google-services.json
+
+# Release artifacts
+*.apk
+*.aab
+app-downloads/
+
+# Logs & OS artifacts
+*.log
+nul
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
