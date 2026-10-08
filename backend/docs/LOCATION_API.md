@@ -6,15 +6,17 @@ credential is ever shared with it.
 
 ```text
 Employee Android → POST /location/*      (employee JWT)
-Super Admin BE   → GET  /admin/*         (service bearer key)
+Super Admin BE   → GET  /admin/*         (X-Location-Service-Key)
 ```
+
+**Production base URL:** `https://employee-api-production-c0e3.up.railway.app/api/v1`
 
 ## Authentication
 
 | Route family | Auth | Notes |
 |---|---|---|
 | `POST /api/v1/location/*` | Employee JWT (`Authorization: Bearer`) | `employee_id` is derived from the token; any `employee_id` in the body is ignored. |
-| `GET /api/v1/admin/*` | Service key (`Authorization: Bearer <LOCATION_SERVICE_API_KEY>`) | Constant-time compare; employee JWTs are rejected with 401. 503 when `LOCATION_SERVICE_API_KEY` is unset. |
+| `GET /api/v1/admin/*` | Service key — `X-Location-Service-Key: <LOCATION_SERVICE_API_KEY>` | Canonical contract for the SA backend. `Authorization: Bearer <key>` is also accepted. Constant-time compare; employee JWTs are rejected with 401. 503 when `LOCATION_SERVICE_API_KEY` is unset. |
 
 ## Session lifecycle
 
@@ -232,3 +234,32 @@ coverage, not truncation) and `downsampled` is `true`.
   after their date; expired partitions simply return empty results.
 - The Super Admin backend must not depend on these key names — they are
   internal. The JSON contracts above are the API.
+
+## curl examples (Super Admin backend)
+
+```bash
+# All live locations
+curl -H "X-Location-Service-Key: $LOCATION_SERVICE_API_KEY" \
+  "https://employee-api-production-c0e3.up.railway.app/api/v1/admin/live-locations"
+
+# One employee
+curl -H "X-Location-Service-Key: $LOCATION_SERVICE_API_KEY" \
+  "https://employee-api-production-c0e3.up.railway.app/api/v1/admin/live-locations?employee_id=EMPLOYEE_UUID"
+
+# Property / zone scope, active-only, stale check
+curl -H "X-Location-Service-Key: $LOCATION_SERVICE_API_KEY" \
+  "https://employee-api-production-c0e3.up.railway.app/api/v1/admin/live-locations?property_id=PROPERTY_UUID"
+curl -H "X-Location-Service-Key: $LOCATION_SERVICE_API_KEY" \
+  "https://employee-api-production-c0e3.up.railway.app/api/v1/admin/live-locations?zone_id=ZONE_UUID"
+curl -H "X-Location-Service-Key: $LOCATION_SERVICE_API_KEY" \
+  "https://employee-api-production-c0e3.up.railway.app/api/v1/admin/live-locations?employee_id=EMPLOYEE_UUID&is_active=false"
+
+# Route history — time range + optional session filter + point cap
+curl -H "X-Location-Service-Key: $LOCATION_SERVICE_API_KEY" \
+  "https://employee-api-production-c0e3.up.railway.app/api/v1/admin/location-history/EMPLOYEE_UUID?from=2026-10-08T08:00:00Z&to=2026-10-08T18:00:00Z"
+curl -H "X-Location-Service-Key: $LOCATION_SERVICE_API_KEY" \
+  "https://employee-api-production-c0e3.up.railway.app/api/v1/admin/location-history/EMPLOYEE_UUID?from=2026-10-08T08:00:00Z&to=2026-10-08T18:00:00Z&tracking_session_id=SESSION_UUID&max_points=500"
+```
+
+Never put the real `LOCATION_SERVICE_API_KEY` in code, docs, or logs —
+the SA backend receives it through its own secret store.

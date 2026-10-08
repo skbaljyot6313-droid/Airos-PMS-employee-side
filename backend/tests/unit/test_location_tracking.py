@@ -77,6 +77,10 @@ def _key() -> dict:
     return {"Authorization": f"Bearer {SERVICE_KEY}"}
 
 
+def _svc_header() -> dict:
+    return {"X-Location-Service-Key": SERVICE_KEY}
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -501,6 +505,26 @@ async def test_history_rejects_inverted_range(api, seed, service_key, fake_redis
         headers=_key(),
     )
     assert res.status_code == 400
+
+
+async def test_live_locations_x_service_key_header(
+    api, seed, service_key, fake_redis
+):
+    """The canonical SA-backend contract is the X-Location-Service-Key
+    header — Bearer remains accepted for compatibility."""
+    sid = await _start(api, seed)
+    await api.post(
+        f"{BASE}/current", json=_fix(sid, 1), headers=_auth(seed["emp_user"])
+    )
+    res = await api.get(f"{ADMIN}/live-locations", headers=_svc_header())
+    assert res.status_code == 200
+    assert len(res.json()["locations"]) == 1
+    # wrong value via the header still fails
+    res = await api.get(
+        f"{ADMIN}/live-locations",
+        headers={"X-Location-Service-Key": "nope"},
+    )
+    assert res.status_code == 401
 
 
 async def test_history_requires_service_key(api, seed, fake_redis):

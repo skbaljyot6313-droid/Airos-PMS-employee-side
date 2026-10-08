@@ -13,7 +13,7 @@ import secrets
 import uuid
 from collections.abc import Callable
 
-from fastapi import Depends, status
+from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,13 +101,16 @@ _location_key_warned = False
 
 
 async def require_location_service(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> None:
     """Shared-key gate for server-to-server endpoints (admin/*).
 
     This is deliberately NOT get_current_user: the caller is another
     backend (the SA service), not a person — no JWT is decoded, no User
-    is loaded, no DB session is touched. The bearer token must equal
+    is loaded, no DB session is touched. The key is accepted as either
+    `X-Location-Service-Key: <key>` (canonical contract) or
+    `Authorization: Bearer <key>` (legacy); either way it must equal
     LOCATION_SERVICE_API_KEY exactly, compared in constant time via
     secrets.compare_digest (a JWT minted for an employee is simply a
     wrong key → 401).
@@ -128,9 +131,10 @@ async def require_location_service(
         raise LiveLocationUnavailable(
             "Live-location service API is not configured on this server."
         )
-    if credentials is None or not secrets.compare_digest(
-        credentials.credentials, expected
-    ):
+    provided = request.headers.get("x-location-service-key") or (
+        credentials.credentials if credentials is not None else None
+    )
+    if provided is None or not secrets.compare_digest(provided, expected):
         raise Unauthenticated()
 
 
