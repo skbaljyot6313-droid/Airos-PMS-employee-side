@@ -1,3 +1,10 @@
+// JDK 21 toolchain auto-provisioning — Capacitor 7 plugins require Java 21;
+// lets builders without a local JDK 21 (e.g. EAS images capped at JDK 17)
+// download one automatically.
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.9.0'
+}
+
 include ':app'
 include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
