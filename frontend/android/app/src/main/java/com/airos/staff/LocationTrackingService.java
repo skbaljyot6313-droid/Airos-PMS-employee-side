@@ -85,7 +85,7 @@ public class LocationTrackingService extends Service {
 
     private static final String CHANNEL_ID = "airos_location";
     private static final int NOTIFICATION_ID = 0xA1;
-    private static final int DEFAULT_INTERVAL_SECONDS = 30;
+    private static final int DEFAULT_INTERVAL_SECONDS = 10;
     private static final int HTTP_TIMEOUT_MS = 10_000;
     /** ~10 h of 30 s fixes — plenty for a shift's worst dead zone. */
     private static final int MAX_QUEUE_LINES = 1_500;
@@ -446,9 +446,20 @@ public class LocationTrackingService extends Service {
         }
         if (!res.ok()) return false;
         try {
-            String sid = new JSONObject(res.body)
-                    .getString("tracking_session_id");
-            p.edit().putString(KEY_SESSION, sid).putInt(KEY_SEQ, 0).apply();
+            JSONObject json = new JSONObject(res.body);
+            String sid = json.getString("tracking_session_id");
+            int oldInterval =
+                    p.getInt(KEY_INTERVAL, DEFAULT_INTERVAL_SECONDS);
+            p.edit().putString(KEY_SESSION, sid)
+                    .putInt(KEY_SEQ, 0).apply();
+            int interval = json.optInt("tracking_interval_seconds", 0);
+            if (interval > 0 && interval != oldInterval) {
+                // Server changed the cadence — adopt it now instead of
+                // waiting for a service restart to re-read the pref.
+                p.edit().putInt(KEY_INTERVAL, interval).apply();
+                stopUpdates();
+                startUpdates();
+            }
             return true;
         } catch (JSONException e) {
             return false;

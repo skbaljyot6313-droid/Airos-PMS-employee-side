@@ -86,6 +86,9 @@ class Settings(BaseSettings):
     # A session key lives this long without refresh (each accepted fix
     # re-arms it); app restarts inside the window resume the session.
     LOCATION_SESSION_TTL_SECONDS: int = 43200
+    # Requested capture/upload cadence handed to trackers at POST
+    # /location/start; re-minted sessions adopt a changed value.
+    LOCATION_TRACKING_INTERVAL_SECONDS: int = 10
     # Quality thresholds — flagged, never dropped (GPS noise is data too).
     LOCATION_LOW_ACCURACY_M: float = 500.0
     # Implied speed above this (m/s ≈ 288 km/h) → suspicious_speed flag.

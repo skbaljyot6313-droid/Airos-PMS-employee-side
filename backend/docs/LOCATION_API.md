@@ -29,7 +29,7 @@ the Redis hot-path marker the ingest path validates against.
 {
   "tracking_session_id": "uuid",
   "started_at": "2026-10-08T11:00:00+00:00",
-  "tracking_interval_seconds": 30
+  "tracking_interval_seconds": 10
 }
 ```
 
