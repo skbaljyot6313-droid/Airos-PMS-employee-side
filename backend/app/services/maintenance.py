@@ -182,14 +182,25 @@ class MaintenanceService:
     async def _enforce_employee_coverage(self, user: User, room=None,
                                        dorm=None, washroom=None) -> None:
         """Employees may only raise tickets inside their zone/area
-        coverage — backend enforcement, never trust the submitted UID."""
+        coverage — backend enforcement, never trust the submitted UID.
+
+        A dorm-attached washroom carries no zone/area of its own — its
+        coverage is inherited from the owning dorm."""
         zone_ids, area_id = await self._employee_coverage(user)
+
+        def _covered(zone_id, t_area) -> bool:
+            return (zone_id is not None and zone_id in zone_ids) or (
+                area_id is not None and t_area == area_id)
+
         target = room or dorm or washroom
-        t_zone = getattr(target, "zone_id", None)
-        t_area = getattr(target, "area_id", None)
-        if (t_zone is not None and t_zone in zone_ids) or (
-                area_id is not None and t_area == area_id):
+        if _covered(getattr(target, "zone_id", None),
+                    getattr(target, "area_id", None)):
             return
+        if washroom is not None and washroom.dorm_id is not None:
+            owning = await self.session.get(Dorm, washroom.dorm_id)
+            if owning is not None and _covered(owning.zone_id,
+                                               owning.area_id):
+                return
         from app.dependencies.auth import Forbidden
         raise Forbidden(
             "This location is outside your assigned area. "
@@ -205,7 +216,10 @@ class MaintenanceService:
             raise Forbidden()
         zone_ids, area_id = await self._employee_coverage(user)
         if not zone_ids and area_id is None:
-            return {"rooms": [], "dorms": []}
+            return {
+                "rooms": [], "dorms": [], "beds": [],
+                "washrooms": [], "fixtures": [],
+            }
 
         scope = Room.zone_id.in_(zone_ids) if zone_ids else None
         scope_d = Dorm.zone_id.in_(zone_ids) if zone_ids else None
@@ -234,6 +248,29 @@ class MaintenanceService:
                 select(Zone).where(Zone.id.in_(zone_ids))
             )
             zmap = {z.id: z.name for z in res.scalars()}
+
+        dorm_ids = [d.id for d in dorms]
+        dorm_map = {d.id: d for d in dorms}
+
+        # Washrooms: zone-level (zone/area coverage) OR dorm-attached
+        # (coverage inherited from an in-scope dorm).
+        wscope = Washroom.dorm_id.in_(dorm_ids) if dorm_ids else None
+        if zone_ids:
+            cond = Washroom.zone_id.in_(zone_ids)
+            wscope = or_(cond, wscope) if wscope is not None else cond
+        if area_id is not None:
+            cond = Washroom.area_id == area_id
+            wscope = or_(cond, wscope) if wscope is not None else cond
+        washrooms: list[Washroom] = []
+        if wscope is not None:
+            res = await self.session.execute(
+                select(Washroom)
+                .options(selectinload(Washroom.fixtures))
+                .where(Washroom.property_id == user.property_id, wscope)
+                .order_by(Washroom.name)
+            )
+            washrooms = list(res.scalars())
+
         return {
             "rooms": [{
                 "room_uid": str(r.id), "room_number": r.room_number,
@@ -244,6 +281,35 @@ class MaintenanceService:
                 "dorm_type": d.dorm_type, "zone_name": zmap.get(d.zone_id),
                 "bed_count": len(d.beds),
             } for d in dorms],
+            "beds": [{
+                "bed_uid": str(b.id), "bed_number": b.bed_number,
+                "dorm_uid": str(d.id), "dorm_name": d.name,
+                "zone_name": zmap.get(d.zone_id),
+            } for d in dorms for b in sorted(
+                d.beds, key=lambda b: b.bed_number)],
+            "washrooms": [{
+                "washroom_uid": str(w.id), "name": w.name,
+                "washroom_type": w.washroom_type,
+                # dorm-attached washrooms inherit the dorm's zone label
+                "zone_name": (
+                    zmap.get(dorm_map[w.dorm_id].zone_id)
+                    if w.dorm_id in dorm_map else zmap.get(w.zone_id)
+                ),
+                "dorm_uid": str(w.dorm_id) if w.dorm_id else None,
+                "dorm_name": dorm_map[w.dorm_id].name
+                if w.dorm_id in dorm_map else None,
+                "fixture_count": len(w.fixtures),
+            } for w in washrooms],
+            "fixtures": [{
+                "fixture_uid": str(f.id), "fixture_type": f.fixture_type,
+                "fixture_number": f.fixture_number,
+                "washroom_uid": str(w.id), "washroom_name": w.name,
+                "zone_name": (
+                    zmap.get(dorm_map[w.dorm_id].zone_id)
+                    if w.dorm_id in dorm_map else zmap.get(w.zone_id)
+                ),
+            } for w in washrooms for f in sorted(
+                w.fixtures, key=lambda f: f.fixture_number)],
         }
 
     async def _resolve_target(self, prop, payload: MaintenanceCreateRequest):

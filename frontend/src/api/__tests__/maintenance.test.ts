@@ -118,3 +118,60 @@ describe('MAINTENANCE_TYPE_LABELS round-trip', () => {
     }
   });
 });
+
+import { mapEligibleLocations } from '../maintenance';
+import { EligibleLocationsWire } from '../wire';
+
+const eligibleWire = (over: Partial<EligibleLocationsWire> = {}): EligibleLocationsWire => ({
+  rooms: [
+    { room_uid: 'room-1', room_number: '101', type: 'Deluxe', zone_name: 'Z1' },
+  ],
+  dorms: [
+    { dorm_uid: 'dorm-1', name: 'Dorm A', dorm_type: 'male', zone_name: 'Z1', bed_count: 2 },
+  ],
+  beds: [
+    { bed_uid: 'bed-1', bed_number: 'Bed 01', dorm_uid: 'dorm-1', dorm_name: 'Dorm A', zone_name: 'Z1' },
+    { bed_uid: 'bed-2', bed_number: 'Bed 02', dorm_uid: 'dorm-1', dorm_name: 'Dorm A', zone_name: 'Z1' },
+  ],
+  washrooms: [
+    { washroom_uid: 'wr-1', name: 'W-01', washroom_type: 'unisex', zone_name: 'Z1', dorm_uid: null, dorm_name: null, fixture_count: 2 },
+    { washroom_uid: 'wr-2', name: 'Dorm W', washroom_type: 'male', zone_name: 'Z1', dorm_uid: 'dorm-1', dorm_name: 'Dorm A', fixture_count: 0 },
+  ],
+  fixtures: [
+    { fixture_uid: 'fx-1', fixture_type: 'sink', fixture_number: 1, washroom_uid: 'wr-1', washroom_name: 'W-01', zone_name: 'Z1' },
+    { fixture_uid: 'fx-2', fixture_type: 'toilet', fixture_number: 1, washroom_uid: 'wr-1', washroom_name: 'W-01', zone_name: 'Z1' },
+  ],
+  ...over,
+});
+
+describe('mapEligibleLocations', () => {
+  it('keeps rooms top-level and nests beds under their dorm', () => {
+    const out = mapEligibleLocations(eligibleWire());
+    const room = out.find((l) => l.id === 'room-1');
+    expect(room?.kind).toBe('room');
+    const dorm = out.find((l) => l.id === 'dorm-1');
+    expect(dorm?.kind).toBe('dorm');
+    expect(dorm?.children?.map((c) => c.id)).toEqual(['bed-1', 'bed-2']);
+    expect(dorm?.children?.[0].kind).toBe('bed');
+  });
+
+  it('nests fixtures under their washroom with the parent uid', () => {
+    const out = mapEligibleLocations(eligibleWire());
+    const wr = out.find((l) => l.id === 'wr-1');
+    expect(wr?.kind).toBe('washroom');
+    expect(wr?.children?.map((c) => c.name)).toEqual(['Sink 1', 'Toilet 1']);
+    expect(wr?.children?.[0].washroom_uid).toBe('wr-1');
+  });
+
+  it('labels dorm-attached washrooms with the owner context', () => {
+    const out = mapEligibleLocations(eligibleWire());
+    const att = out.find((l) => l.id === 'wr-2');
+    expect(att?.name).toBe('Dorm W · Dorm A');
+    expect(att?.children).toEqual([]);
+  });
+
+  it('tolerates missing arrays from an older backend', () => {
+    const out = mapEligibleLocations({ rooms: [], dorms: [] });
+    expect(out).toEqual([]);
+  });
+});

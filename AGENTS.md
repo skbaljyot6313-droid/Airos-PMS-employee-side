@@ -90,8 +90,12 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - `POST /auth/login|refresh|logout`, `GET|PATCH /auth/me` (login 10/min,
   refresh 30/min).
 - `GET /tasks`, `GET /tasks/{id}`, `POST /tasks/{id}/start|submit`.
-- `GET|POST /maintenance`, `GET /maintenance/eligible-locations`,
-  `GET /maintenance/{id}`, `POST /maintenance/{id}/start|resolve`.
+- `GET|POST /maintenance`, `GET /maintenance/eligible-locations`
+  (coverage-scoped picklist for every target kind: `rooms`, `dorms`,
+  `beds` (nested under their dorm), `washrooms` (zone- and
+  dorm-attached — coverage inherited from the owning dorm), `fixtures`
+  (nested under their washroom)), `GET /maintenance/{id}`,
+  `POST /maintenance/{id}/start|resolve`.
 - `GET /zones` (only routed resource list — `/areas` `/rooms` `/dorms`
   `/washrooms` `/properties` `/employees` exist as serializers/repos but
   have NO v1 routes; frontend tolerates the 404s).

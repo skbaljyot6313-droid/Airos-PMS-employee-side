@@ -317,12 +317,16 @@ export interface MaintenanceTarget {
 }
 
 export interface EligibleLocation {
-  id: string; // room_uid | dorm_uid
-  kind: 'room' | 'dorm';
+  id: string; // room_uid | dorm_uid | washroom_uid | bed_uid | fixture_uid
+  kind: 'room' | 'dorm' | 'washroom' | 'bed' | 'fixture';
   name: string;
   zone_name: string | null;
   /** Dorm bed capacity from eligible-locations; null for rooms/unknown. */
   bed_count?: number | null;
+  /** Parent washroom uid — set when kind === 'fixture' (submission needs it). */
+  washroom_uid?: string | null;
+  /** Sub-locations for drill-in: beds under a dorm, fixtures under a washroom. */
+  children?: EligibleLocation[];
 }
 
 // ---------------------------------------------------------------------------

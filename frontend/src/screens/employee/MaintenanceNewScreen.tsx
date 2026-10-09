@@ -34,6 +34,9 @@ import {
   ArrowRight,
   Send,
   Image as ImageIcon,
+  BedDouble,
+  Bath,
+  Wrench,
 } from 'lucide-react';
 
 interface MaintenanceNewScreenProps {
@@ -127,6 +130,8 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   const totalSteps = target ? 3 : 4;
   const stepNumber = target ? step - 1 : step;
   const [selectedLocation, setSelectedLocation] = useState<EligibleLocation | null>(null);
+  // Step-1 drill-in: a dorm exposes its beds, a washroom its fixtures.
+  const [drillParent, setDrillParent] = useState<EligibleLocation | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<MaintenanceCategory | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<string>('');
   const [customDescription, setCustomDescription] = useState<string>('');
@@ -237,7 +242,17 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
       }
     } else if (selectedLocation) {
       if (selectedLocation.kind === 'room') targetFields.room_uid = selectedLocation.id;
-      else targetFields.dorm_uid = selectedLocation.id;
+      else if (selectedLocation.kind === 'dorm') targetFields.dorm_uid = selectedLocation.id;
+      else if (selectedLocation.kind === 'bed') targetFields.bed_uid = selectedLocation.id;
+      else if (selectedLocation.kind === 'washroom') targetFields.washroom_uid = selectedLocation.id;
+      else if (selectedLocation.kind === 'fixture') {
+        if (!selectedLocation.washroom_uid) {
+          setError('This fixture is missing its washroom reference — cannot submit.');
+          return;
+        }
+        targetFields.washroom_uid = selectedLocation.washroom_uid;
+        targetFields.washroom_fixture_uid = selectedLocation.id;
+      }
     }
 
     try {
@@ -411,17 +426,51 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                 Where is the problem located?
               </h2>
               <p className="text-xs text-[#667174]">
-                Select an area within your assigned operational coverage.
+                {drillParent
+                  ? `Inside ${drillParent.name} — the whole unit or a specific part.`
+                  : 'Select an area within your assigned operational coverage.'}
               </p>
             </div>
 
+            {drillParent && (
+              <button
+                type="button"
+                onClick={() => setDrillParent(null)}
+                className="text-xs font-semibold text-[#278B46]"
+              >
+                ← All locations
+              </button>
+            )}
+
             <div className="space-y-2">
-              {locations.map((loc) => {
+              {(drillParent ? [drillParent, ...(drillParent.children ?? [])] : locations).map((loc) => {
+                const childCount = loc.children?.length ?? 0;
+                const drillsIn = !drillParent && childCount > 0;
+                const isWholeUnit = !!drillParent && loc.id === drillParent.id;
                 const isSelected = selectedLocation?.id === loc.id;
+                const Icon =
+                  loc.kind === 'bed' ? BedDouble
+                  : loc.kind === 'washroom' ? Bath
+                  : loc.kind === 'fixture' ? Wrench
+                  : MapPin;
+                const context = drillParent
+                  ? (isWholeUnit
+                      ? `Everything inside ${drillParent.name}`
+                      : drillParent.name)
+                  : [
+                      loc.zone_name,
+                      drillsIn
+                        ? `${childCount} ${loc.kind === 'dorm' ? 'beds' : 'fixtures'}`
+                        : null,
+                    ].filter(Boolean).join(' · ');
                 return (
                   <div
                     key={loc.id}
                     onClick={() => {
+                      if (drillsIn) {
+                        setDrillParent(loc);
+                        return;
+                      }
                       setSelectedLocation(loc);
                       setStep(2);
                     }}
@@ -433,16 +482,18 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                   >
                     <div className="flex items-center gap-3">
                       <div className={`p-2 rounded-xl ${isSelected ? 'bg-[#33B059] text-white' : 'bg-[#F0F2F1] text-[#667174]'}`}>
-                        <MapPin className="w-4 h-4" />
+                        <Icon className="w-4 h-4" />
                       </div>
                       <div>
                         <span className="text-sm font-semibold text-[#20292C] block">
-                          {loc.name}
+                          {isWholeUnit ? `Whole ${loc.name}` : loc.name}
                         </span>
-                        <span className="text-xs text-[#667174]">{loc.zone_name}</span>
+                        <span className="text-xs text-[#667174]">{context}</span>
                       </div>
                     </div>
-                    {isSelected && <Check className="w-4 h-4 text-[#33B059] stroke-[3]" />}
+                    {drillsIn
+                      ? <ArrowRight className="w-4 h-4 text-[#8D999C]" />
+                      : isSelected && <Check className="w-4 h-4 text-[#33B059] stroke-[3]" />}
                   </div>
                 );
               })}

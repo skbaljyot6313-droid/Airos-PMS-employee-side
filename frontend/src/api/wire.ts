@@ -275,9 +275,39 @@ export interface EligibleDormWire {
   bed_count: number;
 }
 
+export interface EligibleBedWire {
+  bed_uid: string;
+  bed_number: string;
+  dorm_uid: string;
+  dorm_name: string;
+  zone_name: string | null;
+}
+
+export interface EligibleWashroomWire {
+  washroom_uid: string;
+  name: string;
+  washroom_type: string | null;
+  zone_name: string | null;
+  dorm_uid: string | null;
+  dorm_name: string | null;
+  fixture_count: number;
+}
+
+export interface EligibleFixtureWire {
+  fixture_uid: string;
+  fixture_type: string;
+  fixture_number: number;
+  washroom_uid: string;
+  washroom_name: string;
+  zone_name: string | null;
+}
+
 export interface EligibleLocationsWire {
   rooms: EligibleRoomWire[];
   dorms: EligibleDormWire[];
+  beds?: EligibleBedWire[];
+  washrooms?: EligibleWashroomWire[];
+  fixtures?: EligibleFixtureWire[];
 }
 
 // ---------------------------------------------------------------------------

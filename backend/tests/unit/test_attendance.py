@@ -1117,12 +1117,12 @@ async def test_expire_due_leaves_submitted_and_open_window(session, seeded):
 
 
 async def test_daily_rollover_abandons_past_day(session, seeded):
-    yesterday = (
-        datetime.now(IST) - timedelta(days=1)
+    past_day = (
+        datetime.now(IST) - timedelta(days=2)
     ).date().isoformat()
     task = Task(
         property_id=seeded["prop"].id, title="Old cleaning",
-        status="assigned", due_date=yesterday,
+        status="assigned", due_date=past_day,
     )
     session.add(task)
     await session.commit()
@@ -1131,7 +1131,7 @@ async def test_daily_rollover_abandons_past_day(session, seeded):
     await session.refresh(task)
     assert task.status == "abandoned"
     assert task.abandoned_reason == "SYSTEM_DAILY_ROLLOVER"
-    assert task.operational_date == yesterday
+    assert task.operational_date == past_day
 
 
 # ---------------------------------------------------------------------------

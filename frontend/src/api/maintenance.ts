@@ -219,8 +219,9 @@ export async function resolveMaintenanceTicketApi(
 const fetchEligibleWire = (): Promise<EligibleLocationsWire> =>
   apiClient<EligibleLocationsWire>('/maintenance/eligible-locations');
 
-export async function fetchEligibleLocationsApi(): Promise<EligibleLocation[]> {
-  const res = await fetchEligibleWire();
+/** Wire payload → picker hierarchy: rooms, dorms (+beds), washrooms
+ *  (+fixtures). Children ride on `children` for the drill-in picker. */
+export const mapEligibleLocations = (res: EligibleLocationsWire): EligibleLocation[] => {
   const rooms: EligibleLocation[] = (res.rooms ?? []).map((r) => ({
     id: r.room_uid,
     kind: 'room',
@@ -228,14 +229,44 @@ export async function fetchEligibleLocationsApi(): Promise<EligibleLocation[]> {
     zone_name: r.zone_name ?? null,
     bed_count: null,
   }));
+  const beds = res.beds ?? [];
   const dorms: EligibleLocation[] = (res.dorms ?? []).map((d) => ({
     id: d.dorm_uid,
     kind: 'dorm',
     name: d.name,
     zone_name: d.zone_name ?? null,
     bed_count: d.bed_count ?? null,
+    children: beds
+      .filter((b) => b.dorm_uid === d.dorm_uid)
+      .map((b) => ({
+        id: b.bed_uid,
+        kind: 'bed' as const,
+        name: b.bed_number,
+        zone_name: b.zone_name ?? d.zone_name ?? null,
+      })),
   }));
-  return [...rooms, ...dorms];
+  const fixtures = res.fixtures ?? [];
+  const washrooms: EligibleLocation[] = (res.washrooms ?? []).map((w) => ({
+    id: w.washroom_uid,
+    kind: 'washroom',
+    // Dorm-attached washrooms show their owner as the context label.
+    name: w.dorm_name ? `${w.name} · ${w.dorm_name}` : w.name,
+    zone_name: w.zone_name ?? null,
+    children: fixtures
+      .filter((f) => f.washroom_uid === w.washroom_uid)
+      .map((f) => ({
+        id: f.fixture_uid,
+        kind: 'fixture' as const,
+        name: `${titleCase(f.fixture_type)} ${f.fixture_number}`,
+        zone_name: f.zone_name ?? w.zone_name ?? null,
+        washroom_uid: w.washroom_uid,
+      })),
+  }));
+  return [...rooms, ...dorms, ...washrooms];
+};
+
+export async function fetchEligibleLocationsApi(): Promise<EligibleLocation[]> {
+  return mapEligibleLocations(await fetchEligibleWire());
 }
 
 // ---------------------------------------------------------------------------
