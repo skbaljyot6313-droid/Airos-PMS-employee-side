@@ -97,8 +97,10 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   (Redis-backed, sessions minted server-side, seq dedup).
 - `GET /notifications`, `unread-count`, `/{uid}/read`;
   `POST /devices/register|unregister`.
-- `GET /mobile/version` (public), `POST /mobile/releases[/.../activate]`
-  (RELEASE_MANAGEMENT_API_KEY).
+- `GET /mobile/version` (public), `POST /mobile/releases[/.../activate]`,
+  `PATCH /mobile/releases/{id}` (repoint `download_url` in place),
+  `POST /mobile/releases/apk` (self-host the binary in object storage) —
+  all service-key via RELEASE_MANAGEMENT_API_KEY.
 - `GET /admin/live-locations`, `GET /admin/location-history/{id}`
   (LOCATION_SERVICE_API_KEY — for the SA backend, not employees).
 
