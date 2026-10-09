@@ -17,6 +17,13 @@ import {
   UpdateState,
 } from './services/updateService';
 import { UpdateDialog } from './components/common/UpdateDialog';
+import { NotificationToast } from './components/common/NotificationToast';
+import {
+  startNotificationPolling,
+  subscribeNotifications,
+} from './services/notificationService';
+import { markNotificationReadApi } from './api/notifications';
+import { StaffNotification } from './types';
 import { DeviceFrame } from './components/common/DeviceFrame';
 import { BottomNav, TabType } from './components/common/BottomNav';
 import { LoginScreen } from './screens/auth/LoginScreen';
@@ -43,6 +50,37 @@ const AppNavigator: React.FC = () => {
   const [route, setRoute] = useState<StackRoute>({ type: 'tabs', tab: 'tasks' });
   const [todoCount, setTodoCount] = useState<number>(0);
   const [maintenanceCount, setMaintenanceCount] = useState<number>(0);
+  const [popupQueue, setPopupQueue] = useState<StaffNotification[]>([]);
+
+  // Work-allocation popups — polling the feed materializes SA-side
+  // assignments (the backend synthesizes rows on read); new ids toast.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setPopupQueue([]);
+      return;
+    }
+    const stop = startNotificationPolling();
+    const unsub = subscribeNotifications((n) =>
+      setPopupQueue((q) => [...q, n])
+    );
+    return () => {
+      stop();
+      unsub();
+    };
+  }, [isAuthenticated]);
+
+  const dismissPopup = (n: StaffNotification) =>
+    setPopupQueue((q) => q.filter((x) => x.id !== n.id));
+
+  const openPopup = (n: StaffNotification) => {
+    dismissPopup(n);
+    void markNotificationReadApi(n.id).catch(() => undefined);
+    if (n.taskId) {
+      setRoute({ type: 'task-detail', taskId: n.taskId });
+    } else if (n.ticketId) {
+      setRoute({ type: 'maintenance-detail', ticketId: n.ticketId });
+    }
+  };
 
   // Background location tracking — the native foreground service owns
   // capture/upload (survives UI close); this only mints the backend
@@ -158,6 +196,14 @@ const AppNavigator: React.FC = () => {
           </>
         )}
       </div>
+
+      {popupQueue.length > 0 && (
+        <NotificationToast
+          notification={popupQueue[0]}
+          onOpen={openPopup}
+          onDismiss={dismissPopup}
+        />
+      )}
 
       {/* Show Bottom Tabs only when on root tabs */}
       {route.type === 'tabs' && (

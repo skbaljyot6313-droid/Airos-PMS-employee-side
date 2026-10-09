@@ -13,24 +13,35 @@ Conventions (mirrors AttendanceService):
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, exists, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.models.audit import AuditEvent
+from app.models.maintenance import MaintenanceTicket
 from app.models.notifications import (
     DEVICE_PLATFORMS,
     DeviceRegistration,
     Notification,
 )
+from app.models.task import Task
 from app.models.user import User
+from app.models.work_allocation import WorkAllocationHistory
 from app.services.push import get_push_provider
 from app.services.structure import NotFoundErr, ValidationErr
 
 logger = get_logger(__name__)
+
+# Allocation synthesis — the shared work_allocation_history ledger is
+# written by the SUPER ADMIN backend (this app's task services are never
+# invoked for SA-side assignments). The feed derives rows from it at read
+# time; the window bounds the scan and stops pre-feature history from
+# flooding a fresh feed.
+ALLOCATION_SYNC_WINDOW = timedelta(days=14)
+ALLOCATION_SYNC_CAP = 50  # materialized rows per sync — backstop only
 
 
 def _audit(session: AsyncSession, *, user: User, action: str,
@@ -157,6 +168,112 @@ class NotificationService:
             q.order_by(Notification.created_at.desc()).limit(limit)
         )
         return list(res.scalars())
+
+    # ------------------------------------------------------------------
+    # Allocation sync — derive feed rows from the shared ledger
+    # ------------------------------------------------------------------
+
+    async def sync_assignment_notifications(self, user: User) -> int:
+        """Materialize notifications for allocations made OUTSIDE this
+        backend — SA assigns work by writing the shared
+        work_allocation_history ledger directly, so this app's notify()
+        paths never see those events.
+
+        Dedupe rule: a same-kind notification with created_at >= the
+        ledger event's created_at already covers it — this app's own
+        notify() calls (which run AFTER the ledger write in the same
+        commit) satisfy it, so double emission is impossible.
+        Synthesized rows are stamped WITH the event's created_at, not
+        now() — the feed orders by when the work was allocated, and a
+        later same-second event is not swallowed by coarse clock
+        resolution. Only events whose ticket is still assigned to the
+        caller notify — reassigned-away work stays silent. Commits only
+        when rows were created; returns the count."""
+        employee_id = self._require_employee(user)
+        cutoff = datetime.now(timezone.utc) - ALLOCATION_SYNC_WINDOW
+        created = 0
+        for kind in ("task", "maintenance"):
+            created += await self._sync_allocation_kind(
+                employee_id, cutoff, kind=kind
+            )
+        if created:
+            await self.session.commit()
+            logger.info(
+                "Allocation sync: %d notification(s) for employee %s",
+                created, employee_id,
+            )
+        return created
+
+    async def _sync_allocation_kind(
+        self, employee_id: uuid.UUID, cutoff: datetime, *, kind: str
+    ) -> int:
+        if kind == "task":
+            entity, assign_col = Task, Task.employee_id
+            link_col, types = Notification.task_id, (
+                "task_assigned", "task_reassigned"
+            )
+            subject_col = Task.title
+        else:
+            entity, assign_col = MaintenanceTicket, MaintenanceTicket.assigned_to
+            link_col, types = Notification.ticket_id, ("ticket_assigned",)
+            subject_col = MaintenanceTicket.issue
+        res = await self.session.execute(
+            select(WorkAllocationHistory, subject_col)
+            .join(
+                entity,
+                and_(
+                    entity.id == WorkAllocationHistory.ticket_id,
+                    assign_col == employee_id,
+                ),
+            )
+            .where(
+                WorkAllocationHistory.ticket_kind == kind,
+                WorkAllocationHistory.employee_id == employee_id,
+                WorkAllocationHistory.created_at >= cutoff,
+                ~exists().where(
+                    Notification.employee_id == employee_id,
+                    link_col == WorkAllocationHistory.ticket_id,
+                    Notification.type.in_(types),
+                    Notification.created_at
+                    >= WorkAllocationHistory.created_at,
+                ),
+            )
+            .order_by(WorkAllocationHistory.created_at)
+            .limit(ALLOCATION_SYNC_CAP)
+        )
+        count = 0
+        for event, subject in res.all():
+            reassigned = event.previous_employee_id is not None
+            if kind == "task":
+                n_type = (
+                    "task_reassigned" if reassigned else "task_assigned"
+                )
+                title = (
+                    "Task Reassigned" if reassigned else "New Task Assigned"
+                )
+                task_id, ticket_id = event.ticket_id, None
+            else:
+                n_type = "ticket_assigned"
+                title = (
+                    "Maintenance Ticket Reassigned" if reassigned
+                    else "New Maintenance Ticket"
+                )
+                task_id, ticket_id = None, event.ticket_id
+            n = await self.notify(
+                employee_id=employee_id,
+                property_id=event.property_id,
+                type=n_type,
+                title=title,
+                body=subject or "A work item was assigned to you.",
+                task_id=task_id,
+                ticket_id=ticket_id,
+                employee_name=event.employee_name,
+            )
+            # Stamp the row at the event's instant — see method docstring.
+            if n is not None:
+                n.created_at = event.created_at
+            count += 1
+        return count
 
     async def unread_count(self, user: User) -> int:
         employee_id = self._require_employee(user)

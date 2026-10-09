@@ -433,3 +433,178 @@ async def test_task_start_and_submit_capture_location(session, seed):
         select(LocationEvent).where(LocationEvent.source == "task_submit")
     )
     assert res.scalar_one().task_id == task.id
+
+
+# ---------------------------------------------------------------------------
+# Allocation sync — assignments written to the shared ledger by the
+# Super Admin backend never pass through this app's notify() paths, so
+# the feed materializes them from work_allocation_history at read time.
+# ---------------------------------------------------------------------------
+
+from datetime import timedelta
+
+from app.models.maintenance import MaintenanceTicket
+from app.models.work_allocation import WorkAllocationHistory
+
+
+def _alloc_event(seed, *, kind="task", ticket_id, previous=None,
+                 when=None) -> WorkAllocationHistory:
+    h = WorkAllocationHistory(
+        property_id=seed["prop"].id, ticket_kind=kind,
+        ticket_id=ticket_id, employee_id=seed["employee"].id,
+        employee_name="Worker One", previous_employee_id=previous,
+        allocation_method="manual", actor_name="Admin",
+    )
+    if when is not None:
+        h.created_at = when
+    return h
+
+
+def _open_task(seed, employee_id=None, title="Mop lobby") -> Task:
+    return Task(
+        property_id=seed["prop"].id, title=title, status="assigned",
+        task_type="fixed",
+        employee_id=employee_id if employee_id is not None
+        else seed["employee"].id,
+    )
+
+
+async def test_sync_creates_notification_for_ledger_event(session, seed):
+    """SA assigns a task → ledger row only → the employee's next feed
+    read materializes a task_assigned notification."""
+    task = _open_task(seed)
+    session.add(task)
+    await session.flush()
+    session.add(_alloc_event(seed, ticket_id=task.id))
+    await session.commit()
+
+    created = await NotificationService(session).sync_assignment_notifications(
+        seed["emp_user"]
+    )
+    assert created == 1
+    rows = await _notifications(session, seed["employee"].id)
+    assert len(rows) == 1
+    n = rows[0]
+    assert n.type == "task_assigned" and n.task_id == task.id
+    assert n.title == "New Task Assigned" and n.body == "Mop lobby"
+    assert n.employee_name == "Worker One"
+
+    # Idempotent — a second sync creates nothing.
+    assert await NotificationService(session).sync_assignment_notifications(
+        seed["emp_user"]
+    ) == 0
+    assert len(await _notifications(session, seed["employee"].id)) == 1
+
+
+async def test_sync_reassign_event_marks_reassigned(session, seed):
+    task = _open_task(seed)
+    session.add(task)
+    await session.flush()
+    session.add(_alloc_event(
+        seed, ticket_id=task.id, previous=uuid.uuid4(),
+    ))
+    await session.commit()
+    await NotificationService(session).sync_assignment_notifications(
+        seed["emp_user"]
+    )
+    (n,) = await _notifications(session, seed["employee"].id)
+    assert n.type == "task_reassigned" and n.title == "Task Reassigned"
+
+
+async def test_sync_skips_event_already_notified(session, seed):
+    """EB's own create_task notifies inline AFTER the ledger write —
+    the existing row covers the event; sync must not duplicate it."""
+    task = await TaskService(session).create_task(
+        seed["admin"], _task_create(seed),
+    )
+    assert await NotificationService(session).sync_assignment_notifications(
+        seed["emp_user"]
+    ) == 0
+    assert len(await _notifications(session, seed["employee"].id)) == 1
+
+
+async def test_sync_skips_work_reassigned_away(session, seed):
+    """Ledger event points at me but the task is no longer mine —
+    reassigned-away work must not pop up."""
+    other = seed["employee2"] if "employee2" in seed else None
+    from app.models.employee import Employee
+    emp2 = Employee(
+        company_id=seed["company"].id, property_id=seed["prop"].id,
+        name="Worker Two", email="w2b@acme.test", status="active",
+    )
+    session.add(emp2)
+    await session.flush()
+    task = _open_task(seed, employee_id=emp2.id)
+    session.add(task)
+    await session.flush()
+    session.add(_alloc_event(seed, ticket_id=task.id))
+    await session.commit()
+    assert await NotificationService(session).sync_assignment_notifications(
+        seed["emp_user"]
+    ) == 0
+    assert await _notifications(session, seed["employee"].id) == []
+    assert other is None or True
+
+
+async def test_sync_ignores_events_outside_window(session, seed):
+    task = _open_task(seed)
+    session.add(task)
+    await session.flush()
+    session.add(_alloc_event(
+        seed, ticket_id=task.id,
+        when=datetime.now(timezone.utc) - timedelta(days=30),
+    ))
+    await session.commit()
+    assert await NotificationService(session).sync_assignment_notifications(
+        seed["emp_user"]
+    ) == 0
+    assert await _notifications(session, seed["employee"].id) == []
+
+
+async def test_sync_later_event_notifies_again(session, seed):
+    """Reassigned back to me → a SECOND notification (the existing one
+    only covers events at-or-before its own timestamp)."""
+    task = _open_task(seed)
+    session.add(task)
+    await session.flush()
+    t0 = datetime.now(timezone.utc) - timedelta(hours=2)
+    session.add(_alloc_event(seed, ticket_id=task.id, when=t0))
+    await session.commit()
+    svc = NotificationService(session)
+    assert await svc.sync_assignment_notifications(seed["emp_user"]) == 1
+
+    session.add(_alloc_event(
+        seed, ticket_id=task.id, previous=uuid.uuid4(),
+    ))
+    await session.commit()
+    assert await svc.sync_assignment_notifications(seed["emp_user"]) == 1
+    types = [n.type for n in await _notifications(session, seed["employee"].id)]
+    assert sorted(types) == ["task_assigned", "task_reassigned"]
+
+
+async def test_sync_maintenance_ticket_assignment(session, seed):
+    ticket = MaintenanceTicket(
+        company_id=seed["company"].id, property_id=seed["prop"].id,
+        ticket_number="MT-2026-00001", maintenance_type="plumbing",
+        issue="Leaking tap", priority="high", status="assigned",
+        assigned_to=seed["employee"].id, assigned_to_name="Worker One",
+    )
+    session.add(ticket)
+    await session.flush()
+    session.add(_alloc_event(
+        seed, kind="maintenance", ticket_id=ticket.id,
+    ))
+    await session.commit()
+    assert await NotificationService(session).sync_assignment_notifications(
+        seed["emp_user"]
+    ) == 1
+    (n,) = await _notifications(session, seed["employee"].id)
+    assert n.type == "ticket_assigned" and n.ticket_id == ticket.id
+    assert n.title == "New Maintenance Ticket" and n.body == "Leaking tap"
+
+
+async def test_sync_forbidden_without_employee_link(session, seed):
+    with pytest.raises(Forbidden):
+        await NotificationService(session).sync_assignment_notifications(
+            seed["emp_user2"]
+        )

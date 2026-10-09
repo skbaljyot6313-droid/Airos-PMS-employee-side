@@ -36,7 +36,12 @@ async def list_notifications(
     user: User = Depends(require_attendance_participant),
     session: AsyncSession = Depends(get_db),
 ):
-    items = await NotificationService(session).list_notifications(
+    svc = NotificationService(session)
+    # SA-side allocations land in the shared ledger without touching
+    # this app — the feed materializes them at read time so popups and
+    # the list see them regardless of which backend assigned the work.
+    await svc.sync_assignment_notifications(user)
+    items = await svc.list_notifications(
         user, limit=limit, unread_only=unread_only,
     )
     return {"items": [notification_out(n) for n in items]}
@@ -47,9 +52,9 @@ async def unread_count(
     user: User = Depends(require_attendance_participant),
     session: AsyncSession = Depends(get_db),
 ):
-    return {
-        "unread": await NotificationService(session).unread_count(user)
-    }
+    svc = NotificationService(session)
+    await svc.sync_assignment_notifications(user)
+    return {"unread": await svc.unread_count(user)}
 
 
 @router.post("/notifications/{notification_uid}/read")

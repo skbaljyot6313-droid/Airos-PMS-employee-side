@@ -430,3 +430,23 @@ export interface LiveLocationWire {
   quality?: string | null;
   age_seconds: number | null;
 }
+
+/** GET /notifications item — one employee-facing event row. task_uid /
+ *  ticket_uid are the deep-link targets (plain UUIDs, may outlive the
+ *  task/ticket itself). */
+export interface NotificationWire {
+  notification_uid: string;
+  type: string;
+  title: string;
+  body: string;
+  task_uid: string | null;
+  ticket_uid: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+/** GET /notifications/unread-count response. */
+export interface UnreadCountWire {
+  unread: number;
+}

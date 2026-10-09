@@ -401,3 +401,31 @@ export interface MyShift {
   date: string;
   timezone: string;
 }
+
+// ---------------------------------------------------------------------------
+// Notifications — the employee's feed (task/ticket assignments, review
+// outcomes). Popups deep-link via taskId / ticketId.
+// ---------------------------------------------------------------------------
+
+export type StaffNotificationType =
+  | 'task_assigned'
+  | 'task_reassigned'
+  | 'task_cancelled'
+  | 'task_due_soon'
+  | 'task_overdue'
+  | 'submission_approved'
+  | 'submission_disapproved'
+  | 'ticket_assigned'
+  | 'ticket_disapproved'
+  | (string & {});
+
+export interface StaffNotification {
+  id: string; // notification_uid
+  type: StaffNotificationType;
+  title: string;
+  body: string;
+  taskId: string | null;
+  ticketId: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
