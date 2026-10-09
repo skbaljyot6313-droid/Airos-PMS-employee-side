@@ -142,8 +142,14 @@ class S3Storage(StorageBackend):
         def _get():
             try:
                 return self.client.get_object(Bucket=self.bucket, Key=key)
-            except Exception:
-                return None
+            except Exception as exc:
+                # Only a genuine object miss maps to None — bucket-level and
+                # transport failures are misconfig and must surface as 502,
+                # not fake 404s.
+                err = (getattr(exc, "response", None) or {}).get("Error", {})
+                if err.get("Code") == "NoSuchKey":
+                    return None
+                raise
 
         res = await asyncio.to_thread(_get)
         if res is None:
@@ -235,10 +241,24 @@ class SupabaseStorage(StorageBackend):
         import httpx  # deferred — only needed when this backend is selected
 
         url = f"{self.base}/object/{self.bucket}/{key}"
+        auth: dict[str, str] | None = self._auth
         async with httpx.AsyncClient(timeout=30) as client:
             head = await client.head(url, headers=self._auth)
             if head.status_code == 404:
-                return None
+                # Bucket is public — fall back to the unauthenticated URL
+                # in case the private object endpoint differs (e.g. the
+                # deployment's service key scopes oddly).
+                public = (
+                    f"{self.base}/object/public/{self.bucket}/{key}"
+                )
+                head = await client.head(public)
+                if head.status_code == 404:
+                    logger.info(
+                        "media object absent in bucket %s: %s",
+                        self.bucket, key,
+                    )
+                    return None
+                url, auth = public, {}
             head.raise_for_status()
             content_type = head.headers.get("Content-Type")
             length = head.headers.get("Content-Length")
@@ -246,7 +266,7 @@ class SupabaseStorage(StorageBackend):
         async def stream() -> AsyncIterator[bytes]:
             async with httpx.AsyncClient(timeout=120) as client:
                 async with client.stream(
-                    "GET", url, headers=self._auth
+                    "GET", url, headers=auth or {}
                 ) as res:
                     res.raise_for_status()
                     async for chunk in res.aiter_bytes(MEDIA_CHUNK):
