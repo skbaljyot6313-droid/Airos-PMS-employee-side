@@ -112,9 +112,13 @@ class S3Storage(StorageBackend):
             except Exception as exc:
                 # Only a genuine object miss maps to None — bucket-level and
                 # transport failures are misconfig and must surface as 502,
-                # not fake 404s.
-                err = (getattr(exc, "response", None) or {}).get("Error", {})
-                if err.get("Code") == "NoSuchKey":
+                # not fake 404s. Check the HTTP status, not just the error
+                # code: some botocore versions parse Supabase's 404 XML
+                # into an empty error code.
+                res = getattr(exc, "response", None) or {}
+                meta = res.get("ResponseMetadata", {})
+                if meta.get("HTTPStatusCode") == 404 or \
+                        res.get("Error", {}).get("Code") == "NoSuchKey":
                     return None
                 raise
 
