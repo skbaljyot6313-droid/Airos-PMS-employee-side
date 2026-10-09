@@ -133,8 +133,7 @@ async def get_media_file(key: str):
         opened = await get_storage().open(key)
     except Exception as exc:
         logger.error(
-            "media fetch failed",
-            extra={"storage_key": key, "error": str(exc)},
+            "media fetch failed for %s: %s", key, exc, exc_info=True,
         )
         raise StorageUnavailable("Media storage is unavailable.") from exc
     if opened is None:
