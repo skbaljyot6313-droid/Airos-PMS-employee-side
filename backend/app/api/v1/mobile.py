@@ -12,7 +12,7 @@ never by employee JWTs.
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -179,6 +179,7 @@ async def publish_release(
 
 @router.post("/releases/apk", status_code=201)
 async def upload_release_apk(
+    request: Request,
     platform: str = Query(default="android", pattern=r"^[a-z]+$"),
     version_code: int = Query(ge=1),
     file: UploadFile = File(...),
@@ -213,7 +214,13 @@ async def upload_release_apk(
         ) from exc
     logger.info("release APK stored platform=%s code=%s key=%s",
                 platform, version_code, key)
-    return {"url": url, "key": key, "size_bytes": len(data)}
+    # Register an absolute same-origin proxy URL — LocalStorage returns a
+    # relative /uploads/ path which fails the download_url validator, and
+    # storage-host URLs are exactly what devices can't reach anyway.
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.url.netloc)
+    proxy_url = f"{proto}://{host}/api/v1/media/file/{key}"
+    return {"url": proxy_url, "key": key, "size_bytes": len(data)}
 
 
 @router.patch("/releases/{release_id}", response_model=MobileReleaseOut)

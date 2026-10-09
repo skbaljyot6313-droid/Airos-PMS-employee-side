@@ -41,6 +41,7 @@ _EXT_CT = {
     ".png": "image/png",
     ".webp": "image/webp",
     ".heic": "image/heic",
+    ".apk": "application/vnd.android.package-archive",
 }
 
 # (stream_factory, content_type, content_length) — the factory is called
@@ -324,12 +325,11 @@ def storage_key_from_url(url: str) -> str | None:
     parsed = urlparse(url)
     path = unquote(parsed.path)
     candidates: list[str] = []
-    if not parsed.netloc and path.startswith("/uploads/"):
-        candidates.append(path.removeprefix("/uploads/"))
-    if not parsed.netloc and path.startswith("/api/v1/media/file/"):
-        candidates.append(path.removeprefix("/api/v1/media/file/"))
-    if not parsed.netloc and path.startswith("/media/file/"):
-        candidates.append(path.removeprefix("/media/file/"))
+    # Proxy/local path shapes are host-agnostic — a stored absolute URL on
+    # this API's own domain still maps back to the same flat object key.
+    for prefix in ("/uploads/", "/api/v1/media/file/", "/media/file/"):
+        if path.startswith(prefix):
+            candidates.append(path.removeprefix(prefix))
     supabase_host = urlparse(settings.SUPABASE_URL).netloc
     if parsed.netloc == supabase_host:
         for marker in (

@@ -46,9 +46,12 @@ class MediaNotFound(AppError):
     message = "Media not found."
 
 
-# new_object_key output shape — a strict whitelist so traversal and
-# enumeration can't reach the storage layer at all.
-_OBJECT_KEY_RE = re.compile(r"^[0-9a-f]{32}\.[a-z0-9]{2,5}$")
+# new_object_key output shape, plus self-hosted release binaries
+# (release-<platform>-<code>-<hex8>.apk) — a strict whitelist so
+# traversal and enumeration can't reach the storage layer at all.
+_OBJECT_KEY_RE = re.compile(
+    r"^([0-9a-f]{32}\.[a-z0-9]{2,5}|release-[a-z0-9]+-[0-9]+-[0-9a-f]{8}\.apk)$"
+)
 
 
 def _matches_image_signature(data: bytes, content_type: str) -> bool:
