@@ -34,8 +34,7 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 ## Backend layout (`backend/app/`)
 
 - `main.py` — app factory, middleware (RequestID → AccessLog →
-  SecurityHeaders → GZip → CORS), `/health` `/health/db` `/ready`,
-  `/uploads` static mount.
+  SecurityHeaders → GZip → CORS), `/health` `/health/db` `/ready`.
 - `api/v1/router.py` — mounts: `auth`, `tasks`, `attendance`, `maintenance`,
   `resources` (`/zones` only), `media`, `notifications` (+`/devices/*`),
   `location`, `admin`, `mobile`.
@@ -81,7 +80,8 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   tokens), `sessions.py` (Redis session registry, fail-open),
   `rate_limit.py` (Redis fixed-window, in-memory fallback, fail-open),
   `redis.py` (`mt:` key prefix convention, accelerator-not-truth),
-  `storage.py` (local | S3 | Supabase via `STORAGE_BACKEND=auto`),
+  `storage.py` (S3-compatible object store only — Supabase Storage's S3
+  endpoint; no local-disk backend),
   `exceptions.py` (dual `detail`+`error` envelopes), `middleware.py`,
   `logging.py`.
 

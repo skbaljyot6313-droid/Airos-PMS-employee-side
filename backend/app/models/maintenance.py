@@ -132,7 +132,7 @@ class MaintenanceTicketEvent(Base):
 
 
 class MaintenanceTicketAttachment(Base):
-    """File metadata — binaries live in /uploads (dev) or object storage."""
+    """File metadata — binaries live in object storage (S3 endpoint)."""
 
     __tablename__ = "maintenance_ticket_attachments"
 

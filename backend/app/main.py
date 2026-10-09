@@ -6,7 +6,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -15,8 +14,6 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import AccessLogMiddleware, RequestIDMiddleware, SecurityHeadersMiddleware
 from app.core.redis import check_redis, close_redis, redis_configured
-from app.core.storage import LocalStorage
-
 setup_logging()
 logger = get_logger("app.main")
 
@@ -43,11 +40,6 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AccessLogMiddleware)
 app.add_middleware(RequestIDMiddleware)
 register_exception_handlers(app)
-
-_uploads = LocalStorage().dir
-_uploads.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(_uploads)), name="uploads")
-
 
 @app.get("/health", tags=["health"])
 async def health():

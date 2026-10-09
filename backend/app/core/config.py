@@ -113,12 +113,11 @@ class Settings(BaseSettings):
     # token bucket otherwise (single-process only).
     RATE_LIMIT_ENABLED: bool = True
 
-    # Media storage — "auto" picks durable object storage when credentials
-    # exist (S3_BUCKET+keys, else the Supabase service key) and falls back to
-    # UPLOAD_DIR otherwise. "local"/"s3"/"supabase" force a backend.
-    # Container filesystems are disposable — prod must not land on local.
-    STORAGE_BACKEND: str = "auto"
-    UPLOAD_DIR: str = "uploads"
+    # Media storage — always the S3-compatible object store (Supabase
+    # Storage's S3 endpoint). There is no local-disk backend: container
+    # filesystems are ephemeral and have lost uploads in production.
+    # STORAGE_BACKEND is kept only for env-compat; any value resolves to S3.
+    STORAGE_BACKEND: str = "s3"
     MAX_TASK_COMPLETION_IMAGES: int = 10
     SUPABASE_STORAGE_BUCKET: str = "uploads"
     S3_ENDPOINT_URL: str | None = None  # leave unset for AWS; set for Supabase/MinIO
@@ -150,17 +149,13 @@ class Settings(BaseSettings):
                 warnings.append("no database configured (DATABASE_URL or SUPABASE_DB_PASSWORD)")
             if self.DEBUG:
                 warnings.append("DEBUG=true in production")
-            if self.STORAGE_BACKEND == "local" or (
-                self.STORAGE_BACKEND == "auto"
-                and not (
-                    self.S3_BUCKET and self.S3_ACCESS_KEY and self.S3_SECRET_KEY
-                )
-                and not self.SUPABASE_SECRET_KEY
+            if not (
+                self.S3_BUCKET and self.S3_ACCESS_KEY and self.S3_SECRET_KEY
             ):
                 warnings.append(
-                    "media storage resolves to local in production — uploads "
-                    "land on an ephemeral filesystem (set S3_* or "
-                    "SUPABASE_SECRET_KEY, or STORAGE_BACKEND=s3/supabase)"
+                    "object storage is unconfigured — every upload/download "
+                    "will fail (set S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY "
+                    "for the Supabase Storage S3 endpoint)"
                 )
         return warnings
 

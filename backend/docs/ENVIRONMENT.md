@@ -11,11 +11,10 @@
 | `CORS_ORIGINS` | Allowed comma-separated origins | No | FastAPI | No | localhost:3000 |
 | `REDIS_URL` | Distributed rate limiter | No | Rate limiting | May be | none |
 | `RATE_LIMIT_ENABLED` | Enable endpoint limits | No | API | No | true |
-| `STORAGE_BACKEND` | `local`, `s3`, `supabase`, or `auto` | No | Media | No | auto |
-| `UPLOAD_DIR` | Local upload directory | Local only | Media | No | uploads |
-| `S3_ENDPOINT_URL/REGION/BUCKET/PUBLIC_BASE_URL` | Object-store routing | S3 only | Media | No | varies |
-| `S3_ACCESS_KEY/S3_SECRET_KEY` | Object-store credentials | S3 only | Media | Yes | none |
-| `SUPABASE_URL/SUPABASE_SECRET_KEY/SUPABASE_STORAGE_BUCKET` | Supabase storage | Supabase only | Media | key is secret | none/uploads |
+| `STORAGE_BACKEND` | Deprecated — storage is always the S3 object store | No | Media | No | s3 |
+| `S3_ENDPOINT_URL/REGION/BUCKET/PUBLIC_BASE_URL` | Object-store routing (Supabase Storage S3 endpoint) | Yes | Media | No | varies |
+| `S3_ACCESS_KEY/S3_SECRET_KEY` | Object-store credentials | Yes | Media | Yes | none |
+| `SUPABASE_URL/SUPABASE_SECRET_KEY/SUPABASE_STORAGE_BUCKET` | Supabase project (DB/auth; stored-URL key extraction) | Yes | DB/Media | key is secret | none/uploads |
 | `DB_POOL_SIZE/MAX_OVERFLOW/RECYCLE/TIMEOUT` | SQLAlchemy pool tuning | No | DB | No | see example |
 | `APP_NAME/APP_ENV/DEBUG/API_V1_PREFIX` | Application metadata/runtime | No | App | No | see example |
 

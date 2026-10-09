@@ -1,5 +1,6 @@
-"""Media upload + download proxy — storage backend selected via
-STORAGE_BACKEND (local dir or S3-compatible object store).
+"""Media upload + download proxy over the S3-compatible object store
+(Supabase Storage's S3 endpoint — the only backend; nothing is written
+to the container filesystem).
 
 Upload returns a same-origin /media/file/<key> path; GET on that path
 streams the object server-side, so devices only ever talk to the API

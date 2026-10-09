@@ -4,7 +4,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY . .
-RUN useradd --system --uid 10001 --home /app appuser && mkdir -p /app/uploads && chown -R appuser:appuser /app
+RUN useradd --system --uid 10001 --home /app appuser && chown -R appuser:appuser /app
 USER appuser
 ENV PORT=8000
 EXPOSE ${PORT}

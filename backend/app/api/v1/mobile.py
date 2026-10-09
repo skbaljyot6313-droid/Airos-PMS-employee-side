@@ -214,9 +214,9 @@ async def upload_release_apk(
         ) from exc
     logger.info("release APK stored platform=%s code=%s key=%s",
                 platform, version_code, key)
-    # Register an absolute same-origin proxy URL — LocalStorage returns a
-    # relative /uploads/ path which fails the download_url validator, and
-    # storage-host URLs are exactly what devices can't reach anyway.
+    # Register an absolute same-origin proxy URL — the raw storage URL
+    # points at a host devices may not reach, and relative paths fail
+    # the download_url validator.
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("x-forwarded-host", request.url.netloc)
     proxy_url = f"{proto}://{host}/api/v1/media/file/{key}"

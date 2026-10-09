@@ -60,7 +60,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         return response
 
 
-_SKIP_LOG = {"/health", "/health/db", "/uploads"}
+_SKIP_LOG = {"/health", "/health/db"}
 
 
 class AccessLogMiddleware(BaseHTTPMiddleware):
