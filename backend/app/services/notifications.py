@@ -44,6 +44,21 @@ ALLOCATION_SYNC_WINDOW = timedelta(days=14)
 ALLOCATION_SYNC_CAP = 50  # materialized rows per sync — backstop only
 
 
+def _allocation_notice_parts(kind: str, reassigned: bool) -> tuple[str, str]:
+    """(n_type, title) — the single mapping shared by ledger synthesis
+    and the SA push endpoint so both emit identical notifications."""
+    if kind == "task":
+        return (
+            "task_reassigned" if reassigned else "task_assigned",
+            "Task Reassigned" if reassigned else "New Task Assigned",
+        )
+    return (
+        "ticket_assigned",
+        "Maintenance Ticket Reassigned" if reassigned
+        else "New Maintenance Ticket",
+    )
+
+
 def _audit(session: AsyncSession, *, user: User, action: str,
            entity_id: uuid.UUID | None, property_id: uuid.UUID | None,
            entity_name: str | None = None, detail: dict | None = None) -> None:
@@ -243,22 +258,11 @@ class NotificationService:
         )
         count = 0
         for event, subject in res.all():
-            reassigned = event.previous_employee_id is not None
-            if kind == "task":
-                n_type = (
-                    "task_reassigned" if reassigned else "task_assigned"
-                )
-                title = (
-                    "Task Reassigned" if reassigned else "New Task Assigned"
-                )
-                task_id, ticket_id = event.ticket_id, None
-            else:
-                n_type = "ticket_assigned"
-                title = (
-                    "Maintenance Ticket Reassigned" if reassigned
-                    else "New Maintenance Ticket"
-                )
-                task_id, ticket_id = None, event.ticket_id
+            n_type, title = _allocation_notice_parts(
+                kind, event.previous_employee_id is not None
+            )
+            task_id = event.ticket_id if kind == "task" else None
+            ticket_id = event.ticket_id if kind == "maintenance" else None
             n = await self.notify(
                 employee_id=employee_id,
                 property_id=event.property_id,
@@ -274,6 +278,81 @@ class NotificationService:
                 n.created_at = event.created_at
             count += 1
         return count
+
+    async def notify_allocation_event(
+        self,
+        *,
+        ticket_kind: str,
+        ticket_id: uuid.UUID,
+        employee_id: uuid.UUID,
+        employee_name: str | None = None,
+        previous_employee_id: uuid.UUID | None = None,
+        event_created_at: datetime | None = None,
+    ) -> Notification | None:
+        """Server-to-server allocation event pushed by the SA backend
+        (POST /admin/notify-allocation). Unlike ledger synthesis this
+        fires at allocation time — real-time push becomes possible.
+
+        The event is honored only while the ticket is still assigned to
+        that employee — a torn or stale SA-side event never notifies.
+        Dedupe: an existing same-kind row at-or-after the event's
+        timestamp already covers it (mirrors synthesis), or ANY such row
+        when no timestamp is supplied."""
+        if ticket_kind == "task":
+            entity, assign_col = Task, Task.employee_id
+            link_col, types = Notification.task_id, (
+                "task_assigned", "task_reassigned"
+            )
+            subject_col = Task.title
+        elif ticket_kind == "maintenance":
+            entity = MaintenanceTicket
+            assign_col = MaintenanceTicket.assigned_to
+            link_col, types = Notification.ticket_id, ("ticket_assigned",)
+            subject_col = MaintenanceTicket.issue
+        else:
+            raise ValidationErr(
+                "ticket_kind must be 'task' or 'maintenance'.",
+                field="ticket_kind",
+            )
+        res = await self.session.execute(
+            select(subject_col, entity.property_id, assign_col).where(
+                entity.id == ticket_id
+            )
+        )
+        row = res.first()
+        if row is None or row[2] != employee_id:
+            raise NotFoundErr("Work item not found.")
+        subject, property_id, _ = row
+
+        covered = exists().where(
+            Notification.employee_id == employee_id,
+            link_col == ticket_id,
+            Notification.type.in_(types),
+        )
+        if event_created_at is not None:
+            covered = covered.where(
+                Notification.created_at >= event_created_at
+            )
+        if (await self.session.execute(select(covered))).scalar():
+            return None
+
+        n_type, title = _allocation_notice_parts(
+            ticket_kind, previous_employee_id is not None
+        )
+        n = await self.notify(
+            employee_id=employee_id,
+            property_id=property_id,
+            type=n_type,
+            title=title,
+            body=subject or "A work item was assigned to you.",
+            task_id=ticket_id if ticket_kind == "task" else None,
+            ticket_id=ticket_id if ticket_kind == "maintenance" else None,
+            employee_name=employee_name,
+        )
+        if n is not None:
+            n.created_at = event_created_at or n.created_at
+        await self.session.commit()
+        return n
 
     async def unread_count(self, user: User) -> int:
         employee_id = self._require_employee(user)

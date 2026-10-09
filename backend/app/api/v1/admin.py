@@ -13,8 +13,10 @@ touch on this path, and it happens only when a scope filter is present.
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +25,7 @@ from app.core.exceptions import AppError
 from app.dependencies.auth import require_location_service
 from app.models.employee import Employee
 from app.services import location_live, location_tracking
+from app.services.notifications import NotificationService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -85,3 +88,36 @@ async def get_location_history(
         employee_id, from_dt, to_dt,
         session_id=tracking_session_id, max_points=max_points,
     )
+
+
+class NotifyAllocationRequest(BaseModel):
+    """SA → EB allocation event. The ticket must still be assigned to
+    that employee when the call lands — stale events get a 404, not a
+    phantom notification."""
+    ticket_kind: Literal["task", "maintenance"]
+    ticket_uid: uuid.UUID
+    employee_uid: uuid.UUID
+    employee_name: str | None = None
+    previous_employee_uid: uuid.UUID | None = None
+    event_created_at: datetime | None = None
+
+
+@router.post("/notify-allocation")
+async def notify_allocation(
+    payload: NotifyAllocationRequest,
+    _service: None = Depends(require_location_service),
+    session: AsyncSession = Depends(get_db),
+):
+    """Push-side allocation notice — creates the notification row (and
+    fires push) at allocation time rather than waiting for the
+    employee's next feed poll. Ledger synthesis stays the backstop for
+    calls that never arrive."""
+    n = await NotificationService(session).notify_allocation_event(
+        ticket_kind=payload.ticket_kind,
+        ticket_id=payload.ticket_uid,
+        employee_id=payload.employee_uid,
+        employee_name=payload.employee_name,
+        previous_employee_id=payload.previous_employee_uid,
+        event_created_at=payload.event_created_at,
+    )
+    return {"notified": n is not None}

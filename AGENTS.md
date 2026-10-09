@@ -116,8 +116,16 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   `POST /mobile/releases/apk` (self-host the binary in object storage) —
   the release-management endpoints are service-key via
   RELEASE_MANAGEMENT_API_KEY.
-- `GET /admin/live-locations`, `GET /admin/location-history/{id}`
-  (LOCATION_SERVICE_API_KEY — for the SA backend, not employees).
+- `GET /admin/live-locations`, `GET /admin/location-history/{id}`,
+  `POST /admin/notify-allocation` (LOCATION_SERVICE_API_KEY — for the SA
+  backend, not employees). notify-allocation receives a SA-side
+  allocation event (`ticket_kind`, `ticket_uid`, `employee_uid`,
+  `employee_name?`, `previous_employee_uid?`, `event_created_at?`),
+  validates the work item is STILL assigned to that employee (stale →
+  404), dedupes against same-kind rows at-or-after the event timestamp,
+  and creates the notification via NotificationService at allocation
+  time — the ledger-based feed synthesis in `list_notifications` remains
+  the backstop for calls that never arrive.
 
 ## Frontend layout (`frontend/src/`)
 

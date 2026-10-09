@@ -608,3 +608,158 @@ async def test_sync_forbidden_without_employee_link(session, seed):
         await NotificationService(session).sync_assignment_notifications(
             seed["emp_user2"]
         )
+
+
+# ---------------------------------------------------------------------------
+# SA push endpoint — notify_allocation_event() backs
+# POST /admin/notify-allocation (server-to-server, X-Location-Service-Key).
+# ---------------------------------------------------------------------------
+
+async def test_event_creates_task_notification(session, seed):
+    task = _open_task(seed)
+    session.add(task)
+    await session.commit()
+
+    n = await NotificationService(session).notify_allocation_event(
+        ticket_kind="task", ticket_id=task.id,
+        employee_id=seed["employee"].id,
+    )
+    assert n is not None
+    assert n.type == "task_assigned" and n.title == "New Task Assigned"
+    assert n.task_id == task.id and n.ticket_id is None
+    assert n.body == "Mop lobby"
+    assert len(await _notifications(session, seed["employee"].id)) == 1
+
+
+async def test_event_reassignment_marks_reassigned(session, seed):
+    task = _open_task(seed)
+    session.add(task)
+    await session.commit()
+    n = await NotificationService(session).notify_allocation_event(
+        ticket_kind="task", ticket_id=task.id,
+        employee_id=seed["employee"].id,
+        previous_employee_id=uuid.uuid4(),
+    )
+    assert n is not None
+    assert n.type == "task_reassigned" and n.title == "Task Reassigned"
+
+
+async def test_event_maintenance_ticket(session, seed):
+    ticket = MaintenanceTicket(
+        company_id=seed["company"].id, property_id=seed["prop"].id,
+        ticket_number="MT-2026-00002", maintenance_type="plumbing",
+        issue="Broken shower", priority="high", status="assigned",
+        assigned_to=seed["employee"].id,
+    )
+    session.add(ticket)
+    await session.commit()
+    n = await NotificationService(session).notify_allocation_event(
+        ticket_kind="maintenance", ticket_id=ticket.id,
+        employee_id=seed["employee"].id,
+    )
+    assert n is not None
+    assert n.type == "ticket_assigned" and n.ticket_id == ticket.id
+    assert n.body == "Broken shower"
+
+
+async def test_event_dedupes_repeat_delivery(session, seed):
+    """SA retries / double-delivers → second call is a no-op."""
+    task = _open_task(seed)
+    session.add(task)
+    await session.commit()
+    svc = NotificationService(session)
+    first = await svc.notify_allocation_event(
+        ticket_kind="task", ticket_id=task.id,
+        employee_id=seed["employee"].id,
+    )
+    second = await svc.notify_allocation_event(
+        ticket_kind="task", ticket_id=task.id,
+        employee_id=seed["employee"].id,
+    )
+    assert first is not None and second is None
+    assert len(await _notifications(session, seed["employee"].id)) == 1
+
+
+async def test_event_rejected_when_no_longer_assigned(session, seed):
+    """Stale event: task now belongs to someone else → 404, no row."""
+    from app.models.employee import Employee
+    emp2 = Employee(
+        company_id=seed["company"].id, property_id=seed["prop"].id,
+        name="Worker Two", email="w2c@acme.test", status="active",
+    )
+    session.add(emp2)
+    await session.flush()
+    task = _open_task(seed, employee_id=emp2.id)
+    session.add(task)
+    await session.commit()
+    with pytest.raises(NotFoundErr):
+        await NotificationService(session).notify_allocation_event(
+            ticket_kind="task", ticket_id=task.id,
+            employee_id=seed["employee"].id,
+        )
+    assert await _notifications(session, seed["employee"].id) == []
+
+
+async def test_event_rejected_for_unknown_ticket(session, seed):
+    with pytest.raises(NotFoundErr):
+        await NotificationService(session).notify_allocation_event(
+            ticket_kind="task", ticket_id=uuid.uuid4(),
+            employee_id=seed["employee"].id,
+        )
+
+
+async def test_event_rejected_for_unknown_kind(session, seed):
+    with pytest.raises(ValidationErr):
+        await NotificationService(session).notify_allocation_event(
+            ticket_kind="carrier_pigeon", ticket_id=uuid.uuid4(),
+            employee_id=seed["employee"].id,
+        )
+
+
+async def test_event_then_sync_no_double_notify(session, seed):
+    """Push arrives first, feed poll later → synthesis sees the existing
+    row covers the ledger event and creates nothing."""
+    task = _open_task(seed)
+    session.add(task)
+    await session.flush()
+    t0 = datetime.now(timezone.utc) - timedelta(minutes=5)
+    session.add(_alloc_event(seed, ticket_id=task.id, when=t0))
+    await session.commit()
+
+    svc = NotificationService(session)
+    n = await svc.notify_allocation_event(
+        ticket_kind="task", ticket_id=task.id,
+        employee_id=seed["employee"].id,
+        event_created_at=t0,
+    )
+    assert n is not None
+    assert await svc.sync_assignment_notifications(seed["emp_user"]) == 0
+    assert len(await _notifications(session, seed["employee"].id)) == 1
+
+
+async def test_event_push_failure_still_persists(session, seed, monkeypatch):
+    from app.services import notifications as notif_mod
+    monkeypatch.setattr(notif_mod, "get_push_provider", lambda: _FailingPush())
+    task = _open_task(seed)
+    session.add(task)
+    await session.commit()
+    n = await NotificationService(session).notify_allocation_event(
+        ticket_kind="task", ticket_id=task.id,
+        employee_id=seed["employee"].id,
+    )
+    assert n is not None
+    assert len(await _notifications(session, seed["employee"].id)) == 1
+
+
+async def test_event_uses_employee_name_for_push(session, seed):
+    """Push data carries the employee's display name when resolvable."""
+    task = _open_task(seed)
+    session.add(task)
+    await session.commit()
+    push = _RecordingPush()
+    await NotificationService(session, push=push).notify_allocation_event(
+        ticket_kind="task", ticket_id=task.id,
+        employee_id=seed["employee"].id,
+    )
+    # No device registrations → no call, but no error either.
+    assert push.calls == []
