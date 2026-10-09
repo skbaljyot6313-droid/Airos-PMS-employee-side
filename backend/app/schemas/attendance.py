@@ -78,6 +78,41 @@ def day_out(d: AttendanceDay) -> dict:
     }
 
 
+def my_shift_out(
+    assignment,
+    shift,
+    *,
+    op_date: str,
+    is_working_today: bool,
+) -> dict:
+    """GET /attendance/shift wire shape — 'scheduled' when the in-force
+    assignment's shift is active, 'inactive' when the definition was
+    deactivated, 'not_assigned' when nothing covers today."""
+    if assignment is None or shift is None:
+        return {
+            "status": "not_assigned",
+            "shift": None,
+            "date": op_date,
+            "timezone": "Asia/Kolkata",
+        }
+    return {
+        "status": "scheduled" if shift.is_active else "inactive",
+        "shift": {
+            "shift_uid": str(shift.id),
+            "shift_name": shift.name,
+            "start_time": shift.start_time.strftime("%H:%M"),
+            "end_time": shift.end_time.strftime("%H:%M"),
+            "overnight": shift.end_time <= shift.start_time,
+            "working_days": shift.working_days,
+            "is_working_today": is_working_today,
+            "effective_from": assignment.effective_from,
+            "effective_until": assignment.effective_until,
+        },
+        "date": op_date,
+        "timezone": "Asia/Kolkata",
+    }
+
+
 def request_out(r: AttendanceRequest) -> dict:
     return {
         "request_uid": str(r.id),

@@ -16,11 +16,13 @@ from app.schemas.attendance import (
     AttendanceRequestCreate,
     AttendanceReviewRequest,
     day_out,
+    my_shift_out,
     request_out,
     workday_out,
 )
 from app.schemas.location import GeoCapture
 from app.services.attendance import AttendanceService
+from app.services.employee_shift import resolve_my_shift, shift_applies_on
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
@@ -36,6 +38,24 @@ async def get_today(
 ):
     day, op_date, request = await AttendanceService(session).today(user)
     return workday_out(day, date=op_date, request=request)
+
+
+@router.get("/shift")
+async def get_my_shift(
+    user: User = Depends(require_employee),
+    session: AsyncSession = Depends(get_db),
+):
+    """The caller's shift assignment in force today — read-only; the
+    schedule itself is managed from the Super Admin app."""
+    assignment, shift, op_date = await resolve_my_shift(user, session)
+    return my_shift_out(
+        assignment, shift,
+        op_date=op_date,
+        is_working_today=(
+            shift_applies_on(shift.working_days, op_date)
+            if shift else False
+        ),
+    )
 
 
 @router.post("/start")

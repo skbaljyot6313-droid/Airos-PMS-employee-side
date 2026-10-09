@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { PrimaryButton, SecondaryButton, DangerButton } from '../../components/common/Buttons';
 import { errorMessage } from '../../api/client';
@@ -16,6 +16,14 @@ import {
   NativeTrackerState,
 } from '../../services/nativeLocation';
 import { Capacitor } from '@capacitor/core';
+import {
+  getMyShiftApi,
+  formatShiftTime,
+  formatOpDate,
+  workingDaysLabel,
+  MY_SHIFT_STATUS_LABELS,
+} from '../../api/shift';
+import { MyShift } from '../../types';
 import {
   User,
   Phone,
@@ -46,6 +54,27 @@ export const ProfileScreen: React.FC = () => {
 
   // Sign out confirmation dialog
   const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
+
+  // My Shift — refetched on every mount (the screen remounts when the
+  // employee returns to this tab, so admin changes appear without an
+  // app reinstall). Read-only: scheduling is an admin operation.
+  const [myShift, setMyShift] = useState<MyShift | null>(null);
+  const [shiftLoading, setShiftLoading] = useState<boolean>(true);
+  const [shiftError, setShiftError] = useState<string | null>(null);
+  const loadShift = useCallback(async () => {
+    setShiftError(null);
+    try {
+      setMyShift(await getMyShiftApi());
+    } catch (err: unknown) {
+      setMyShift(null);
+      setShiftError(errorMessage(err, 'Could not load your shift.'));
+    } finally {
+      setShiftLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void loadShift();
+  }, [loadShift]);
 
   // Diagnostics — only compiled in when built with VITE_UPDATE_DEBUG=true.
   const UPDATE_DEBUG = import.meta.env.VITE_UPDATE_DEBUG === 'true';
@@ -166,6 +195,96 @@ export const ProfileScreen: React.FC = () => {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* My Shift (Read-Only — schedule set by Property Manager) */}
+        <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#33B059]" />
+              <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+                My Shift
+              </h3>
+            </div>
+            {!shiftLoading && !shiftError && (
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${
+                  myShift?.status === 'scheduled'
+                    ? 'bg-[#E8F7ED] text-[#278B46] border-[#BBECCC]'
+                    : 'bg-[#F7F8F6] text-[#8D999C] border-[#E4E8E6]'
+                }`}
+              >
+                {MY_SHIFT_STATUS_LABELS[myShift?.status ?? 'not_assigned']}
+              </span>
+            )}
+          </div>
+
+          {shiftLoading ? (
+            <div className="space-y-2.5 animate-pulse">
+              <div className="h-3.5 rounded bg-[#F0F2F1] w-3/4" />
+              <div className="h-3.5 rounded bg-[#F0F2F1] w-1/2" />
+              <div className="h-3.5 rounded bg-[#F0F2F1] w-2/3" />
+            </div>
+          ) : shiftError ? (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[#D9534F]">{shiftError}</span>
+              <button
+                onClick={() => {
+                  setShiftLoading(true);
+                  void loadShift();
+                }}
+                className="text-xs font-semibold text-[#33B059] hover:underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : myShift?.shift ? (
+            <div className="divide-y divide-[#F0F2F1] text-xs">
+              <div className="py-2 flex items-center justify-between">
+                <span className="text-[#8D999C]">Timing</span>
+                <span className="font-semibold text-[#20292C] text-right">
+                  {formatShiftTime(myShift.shift.start_time)} –{' '}
+                  {formatShiftTime(myShift.shift.end_time)}
+                  {myShift.shift.overnight && (
+                    <span className="text-[#8D999C] font-medium"> (+1 day)</span>
+                  )}
+                </span>
+              </div>
+              <div className="py-2 flex items-center justify-between">
+                <span className="text-[#8D999C]">Working days</span>
+                <span className="font-semibold text-[#20292C] text-right">
+                  {workingDaysLabel(myShift.shift.working_days)}
+                </span>
+              </div>
+              <div className="py-2 flex items-center justify-between">
+                <span className="text-[#8D999C]">Shift</span>
+                <span className="font-semibold text-[#20292C] text-right">
+                  {myShift.shift.shift_name}
+                </span>
+              </div>
+              <div className="py-2 flex items-center justify-between">
+                <span className="text-[#8D999C]">Effective</span>
+                <span className="font-semibold text-[#20292C] text-right">
+                  {formatOpDate(myShift.shift.effective_from)}
+                  {myShift.shift.effective_until
+                    ? ` – ${formatOpDate(myShift.shift.effective_until)}`
+                    : ' onwards'}
+                </span>
+              </div>
+              {!myShift.shift.is_working_today && (
+                <div className="py-2 flex items-center justify-between">
+                  <span className="text-[#8D999C]">Today</span>
+                  <span className="font-medium text-[#667174] text-right">
+                    Scheduled day off
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-[#8D999C]">
+              No shift assigned — your manager hasn't scheduled you yet.
+            </p>
+          )}
         </div>
 
         {/* Personal Contact Details */}

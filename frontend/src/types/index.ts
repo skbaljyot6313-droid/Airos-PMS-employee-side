@@ -375,3 +375,29 @@ export interface DayOffRequest {
   reason: string | null;
   created_at: string;
 }
+
+// ---------------------------------------------------------------------------
+// My Shift — the employee's shift assignment in force today (read-only;
+// managed from the Super Admin app). Times stay IST wall-clock 'HH:MM'.
+// ---------------------------------------------------------------------------
+
+export type MyShiftStatus = 'scheduled' | 'inactive' | 'not_assigned';
+
+export interface AssignedShift {
+  shift_uid: string;
+  shift_name: string;
+  start_time: string; // 'HH:MM' IST
+  end_time: string;   // 'HH:MM' IST
+  overnight: boolean;
+  working_days: string; // Monday-first 7-char bitmap
+  is_working_today: boolean;
+  effective_from: string;         // 'YYYY-MM-DD'
+  effective_until: string | null; // 'YYYY-MM-DD' or open-ended
+}
+
+export interface MyShift {
+  status: MyShiftStatus;
+  shift: AssignedShift | null;
+  date: string;
+  timezone: string;
+}

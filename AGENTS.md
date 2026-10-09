@@ -64,7 +64,13 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   occupancies, attendance_days/breaks/requests, notifications,
   device_registrations, location_events, resource_state_events,
   work_allocation_*, work_templates*, audit_events, mobile_releases,
-  location_tracking_sessions).
+  location_tracking_sessions, shifts + employee_shift_assignments —
+  shared tables written by the Super Admin backend; this repo owns the
+  migration revision `v9f2b5c8d1e4` in its chain, maps them read-only
+  in `models/shift.py`, and serves the caller's own assignment via
+  `GET /attendance/shift` (`services/employee_shift.py` — resolution
+  mirrors SA's effective_assignments: in-force on today's IST op-day,
+  latest effective_from wins; UI route: Profile → My Shift card).
 - `domain/` — canonical state vocab (`resource_states.py`), legal
   transitions + source gates (`transitions.py`), event sources
   (`resource_events.py`).

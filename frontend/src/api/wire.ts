@@ -335,6 +335,35 @@ export interface AttendanceMonthWire {
   requests: AttendanceRequestWire[];
 }
 
+/** One shift assignment inside GET /attendance/shift — times are IST
+ *  wall-clock 'HH:MM' and must be rendered verbatim (never converted to
+ *  device timezone). */
+export interface AssignedShiftWire {
+  shift_uid: string;
+  shift_name: string;
+  start_time: string; // 'HH:MM' IST
+  end_time: string;   // 'HH:MM' IST
+  /** end_time <= start_time — the window ends on the next calendar day. */
+  overnight: boolean;
+  /** Monday-first 7-char '0'/'1' bitmap. */
+  working_days: string;
+  /** Today's op-date covered by the bitmap. */
+  is_working_today: boolean;
+  effective_from: string;        // 'YYYY-MM-DD' inclusive
+  effective_until: string | null; // 'YYYY-MM-DD' inclusive, open-ended
+}
+
+export type MyShiftStatusWire = 'scheduled' | 'inactive' | 'not_assigned';
+
+/** GET /attendance/shift response. */
+export interface MyShiftWire {
+  status: MyShiftStatusWire;
+  shift: AssignedShiftWire | null;
+  /** IST operational date the assignment was resolved against. */
+  date: string;
+  timezone: string; // 'Asia/Kolkata'
+}
+
 // ---------------------------------------------------------------------------
 // Live location — current-position-only (Redis latest, 60 s TTL server-side)
 // ---------------------------------------------------------------------------
