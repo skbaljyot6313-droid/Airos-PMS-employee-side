@@ -225,6 +225,12 @@ export function subscribeFlow(l: (f: UpdateFlow) => void): () => void {
 
 const emitFlow = (f: UpdateFlow) => {
   flow = f;
+  // The native reject code is the only diagnostic for a failed download —
+  // send it to logcat (Capacitor pipes console.* there) so support can
+  // read it without rebuilding anything.
+  if (f.phase === 'error') {
+    console.warn(`[UPDATE] update flow failed: ${f.error}`);
+  }
   flowListeners.forEach((l) => l(flow));
 };
 export const getUpdateFlow = (): UpdateFlow => flow;

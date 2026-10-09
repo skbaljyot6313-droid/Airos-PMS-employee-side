@@ -137,3 +137,100 @@ async def test_non_https_url_rejected(api, service_key):
         headers=_auth(),
     )
     assert res.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# PATCH /mobile/releases/{id} — repoint download_url / notes in place
+# ---------------------------------------------------------------------------
+
+
+async def test_patch_repoints_download_url(api, service_key):
+    rel = (
+        await api.post(RELEASES_URL, json=_release(), headers=_auth())
+    ).json()
+    res = await api.patch(
+        f"{RELEASES_URL}/{rel['id']}",
+        json={"download_url": "https://storage.test/release.apk"},
+        headers=_auth(),
+    )
+    assert res.status_code == 200
+    pub = await api.get(VERSION_URL)
+    assert pub.json()["download_url"] == "https://storage.test/release.apk"
+
+
+async def test_patch_rejects_non_https(api, service_key):
+    rel = (
+        await api.post(RELEASES_URL, json=_release(), headers=_auth())
+    ).json()
+    res = await api.patch(
+        f"{RELEASES_URL}/{rel['id']}",
+        json={"download_url": "http://insecure/x.apk"},
+        headers=_auth(),
+    )
+    assert res.status_code == 422
+
+
+async def test_patch_requires_service_key(api, service_key):
+    rel = (
+        await api.post(RELEASES_URL, json=_release(), headers=_auth())
+    ).json()
+    res = await api.patch(
+        f"{RELEASES_URL}/{rel['id']}",
+        json={"download_url": "https://storage.test/x.apk"},
+    )
+    assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /mobile/releases/apk — self-hosted release binaries
+# ---------------------------------------------------------------------------
+
+
+class _FakeStorage:
+    def __init__(self):
+        self.saved: dict[str, bytes] = {}
+
+    async def save(self, data: bytes, key: str, content_type: str) -> str:
+        self.saved[key] = data
+        return f"https://storage.test/{key}"
+
+    async def delete(self, key: str) -> None:
+        self.saved.pop(key, None)
+
+
+async def test_apk_upload_stores_binary(api, service_key, monkeypatch):
+    fake = _FakeStorage()
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
+    res = await api.post(
+        f"{RELEASES_URL}/apk?platform=android&version_code=3",
+        files={
+            "file": (
+                "app.apk",
+                b"PK\x03\x04fake-apk-bytes",
+                "application/vnd.android.package-archive",
+            )
+        },
+        headers=_auth(),
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["url"].endswith(".apk")
+    assert "release-android-3-" in body["key"]
+    assert fake.saved[body["key"]].startswith(b"PK")
+
+
+async def test_apk_upload_rejects_non_apk(api, service_key):
+    res = await api.post(
+        f"{RELEASES_URL}/apk",
+        files={"file": ("x.apk", b"not-an-apk", "application/octet-stream")},
+        headers=_auth(),
+    )
+    assert res.status_code == 422
+
+
+async def test_apk_upload_requires_service_key(api, service_key):
+    res = await api.post(
+        f"{RELEASES_URL}/apk?version_code=3",
+        files={"file": ("x.apk", b"PK\x03\x04x", "application/octet-stream")},
+    )
+    assert res.status_code == 401

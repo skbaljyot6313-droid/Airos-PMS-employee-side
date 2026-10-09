@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import android.util.Log;
 
 import androidx.core.content.FileProvider;
 import androidx.core.content.pm.PackageInfoCompat;
@@ -38,6 +39,7 @@ import java.util.concurrent.Executors;
  */
 @CapacitorPlugin(name = "AirosUpdate")
 public class AppUpdatePlugin extends Plugin {
+    private static final String TAG = "AirosUpdate";
     private static final String EXPECTED_PACKAGE = "com.theairco.airos.employee";
     private static final String PREFS = "airos_update";
     private static final String KEY_PATH = "pending_apk_path";
@@ -46,10 +48,20 @@ public class AppUpdatePlugin extends Plugin {
     private static final int CONNECT_TIMEOUT_MS = 30000;
     private static final int READ_TIMEOUT_MS = 60000;
     private static final int MAX_REDIRECTS = 5;
-    /** The APK may only come from Expo's artifact hosts — the backend URL is
-     *  treated as untrusted input until it lands on one of these. */
+    /** The APK may only come from Expo's artifact hosts or our own
+     *  release storage/API — the backend URL is treated as untrusted
+     *  input until it lands on one of these. The APK signature and
+     *  versionCode checks below remain the real install gates. */
     private static final Set<String> TRUSTED_HOSTS = new HashSet<>(Arrays.asList(
-            "expo.dev", "eascdn.net", "storage.googleapis.com"));
+            "expo.dev", "eascdn.net", "storage.googleapis.com",
+            "supabase.co", "up.railway.app"));
+
+    /** Every rejection is logged to logcat — the JS layer only ever sees
+     *  the code, so without this a failed download is undiagnosable. */
+    private static void deny(PluginCall call, String code) {
+        Log.w(TAG, "update request rejected: " + code);
+        call.reject(code);
+    }
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile boolean downloading = false;
@@ -185,21 +197,21 @@ public class AppUpdatePlugin extends Plugin {
     public void installApk(PluginCall call) {
         String path = prefs().getString(KEY_PATH, null);
         if (path == null) {
-            call.reject("NO_PENDING_APK");
+            deny(call,"NO_PENDING_APK");
             return;
         }
         File apk = new File(path);
         PackageInfo info = inspectApk(apk);
         if (info == null) {
             clearPending();
-            call.reject("INVALID_APK");
+            deny(call,"INVALID_APK");
             return;
         }
         long installed = installedCode();
         if (installed > 0
                 && PackageInfoCompat.getLongVersionCode(info) <= installed) {
             clearPending();
-            call.reject("NOT_AN_UPGRADE");
+            deny(call,"NOT_AN_UPGRADE");
             return;
         }
         Uri uri = FileProvider.getUriForFile(
@@ -216,7 +228,7 @@ public class AppUpdatePlugin extends Plugin {
         try {
             getContext().startActivity(intent);
         } catch (Exception e) {
-            call.reject("INSTALL_LAUNCH_FAILED");
+            deny(call,"INSTALL_LAUNCH_FAILED");
             return;
         }
         call.resolve();
@@ -227,11 +239,11 @@ public class AppUpdatePlugin extends Plugin {
         String url = call.getString("url");
         int expectedCode = call.getInt("expectedVersionCode", -1);
         if (url == null || !url.startsWith("https://") || !trustedHost(url)) {
-            call.reject("UNTRUSTED_URL");
+            deny(call,"UNTRUSTED_URL");
             return;
         }
         if (downloading) {
-            call.reject("ALREADY_DOWNLOADING");
+            deny(call,"ALREADY_DOWNLOADING");
             return;
         }
         downloading = true;
@@ -258,21 +270,21 @@ public class AppUpdatePlugin extends Plugin {
                         String next = conn.getHeaderField("Location");
                         conn.disconnect();
                         if (next == null || hops >= MAX_REDIRECTS) {
-                            call.reject("BAD_REDIRECT");
+                            deny(call,"BAD_REDIRECT");
                             return;
                         }
                         // Resolve relative Locations against the current URL.
                         URL resolved = new URL(new URL(current), next);
                         if (!"https".equalsIgnoreCase(resolved.getProtocol())
                                 || !trustedHost(resolved.toExternalForm())) {
-                            call.reject("UNTRUSTED_REDIRECT");
+                            deny(call,"UNTRUSTED_REDIRECT");
                             return;
                         }
                         current = resolved.toExternalForm();
                         continue;
                     }
                     if (status != 200) {
-                        call.reject("HTTP_" + status);
+                        deny(call,"HTTP_" + status);
                         return;
                     }
                     break;
@@ -306,7 +318,7 @@ public class AppUpdatePlugin extends Plugin {
                 if (received == 0) {
                     //noinspection ResultOfMethodCallIgnored
                     part.delete();
-                    call.reject("EMPTY_DOWNLOAD");
+                    deny(call,"EMPTY_DOWNLOAD");
                     return;
                 }
 
@@ -316,7 +328,7 @@ public class AppUpdatePlugin extends Plugin {
                     if (head.read(magic) < 4 || magic[0] != 'P' || magic[1] != 'K') {
                         //noinspection ResultOfMethodCallIgnored
                         part.delete();
-                        call.reject("NOT_AN_APK");
+                        deny(call,"NOT_AN_APK");
                         return;
                     }
                 }
@@ -329,14 +341,14 @@ public class AppUpdatePlugin extends Plugin {
                 if (info == null) {
                     //noinspection ResultOfMethodCallIgnored
                     target.delete();
-                    call.reject("WRONG_PACKAGE");
+                    deny(call,"WRONG_PACKAGE");
                     return;
                 }
                 long code = PackageInfoCompat.getLongVersionCode(info);
                 if (expectedCode > 0 && code != expectedCode) {
                     //noinspection ResultOfMethodCallIgnored
                     target.delete();
-                    call.reject("WRONG_VERSION_CODE");
+                    deny(call,"WRONG_VERSION_CODE");
                     return;
                 }
                 // Downgrade guard — never install a build that isn't newer.
@@ -344,7 +356,7 @@ public class AppUpdatePlugin extends Plugin {
                 if (installed > 0 && code <= installed) {
                     //noinspection ResultOfMethodCallIgnored
                     target.delete();
-                    call.reject("NOT_AN_UPGRADE");
+                    deny(call,"NOT_AN_UPGRADE");
                     return;
                 }
                 savePending(target, info);
@@ -363,7 +375,7 @@ public class AppUpdatePlugin extends Plugin {
             } catch (Exception e) {
                 //noinspection ResultOfMethodCallIgnored
                 part.delete();
-                call.reject("DOWNLOAD_ERROR:" + e.getClass().getSimpleName());
+                deny(call,"DOWNLOAD_ERROR:" + e.getClass().getSimpleName());
             } finally {
                 if (conn != null) conn.disconnect();
                 downloading = false;

@@ -50,6 +50,25 @@ class MobileReleaseCreate(BaseModel):
         return v
 
 
+class MobileReleasePatch(BaseModel):
+    """Mutable release fields — repoint a download URL or edit notes
+    without a version bump. version/version_code stay immutable: a new
+    build is a new release."""
+
+    download_url: str | None = Field(default=None, min_length=1, max_length=2048)
+    release_notes: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("download_url")
+    @classmethod
+    def _https_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v.startswith("https://"):
+            raise ValueError("download_url must be an https:// URL")
+        return v
+
+
 class MobileReleaseOut(BaseModel):
     id: uuid.UUID
     platform: str

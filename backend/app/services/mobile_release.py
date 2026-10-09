@@ -83,6 +83,26 @@ async def publish_release(
     return release
 
 
+async def update_release(
+    session: AsyncSession,
+    release_id,
+    platform: str,
+    data,
+) -> MobileRelease:
+    """Patch mutable fields (download_url, release_notes) on an existing
+    release — lets ops repoint a download without a version bump."""
+    release = await session.get(MobileRelease, release_id)
+    if release is None or release.platform != platform:
+        raise ReleaseNotFound("Release not found for this platform.")
+    patch = data.model_dump(exclude_unset=True)
+    if patch:
+        for key, value in patch.items():
+            setattr(release, key, value)
+        await session.commit()
+        await session.refresh(release)
+    return release
+
+
 async def activate_release(
     session: AsyncSession, release_id, platform: str
 ) -> MobileRelease:

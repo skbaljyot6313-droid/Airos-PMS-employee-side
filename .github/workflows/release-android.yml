@@ -110,6 +110,25 @@ jobs:
           test -n "$APK_URL"
           echo "apk_url=$APK_URL" >> "$GITHUB_OUTPUT"
 
+      # Devices fetch the update from our object storage — one direct
+      # HTTPS hop. The EAS artifact chain (expo.dev -> api.expo.dev ->
+      # expiring eascdn signed URL) stays as fallback if upload fails.
+      - name: Self-host the APK
+        id: upload
+        run: |
+          curl -fsSL "${{ steps.artifact.outputs.apk_url }}" -o app-release.apk
+          NEW_CODE=$(jq -r '.expo.android.versionCode' app.json)
+          URL=$(curl -fsS -X POST \
+            "$API_BASE/mobile/releases/apk?platform=android&version_code=$NEW_CODE" \
+            -H "Authorization: Bearer $RELEASE_KEY" \
+            -F "file=@app-release.apk;type=application/vnd.android.package-archive" \
+            | jq -r '.url // empty' || true)
+          if [ -z "$URL" ]; then
+            echo "::warning::APK self-host upload failed — falling back to the EAS artifact URL"
+            URL="${{ steps.artifact.outputs.apk_url }}"
+          fi
+          echo "download_url=$URL" >> "$GITHUB_OUTPUT"
+
       - name: Publish release metadata
         run: |
           MIN_VERSION="${{ inputs.minimum_version }}"
@@ -124,7 +143,7 @@ jobs:
             --argjson c "$NEW_CODE" \
             --arg mv "$MIN_VERSION" \
             --argjson mc "$MIN_CODE" \
-            --arg url "${{ steps.artifact.outputs.apk_url }}" \
+            --arg url "${{ steps.upload.outputs.download_url }}" \
             --arg notes "${{ inputs.release_notes }}" \
             --argjson force "${{ inputs.force_update }}" \
             '{platform:"android", version:$v, version_code:$c,
