@@ -16,6 +16,7 @@ object comes back from save() — the caller never builds paths itself.
 import asyncio
 import uuid
 from pathlib import Path
+from typing import AsyncIterator, Callable
 from urllib.parse import unquote, urlparse
 
 from app.core.config import settings
@@ -32,6 +33,23 @@ ALLOWED_CONTENT_TYPES = {
     "image/heif": ".heic",
 }
 
+# Stored objects are immutable uuid-keyed blobs — long-cacheable.
+MEDIA_CHUNK = 256 * 1024
+
+_EXT_CT = {
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".heic": "image/heic",
+}
+
+# (stream_factory, content_type, content_length) — the factory is called
+# once by the route to produce the body iterator, so connections stay
+# open exactly as long as the response streams.
+OpenedObject = tuple[
+    Callable[[], AsyncIterator[bytes]], str | None, int | None
+]
+
 
 class StorageBackend:
     async def save(self, data: bytes, key: str, content_type: str) -> str:
@@ -40,6 +58,10 @@ class StorageBackend:
 
     async def delete(self, key: str) -> None:
         """Delete a previously stored object; missing objects are ignored."""
+        raise NotImplementedError
+
+    async def open(self, key: str) -> OpenedObject | None:
+        """Open a stored object for streaming — None when absent."""
         raise NotImplementedError
 
 
@@ -60,6 +82,25 @@ class LocalStorage(StorageBackend):
         if not key or Path(key).name != key:
             return
         await asyncio.to_thread((self.dir / key).unlink, missing_ok=True)
+
+    async def open(self, key: str) -> OpenedObject | None:
+        path = self.dir / key
+        if not await asyncio.to_thread(path.is_file):
+            return None
+        size = (await asyncio.to_thread(path.stat)).st_size
+
+        async def stream() -> AsyncIterator[bytes]:
+            def _read(fh):
+                return fh.read(MEDIA_CHUNK)
+
+            with open(path, "rb") as fh:
+                while True:
+                    chunk = await asyncio.to_thread(_read, fh)
+                    if not chunk:
+                        break
+                    yield chunk
+
+        return stream, _EXT_CT.get(path.suffix.lower()), size
 
 
 class S3Storage(StorageBackend):
@@ -96,6 +137,31 @@ class S3Storage(StorageBackend):
             await asyncio.to_thread(
                 self.client.delete_object, Bucket=self.bucket, Key=key
             )
+
+    async def open(self, key: str) -> OpenedObject | None:
+        def _get():
+            try:
+                return self.client.get_object(Bucket=self.bucket, Key=key)
+            except Exception:
+                return None
+
+        res = await asyncio.to_thread(_get)
+        if res is None:
+            return None
+        body = res["Body"]
+
+        async def stream() -> AsyncIterator[bytes]:
+            while True:
+                chunk = await asyncio.to_thread(body.read, MEDIA_CHUNK)
+                if not chunk:
+                    break
+                yield chunk
+
+        return (
+            stream,
+            res.get("ContentType"),
+            res.get("ContentLength"),
+        )
 
 
 class SupabaseStorage(StorageBackend):
@@ -162,6 +228,36 @@ class SupabaseStorage(StorageBackend):
             if res.status_code != 404:
                 res.raise_for_status()
 
+    async def open(self, key: str) -> OpenedObject | None:
+        """HEAD for existence/metadata, then a streaming GET owned by the
+        returned factory — the private object endpoint serves the bytes,
+        so the device never talks to supabase.co directly."""
+        import httpx  # deferred — only needed when this backend is selected
+
+        url = f"{self.base}/object/{self.bucket}/{key}"
+        async with httpx.AsyncClient(timeout=30) as client:
+            head = await client.head(url, headers=self._auth)
+            if head.status_code == 404:
+                return None
+            head.raise_for_status()
+            content_type = head.headers.get("Content-Type")
+            length = head.headers.get("Content-Length")
+
+        async def stream() -> AsyncIterator[bytes]:
+            async with httpx.AsyncClient(timeout=120) as client:
+                async with client.stream(
+                    "GET", url, headers=self._auth
+                ) as res:
+                    res.raise_for_status()
+                    async for chunk in res.aiter_bytes(MEDIA_CHUNK):
+                        yield chunk
+
+        return (
+            stream,
+            content_type,
+            int(length) if length and length.isdigit() else None,
+        )
+
 
 def _s3_ready() -> bool:
     return bool(
@@ -210,6 +306,10 @@ def storage_key_from_url(url: str) -> str | None:
     candidates: list[str] = []
     if not parsed.netloc and path.startswith("/uploads/"):
         candidates.append(path.removeprefix("/uploads/"))
+    if not parsed.netloc and path.startswith("/api/v1/media/file/"):
+        candidates.append(path.removeprefix("/api/v1/media/file/"))
+    if not parsed.netloc and path.startswith("/media/file/"):
+        candidates.append(path.removeprefix("/media/file/"))
     supabase_host = urlparse(settings.SUPABASE_URL).netloc
     if parsed.netloc == supabase_host:
         for marker in (
@@ -233,3 +333,20 @@ def storage_key_from_url(url: str) -> str | None:
         if candidate and Path(candidate).name == candidate:
             return candidate
     return None
+
+
+def proxy_media_url(url: str | None) -> str | None:
+    """Rewrite a stored storage URL to the same-origin proxy path.
+
+    Devices only ever fetch media from the API origin — the object store
+    (supabase.co / S3 endpoints) may be unreachable or DNS-blocked on
+    field networks, while the Railway API domain is already proven
+    reachable. Unknown/external URLs pass through untouched; relative
+    /media/file/ paths stay as-is (already proxied).
+    """
+    if not url:
+        return url
+    if "/media/file/" in url:
+        return url
+    key = storage_key_from_url(url)
+    return f"/api/v1/media/file/{key}" if key else url

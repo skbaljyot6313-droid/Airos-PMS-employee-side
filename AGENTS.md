@@ -96,17 +96,26 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   `/washrooms` `/properties` `/employees` exist as serializers/repos but
   have NO v1 routes; frontend tolerates the 404s).
 - `POST /media/uploads` (JPEG/PNG/WebP/HEIC MIME, magic-byte check, ≤10MB,
-  30/min).
+  30/min). `GET /media/file/{key}` (public, 240/min) streams a stored
+  object through this origin — serializers emit `/api/v1/media/file/<key>`
+  (`proxy_media_url` in storage.py) so devices never fetch from
+  supabase.co/CDN hosts they may not reach. Keys are unguessable uuid
+  blobs; the regex whitelist makes traversal impossible.
 - `GET|POST /attendance/*` — today/start/break/resume/end, calendar,
   requests (+cancel; approve/reject are super_admin-only).
 - `POST /location/start|current|stop`, `GET /location/current`
   (Redis-backed, sessions minted server-side, seq dedup).
 - `GET /notifications`, `unread-count`, `/{uid}/read`;
   `POST /devices/register|unregister`.
-- `GET /mobile/version` (public), `POST /mobile/releases[/.../activate]`,
+- `GET /mobile/version` (public; `download_url` is the same-origin
+  `/api/v1/mobile/apk` proxy path — updateService absolutizes it via
+  `mediaUrl`), `GET /mobile/apk` (public, 30/min; streams the active
+  binary from storage or server-fetches the stored external URL),
+  `POST /mobile/releases[/.../activate]`,
   `PATCH /mobile/releases/{id}` (repoint `download_url` in place),
   `POST /mobile/releases/apk` (self-host the binary in object storage) —
-  all service-key via RELEASE_MANAGEMENT_API_KEY.
+  the release-management endpoints are service-key via
+  RELEASE_MANAGEMENT_API_KEY.
 - `GET /admin/live-locations`, `GET /admin/location-history/{id}`
   (LOCATION_SERVICE_API_KEY — for the SA backend, not employees).
 

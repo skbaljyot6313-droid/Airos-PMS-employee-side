@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.core.storage import proxy_media_url
+
 
 MAINTENANCE_TYPES = {
     "electrical", "plumbing", "civil", "carpentry", "hvac", "painting",
@@ -67,7 +69,7 @@ class MaintenanceDisapproveRequest(BaseModel):
 def attachment_out(a) -> dict:
     return {
         "attachment_uid": str(a.id),
-        "url": a.url,
+        "url": proxy_media_url(a.url),
         "file_name": a.file_name,
         "mime_type": a.mime_type,
         "size_bytes": a.size_bytes,

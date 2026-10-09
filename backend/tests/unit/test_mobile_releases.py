@@ -76,7 +76,8 @@ async def test_publish_then_public_version(api, service_key):
     body = pub.json()
     assert body["latest_version"] == "1.0.1"
     assert body["latest_version_code"] == 2
-    assert body["download_url"].endswith(".apk")
+    # Devices download through the API origin — never the stored host URL.
+    assert body["download_url"].startswith("/api/v1/mobile/apk")
     assert body["force_update"] is False
     # Public payload carries release metadata only.
     assert set(body) == {
@@ -155,7 +156,7 @@ async def test_patch_repoints_download_url(api, service_key):
     )
     assert res.status_code == 200
     pub = await api.get(VERSION_URL)
-    assert pub.json()["download_url"] == "https://storage.test/release.apk"
+    assert pub.json()["download_url"].startswith("/api/v1/mobile/apk")
 
 
 async def test_patch_rejects_non_https(api, service_key):
@@ -197,6 +198,16 @@ class _FakeStorage:
     async def delete(self, key: str) -> None:
         self.saved.pop(key, None)
 
+    async def open(self, key: str):
+        data = self.saved.get(key)
+        if data is None:
+            return None
+
+        async def stream():
+            yield data
+
+        return stream, "application/vnd.android.package-archive", len(data)
+
 
 async def test_apk_upload_stores_binary(api, service_key, monkeypatch):
     fake = _FakeStorage()
@@ -234,3 +245,123 @@ async def test_apk_upload_requires_service_key(api, service_key):
         files={"file": ("x.apk", b"PK\x03\x04x", "application/octet-stream")},
     )
     assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# GET /mobile/apk — device-facing binary proxy through the API origin
+# ---------------------------------------------------------------------------
+
+
+async def test_apk_proxy_404s_without_release(api):
+    res = await api.get("/api/v1/mobile/apk")
+    assert res.status_code == 404
+
+
+async def test_apk_proxy_streams_stored_binary(api, service_key, monkeypatch):
+    fake = _FakeStorage()
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
+    monkeypatch.setattr(settings, "S3_BUCKET", "b")
+    monkeypatch.setattr(
+        settings, "S3_PUBLIC_BASE_URL", "https://storage.test"
+    )
+    await api.post(
+        RELEASES_URL,
+        json=_release(url="https://storage.test/release-android-2-deadbeef.apk"),
+        headers=_auth(),
+    )
+    fake.saved["release-android-2-deadbeef.apk"] = b"PK\x03\x04apk-bytes"
+
+    res = await api.get("/api/v1/mobile/apk")
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith(
+        "application/vnd.android.package-archive"
+    )
+    assert res.headers["content-length"] == str(len(b"PK\x03\x04apk-bytes"))
+    assert "airos-android-1.0.1.apk" in res.headers["content-disposition"]
+    assert res.content == b"PK\x03\x04apk-bytes"
+
+
+async def test_apk_proxy_404s_when_binary_missing(api, service_key, monkeypatch):
+    fake = _FakeStorage()
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
+    monkeypatch.setattr(settings, "S3_BUCKET", "b")
+    monkeypatch.setattr(
+        settings, "S3_PUBLIC_BASE_URL", "https://storage.test"
+    )
+    await api.post(
+        RELEASES_URL,
+        json=_release(url="https://storage.test/release-android-2-deadbeef.apk"),
+        headers=_auth(),
+    )
+    res = await api.get("/api/v1/mobile/apk")
+    assert res.status_code == 404
+
+
+async def test_apk_proxy_fetches_external_url(api, service_key, monkeypatch):
+    """Externally hosted artifacts (expo.dev) are fetched server-side —
+    the device still only talks to this origin."""
+    await api.post(RELEASES_URL, json=_release(), headers=_auth())
+    apk = b"PK\x03\x04external-apk"
+
+    class _Resp:
+        def __init__(self, status=200, headers=None):
+            self.status_code = status
+            self.headers = headers or {}
+
+        async def aiter_bytes(self, n):
+            yield apk
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError("upstream")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+    class _Client:
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def head(self, url):
+            return _Resp(200, {"Content-Length": str(len(apk))})
+
+        def stream(self, method, url):
+            return _Resp()
+
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    res = await api.get("/api/v1/mobile/apk")
+    assert res.status_code == 200
+    assert res.content == apk
+
+
+async def test_apk_proxy_502s_when_external_unreachable(
+    api, service_key, monkeypatch
+):
+    await api.post(RELEASES_URL, json=_release(), headers=_auth())
+
+    class _Client:
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def head(self, url):
+            raise httpx.ConnectError("no route")
+
+    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    res = await api.get("/api/v1/mobile/apk")
+    assert res.status_code == 502
+    assert res.json()["error"]["code"] == "STORAGE_UNAVAILABLE"

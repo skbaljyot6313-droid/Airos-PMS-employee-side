@@ -17,6 +17,7 @@
 import { App } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 
+import { mediaUrl } from '../api/client';
 import { getMobileVersion, MobileVersionInfo } from '../api/mobile';
 import { NativeUpdate } from './updateInstaller';
 
@@ -329,8 +330,11 @@ export async function beginUpdate(info: MobileVersionInfo): Promise<void> {
       return;
     }
     emitFlow({ phase: 'downloading', progress: 0, error: null });
+    // download_url is an API-relative proxy path (the device only ever
+    // fetches from the API origin); mediaUrl() absolutizes it for the
+    // native downloader and passes any absolute URL through unchanged.
     await NativeUpdate.downloadApk({
-      url: info.download_url,
+      url: mediaUrl(info.download_url),
       expectedVersionCode: info.latest_version_code,
     });
     emitFlow({ phase: 'ready', progress: 100, error: null });

@@ -10,6 +10,7 @@ from typing import Any, Generic, TypeVar
 from pydantic import BaseModel
 from sqlalchemy import inspect as sa_inspect
 
+from app.core.storage import proxy_media_url
 from app.models.employee import Employee
 from app.models.property import Property
 from app.models.structure import Area, Bed, Dorm, Room, Washroom, Zone
@@ -346,7 +347,7 @@ def completion_image_out(i: TaskCompletionImage) -> dict:
         "task_uid": str(i.task_id),
         "event_uid": str(i.history_event_id) if i.history_event_id else None,
         "submission_uid": str(i.submission_id) if i.submission_id else None,
-        "url": i.url,
+        "url": proxy_media_url(i.url),
         "file_name": i.file_name,
         "created_by_name": i.created_by_name,
         "created_at": i.created_at,
@@ -364,7 +365,7 @@ def completion_submission_out(
                 "task_uid": str(s.task_id),
                 "event_uid": str(event.id),
                 "submission_uid": str(s.id),
-                "url": url,
+                "url": proxy_media_url(url),
                 "file_name": url.rsplit("/", 1)[-1],
                 "created_by_name": s.employee_name,
                 "created_at": s.submitted_at,

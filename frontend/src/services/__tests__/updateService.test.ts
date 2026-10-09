@@ -31,6 +31,7 @@ vi.mock('../updateInstaller', () => ({
 }));
 
 import { App } from '@capacitor/app';
+import { API_ORIGIN } from '../../api/client';
 import { getMobileVersion, MobileVersionInfo } from '../../api/mobile';
 import { NativeUpdate } from '../updateInstaller';
 import {
@@ -177,6 +178,18 @@ describe('download/install flow', () => {
     });
     expect(NativeUpdate.installApk).toHaveBeenCalledTimes(1);
     expect(getUpdateFlow().phase).toBe('installing');
+  });
+
+  it('absolutizes an API-relative proxy download_url for the native downloader', async () => {
+    const proxied = release({
+      download_url: '/api/v1/mobile/apk?platform=android',
+      latest_version_code: 3,
+    });
+    await beginUpdate(proxied);
+    expect(NativeUpdate.downloadApk).toHaveBeenCalledWith({
+      url: `${API_ORIGIN}/api/v1/mobile/apk?platform=android`,
+      expectedVersionCode: 3,
+    });
   });
 
   it('a second tap while downloading starts no second download', async () => {

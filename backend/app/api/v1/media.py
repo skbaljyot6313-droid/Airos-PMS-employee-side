@@ -1,12 +1,16 @@
-"""Media uploads — storage backend selected via STORAGE_BACKEND (local dir
-or S3-compatible object store). Local objects are served from the
-`/uploads` static mount; S3 objects get their public/CDN URL back.
+"""Media upload + download proxy — storage backend selected via
+STORAGE_BACKEND (local dir or S3-compatible object store).
 
-Returns the stored URL so the frontend can render/store it directly.
+Upload returns a same-origin /media/file/<key> path; GET on that path
+streams the object server-side, so devices only ever talk to the API
+origin regardless of where the bytes actually live.
 """
+
+import re
 
 from fastapi import APIRouter, Depends, Request, UploadFile, status
 from fastapi import File
+from fastapi.responses import StreamingResponse
 
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
@@ -16,6 +20,7 @@ from app.core.storage import (
     MAX_BYTES,
     get_storage,
     new_object_key,
+    proxy_media_url,
 )
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -33,6 +38,17 @@ class InvalidUpload(AppError):
 class StorageUnavailable(AppError):
     status_code = 502
     code = "STORAGE_UNAVAILABLE"
+
+
+class MediaNotFound(AppError):
+    status_code = 404
+    code = "MEDIA_NOT_FOUND"
+    message = "Media not found."
+
+
+# new_object_key output shape — a strict whitelist so traversal and
+# enumeration can't reach the storage layer at all.
+_OBJECT_KEY_RE = re.compile(r"^[0-9a-f]{32}\.[a-z0-9]{2,5}$")
 
 
 def _matches_image_signature(data: bytes, content_type: str) -> bool:
@@ -87,7 +103,51 @@ async def upload_media(
         raise StorageUnavailable(
             "Image storage is unavailable — check the storage backend configuration."
         ) from exc
-    # Local backend returns a relative /uploads/<key> path — the frontend's
-    # mediaUrl() resolves it against the API origin. Works identically
-    # direct, or behind nginx (absolute proxy-derived URLs lose the port).
-    return {"url": url, "key": key}
+    # Return the same-origin proxy path, not the raw storage URL — the
+    # object-store host may be unreachable on the device's network, while
+    # the API origin is already proven. Serializers re-emit it verbatim.
+    return {"url": proxy_media_url(url), "key": key}
+
+
+@router.get(
+    "/media/file/{key}",
+    dependencies=[Depends(rate_limit("media_fetch", limit=240, window_seconds=60))],
+)
+async def get_media_file(key: str):
+    """Stream a stored object through the API origin.
+
+    Devices fetch every download from this host only — the object-store
+    public host (supabase.co / CDN) is unreachable on some field
+    networks while the API domain is already proven. Public by design,
+    same as the public URLs it replaces: keys are unguessable uuid4
+    names and <img> tags can't attach a JWT. Traversal can't pass the
+    key whitelist, so only our own objects are ever served.
+    """
+    if not _OBJECT_KEY_RE.fullmatch(key):
+        raise MediaNotFound()
+    try:
+        opened = await get_storage().open(key)
+    except Exception as exc:
+        logger.error(
+            "media fetch failed",
+            extra={"storage_key": key, "error": str(exc)},
+        )
+        raise StorageUnavailable("Media storage is unavailable.") from exc
+    if opened is None:
+        raise MediaNotFound()
+    stream, content_type, length = opened
+    headers = {
+        # objects are immutable uuid-keyed blobs
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
+        # already-compressed formats — bypass GZipMiddleware so
+        # Content-Length survives for client progress display
+        "Content-Encoding": "identity",
+    }
+    if length is not None:
+        headers["Content-Length"] = str(length)
+    return StreamingResponse(
+        stream(),
+        media_type=content_type or "application/octet-stream",
+        headers=headers,
+    )
