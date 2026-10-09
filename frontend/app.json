@@ -5,7 +5,7 @@
     "version": "1.0.3",
     "android": {
       "package": "com.theairco.airos.employee",
-      "versionCode": 4
+      "versionCode": 5
     },
     "extra": {
       "eas": {
