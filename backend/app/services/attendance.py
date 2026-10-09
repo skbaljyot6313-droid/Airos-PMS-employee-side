@@ -14,12 +14,13 @@ fails with IntegrityError → 409.
 
 import calendar as cal
 import uuid
-from datetime import date as date_type, datetime, timedelta, timezone
+from datetime import date as date_type, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Uuid, bindparam, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.attendance import (
     AttendanceBreak,
@@ -47,6 +48,13 @@ REVIEWER_ROLES = (UserRole.SUPER_ADMIN,)
 def _aware(dt: datetime) -> datetime:
     """sqlite round-trips timestamptz naive — normalize to aware UTC."""
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+def _op_day_end_utc(date_key: str, start: time) -> datetime:
+    """UTC instant at which operational day `date_key` ends — i.e. the
+    following calendar date at the company's day-start, IST wall-clock."""
+    d = date_type.fromisoformat(date_key) + timedelta(days=1)
+    return datetime.combine(d, start, tzinfo=IST).astimezone(timezone.utc)
 
 
 def _validate_date(value: str | None, *, field: str = "date") -> str:
@@ -96,8 +104,9 @@ class AttendanceService:
 
     async def _employee_context(
         self, user: User
-    ) -> tuple[Employee, uuid.UUID, str]:
-        """Employee row + property + today's operational-date key.
+    ) -> tuple[Employee, uuid.UUID, str, time]:
+        """Employee row + property + today's operational-date key + the
+        company's configured day-start.
 
         A user without a linked employee record can never self-file —
         403, never a widened scope. Property follows user.property_id
@@ -128,10 +137,9 @@ class AttendanceService:
             )
         employee, day_start = row
         property_id = user.property_id or employee.property_id
-        op_date = operational_day_key(
-            datetime.now(IST), parse_day_start(day_start)
-        )
-        return employee, property_id, op_date
+        parsed = parse_day_start(day_start)
+        op_date = operational_day_key(datetime.now(IST), parsed)
+        return employee, property_id, op_date, parsed
 
     def _audit(
         self, *, user: User, action: str, entity_type: str,
@@ -157,7 +165,7 @@ class AttendanceService:
         self, user: User
     ) -> tuple[AttendanceDay | None, str, AttendanceRequest | None]:
         """(day, op_date, open request) — None day means 'not_started'."""
-        emp, _prop_id, op_date = await self._employee_context(user)
+        emp, _prop_id, op_date, _ = await self._employee_context(user)
         day = await self.repo.get_day(emp.id, op_date)
         request = await self.repo.open_request_on(emp.id, op_date)
         return day, op_date, request
@@ -172,7 +180,8 @@ class AttendanceService:
         from app.services.location import parse_geo
 
         fix = parse_geo(geo)
-        emp, prop_id, op_date = await self._employee_context(user)
+        emp, prop_id, op_date, day_start = await self._employee_context(user)
+        await self._close_stale_open_days(user, emp, op_date, day_start)
         day = await self.repo.get_or_create_day(
             property_id=prop_id,
             employee_id=emp.id,
@@ -204,10 +213,75 @@ class AttendanceService:
         await self.session.commit()
         return day, op_date
 
+    async def _close_stale_open_days(
+        self, user: User, emp: Employee, current_key: str, day_start: time
+    ) -> None:
+        """End open 'present' days left over from EARLIER op-dates.
+
+        `uq_attendance_open_session` allows exactly one open 'present'
+        row per employee — a day the employee never ended would
+        otherwise wedge every future /start on a raw IntegrityError
+        (surfaced as a generic 503). The employee cannot fix it either:
+        end-day only locks TODAY's row. So a stale row is closed at the
+        end of ITS operational day — the last instant it could honestly
+        have run to — with any open break closed at the same instant
+        and an audit trail. Today's row (if any) is untouched.
+        """
+        res = await self.session.execute(
+            select(AttendanceDay)
+            .where(
+                AttendanceDay.employee_id == emp.id,
+                AttendanceDay.status == "present",
+                AttendanceDay.ended_at.is_(None),
+                AttendanceDay.attendance_date != current_key,
+            )
+            .options(selectinload(AttendanceDay.breaks))
+            .with_for_update()
+        )
+        for day in res.scalars():
+            close_at = _op_day_end_utc(day.attendance_date, day_start)
+            if day.started_at is None:
+                # A 'present' row that never got stamped can only come
+                # from a torn write — record it as a zero-length day so
+                # ck_attendance_days_end_needs_start holds and the
+                # open-session slot frees.
+                day.started_at = close_at
+            close_at = max(close_at, _aware(day.started_at))
+            for br in day.breaks:
+                if br.ended_at is None:
+                    br.ended_at = close_at
+                    br.duration_seconds = max(
+                        0,
+                        int((close_at - _aware(br.started_at))
+                            .total_seconds()),
+                    )
+                    day.break_seconds = (
+                        day.break_seconds or 0
+                    ) + br.duration_seconds
+            day.ended_at = close_at
+            if day.started_at is not None:
+                day.work_seconds = max(
+                    0,
+                    int((close_at - _aware(day.started_at)).total_seconds())
+                    - (day.break_seconds or 0),
+                )
+            self._audit(
+                user=user, action="attendance_day_auto_closed",
+                entity_type="attendance_day", entity_id=day.id,
+                entity_name=day.employee_name,
+                property_id=day.property_id,
+                detail={
+                    "date": day.attendance_date,
+                    "state": "completed",
+                    "reason": "stale_open_workday",
+                    "work_seconds": day.work_seconds,
+                },
+            )
+
     async def _locked_open_day(
         self, user: User, action: str
     ) -> tuple[AttendanceDay, str, uuid.UUID]:
-        emp, prop_id, op_date = await self._employee_context(user)
+        emp, prop_id, op_date, _ = await self._employee_context(user)
         day = await self.repo.lock_day(emp.id, op_date)
         if day is None or day.started_at is None:
             raise ConflictErr(
@@ -305,7 +379,7 @@ class AttendanceService:
     ) -> tuple[list[AttendanceDay], list[AttendanceRequest]]:
         """Actual days + non-cancelled requests for one month — absent
         days are NEVER fabricated (no row = unrecorded)."""
-        emp, _prop_id, _op = await self._employee_context(user)
+        emp, _prop_id, _op, _ = await self._employee_context(user)
         year, mon = _validate_month(month)
         last = cal.monthrange(year, mon)[1]
         start = f"{year:04d}-{mon:02d}-01"
@@ -327,7 +401,7 @@ class AttendanceService:
         """File a DATE-RANGE request — 'leave' (typed, reason required)
         or 'week_off' (untyped). property/employee are resolved
         server-side from the caller — never from the client payload."""
-        emp, prop_id, op_date = await self._employee_context(user)
+        emp, prop_id, op_date, _ = await self._employee_context(user)
         from_d = _validate_date(from_date, field="from_date")
         to_d = _validate_date(to_date, field="to_date")
         if to_d < from_d:

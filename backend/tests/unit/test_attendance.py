@@ -19,6 +19,7 @@ from app.models.attendance import (
     AttendanceDay,
     AttendanceRequest,
 )
+from app.models.audit import AuditEvent
 from app.models.company import Company
 from app.models.employee import Employee
 from app.models.property import Property
@@ -26,7 +27,7 @@ from app.models.task import Task, TaskHistoryEvent
 from app.models.user import User, UserRole
 from app.models import Base
 from app.repositories.attendance import AttendanceRepository
-from app.services.attendance import AttendanceService
+from app.services.attendance import AttendanceService, _aware
 from app.services.rollover import (
     RolloverService,
     current_operational_day,
@@ -178,6 +179,77 @@ async def test_start_twice_conflicts(session, seeded):
     await svc.start(seeded["emp_user"])
     with pytest.raises(ConflictErr):
         await svc.start(seeded["emp_user"])
+
+
+async def test_start_auto_closes_stale_open_day(session, seeded):
+    """A workday the employee never ended occupies the
+    uq_attendance_open_session slot — every later start would die on a
+    raw IntegrityError (generic 503). The next start must close the
+    stale row at ITS op-day boundary, then open today normally."""
+    emp = seeded["employee"]
+    stale = AttendanceDay(
+        property_id=seeded["prop"].id, employee_id=emp.id,
+        employee_name=emp.name, attendance_date="2026-01-01",
+        status="present",
+        started_at=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+        breaks=[
+            AttendanceBreak(
+                started_at=datetime(
+                    2026, 1, 1, 12, 0, tzinfo=timezone.utc
+                ),
+            ),
+        ],
+    )
+    session.add(stale)
+    await session.commit()
+
+    day, op_date = await AttendanceService(session).start(
+        seeded["emp_user"]
+    )
+
+    assert day.attendance_date == op_date_today()
+    assert day.started_at is not None
+    await session.refresh(stale, attribute_names=["breaks"])
+    # Company day-start is 06:00 → op-day '2026-01-01' ends
+    # 2026-01-02 06:00 IST = 2026-01-02 00:30 UTC.
+    expected_close = datetime(2026, 1, 2, 0, 30, tzinfo=timezone.utc)
+    assert _aware(stale.ended_at) == expected_close
+    assert stale.work_seconds == int(
+        (expected_close - _aware(stale.started_at)).total_seconds()
+    ) - stale.break_seconds
+    br = stale.breaks[0]
+    assert _aware(br.ended_at) == expected_close
+    assert br.duration_seconds == stale.break_seconds
+    # Audit trail records the automatic close.
+    ev = (
+        await session.execute(
+            select(AuditEvent).where(
+                AuditEvent.action == "attendance_day_auto_closed",
+                AuditEvent.entity_id == stale.id,
+            )
+        )
+    ).scalar_one()
+    assert ev.detail["reason"] == "stale_open_workday"
+    assert ev.detail["date"] == "2026-01-01"
+
+
+async def test_start_leaves_other_employees_stale_days(session, seeded):
+    """Auto-close is scoped to the caller — employee B's open day is
+    untouched when A starts."""
+    svc = AttendanceService(session)
+    stale = AttendanceDay(
+        property_id=seeded["prop"].id,
+        employee_id=seeded["employee2"].id,
+        employee_name=seeded["employee2"].name,
+        attendance_date="2026-01-01", status="present",
+        started_at=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+    )
+    session.add(stale)
+    await session.commit()
+
+    await svc.start(seeded["emp_user"])
+    await session.refresh(stale)
+    assert stale.ended_at is None
 
 
 async def test_break_requires_started_day(session, seeded):
