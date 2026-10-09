@@ -161,7 +161,13 @@ async def test_stop_rejects_foreign_session(api, seed, fake_redis):
     assert res.json()["error"]["code"] == "TRACKING_SESSION_NOT_FOUND"
 
 
-async def test_location_with_unknown_session_rejected(api, seed, fake_redis):
+async def test_location_with_unknown_session_rejected(
+    api, seed, fake_redis, monkeypatch
+):
+    # The limiter writes a counter key before session validation; this
+    # test asserts no location keys are persisted, so pin the limiter
+    # off instead of depending on ambient env.
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", False)
     res = await api.post(
         f"{BASE}/current",
         json=_fix(uuid.uuid4(), 1),
@@ -527,7 +533,9 @@ async def test_live_locations_x_service_key_header(
     assert res.status_code == 401
 
 
-async def test_history_requires_service_key(api, seed, fake_redis):
+async def test_history_requires_service_key(
+    api, seed, service_key, fake_redis
+):
     emp = seed["employee"].id
     res = await api.get(
         f"{ADMIN}/location-history/{emp}"
