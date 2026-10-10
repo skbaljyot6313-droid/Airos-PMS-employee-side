@@ -84,7 +84,9 @@ public class LocationTrackingService extends Service {
     static final String ACTION_STOP = "com.airos.staff.location.STOP";
 
     private static final String CHANNEL_ID = "airos_location";
+    private static final String WORK_CHANNEL_ID = "airos_work";
     private static final int NOTIFICATION_ID = 0xA1;
+    private static final int WORK_NOTIF_BASE = 0xB000;
     private static final int DEFAULT_INTERVAL_SECONDS = 10;
     private static final int HTTP_TIMEOUT_MS = 10_000;
     /** ~10 h of 30 s fixes — plenty for a shift's worst dead zone. */
@@ -92,10 +94,16 @@ public class LocationTrackingService extends Service {
     /** Per-drain cap — a reconnect burst must not monopolise the worker. */
     private static final int MAX_FLUSH_PER_DRAIN = 100;
     private static final long REFRESH_BACKOFF_MS = 60_000;
+    /** Work-feed poll cadence — allocations must surface within a minute. */
+    private static final long NOTIF_POLL_MS = 60_000;
+    private static final String KEY_SEEN_NOTIFS = "seen_notif_uids";
+    private static final int MAX_SEEN_NOTIFS = 200;
 
     static volatile boolean RUNNING = false;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ScheduledExecutorService notifPoller =
+            Executors.newSingleThreadScheduledExecutor();
     private final Object queueLock = new Object();
     private FusedLocationProviderClient fused;
     private LocationCallback fusedCallback;
@@ -132,6 +140,17 @@ public class LocationTrackingService extends Service {
         startForegroundCompat();
         RUNNING = true;
         startUpdates();
+        // Poll the work feed on its own cadence — independent of the GPS
+        // heartbeat so a dead fix source can't silence allocations. A
+        // throwing run cancels every future run — nothing escapes.
+        notifPoller.scheduleWithFixedDelay(
+                () -> {
+                    try {
+                        pollNotificationsSync();
+                    } catch (Throwable ignored) {
+                    }
+                }, 15, NOTIF_POLL_MS / 1000,
+                java.util.concurrent.TimeUnit.SECONDS);
         return START_STICKY;
     }
 
@@ -139,6 +158,7 @@ public class LocationTrackingService extends Service {
     public void onDestroy() {
         stopUpdates();
         RUNNING = false;
+        notifPoller.shutdownNow();
         worker.shutdownNow();
         super.onDestroy();
     }
@@ -158,8 +178,15 @@ public class LocationTrackingService extends Service {
                     CHANNEL_ID, "Location tracking",
                     NotificationManager.IMPORTANCE_LOW);
             ch.setDescription("Shown while AiROS records work location.");
+            NotificationChannel work = new NotificationChannel(
+                    WORK_CHANNEL_ID, "Work assignments",
+                    NotificationManager.IMPORTANCE_HIGH);
+            work.setDescription("New tasks, reassignments and tickets.");
             NotificationManager nm = getSystemService(NotificationManager.class);
-            if (nm != null) nm.createNotificationChannel(ch);
+            if (nm != null) {
+                nm.createNotificationChannel(ch);
+                nm.createNotificationChannel(work);
+            }
         }
     }
 
@@ -380,6 +407,94 @@ public class LocationTrackingService extends Service {
     }
 
     // ------------------------------------------------------------------
+    // Work-feed poll → OS notifications for unseen unread items
+    // ------------------------------------------------------------------
+    // GET /notifications runs the server-side allocation synthesis, so
+    // this poll also covers a dead SA→EB push path. Anything unread that
+    // we haven't surfaced gets an OS notification — the employee's app
+    // can be fully closed while the workday (and this service) runs.
+    // ------------------------------------------------------------------
+
+    private void pollNotificationsSync() {
+        SharedPreferences p = prefs(this);
+        String base = p.getString(KEY_API_BASE, null);
+        String token = p.getString(KEY_ACCESS, null);
+        if (base == null || token == null) return;
+        String url = base + "/notifications?unread_only=true&limit=5";
+        HttpResult res = apiGet(url, token);
+        if (res.status == 401 && tryRefresh(p)) {
+            res = apiGet(url, p.getString(KEY_ACCESS, null));
+        }
+        if (!res.ok()) return;
+        try {
+            org.json.JSONArray items =
+                    new JSONObject(res.body).optJSONArray("items");
+            if (items == null || items.length() == 0) return;
+            java.util.Set<String> seen = new java.util.HashSet<>(
+                    p.getStringSet(KEY_SEEN_NOTIFS,
+                            new java.util.HashSet<>()));
+            boolean changed = false;
+            // Fire oldest-first so the tray reads chronologically.
+            for (int i = items.length() - 1; i >= 0; i--) {
+                JSONObject n = items.optJSONObject(i);
+                if (n == null) continue;
+                String uid = n.optString("notification_uid", "");
+                if (uid.isEmpty() || seen.contains(uid)) continue;
+                postWorkNotification(uid,
+                        n.optString("title", "New assignment"),
+                        n.optString("body", ""));
+                seen.add(uid);
+                changed = true;
+            }
+            if (changed) {
+                // Cap the dedup ledger — stale ids never matter again.
+                if (seen.size() > MAX_SEEN_NOTIFS) {
+                    java.util.Set<String> live = new java.util.HashSet<>();
+                    for (int i = 0; i < items.length(); i++) {
+                        String uid = items.optJSONObject(i)
+                                .optString("notification_uid", "");
+                        if (!uid.isEmpty()) live.add(uid);
+                    }
+                    seen = live;
+                }
+                p.edit().putStringSet(KEY_SEEN_NOTIFS, seen).apply();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void postWorkNotification(String uid, String title, String body) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ActivityCompat.checkSelfPermission(this,
+                        Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        Intent open = new Intent(this, MainActivity.class);
+        PendingIntent pi = PendingIntent.getActivity(
+                this, uid.hashCode(), open,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        int icon = getApplicationInfo().icon != 0
+                ? getApplicationInfo().icon
+                : android.R.drawable.ic_dialog_info;
+        Notification n = new NotificationCompat.Builder(this, WORK_CHANNEL_ID)
+                .setSmallIcon(icon)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setAutoCancel(true)
+                .setContentIntent(pi)
+                .build();
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (nm != null) {
+            nm.notify(WORK_NOTIF_BASE
+                    + Math.floorMod(uid.hashCode(), 4096), n);
+        }
+    }
+
+    // ------------------------------------------------------------------
     // HTTP — ingest, session re-mint, token refresh
     // ------------------------------------------------------------------
 
@@ -543,6 +658,39 @@ public class LocationTrackingService extends Service {
             conn.setFixedLengthStreamingMode(payload.length);
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(payload);
+            }
+            int status = conn.getResponseCode();
+            InputStream in = status < 400
+                    ? conn.getInputStream() : conn.getErrorStream();
+            StringBuilder sb = new StringBuilder();
+            if (in != null) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) >= 0) {
+                    sb.append(new String(buf, 0, n, StandardCharsets.UTF_8));
+                }
+                in.close();
+            }
+            return new HttpResult(status, sb.toString());
+        } catch (Exception e) {
+            return new HttpResult(-1, "");
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    /** Bare HttpURLConnection GET — status+body out. Never throws. */
+    private static HttpResult apiGet(String url, String bearer) {
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setConnectTimeout(HTTP_TIMEOUT_MS);
+            conn.setReadTimeout(HTTP_TIMEOUT_MS);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("Accept-Encoding", "identity");
+            if (bearer != null) {
+                conn.setRequestProperty("Authorization", "Bearer " + bearer);
             }
             int status = conn.getResponseCode();
             InputStream in = status < 400

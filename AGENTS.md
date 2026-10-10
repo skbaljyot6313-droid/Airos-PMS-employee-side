@@ -152,7 +152,10 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   APK reconcile).
 - `android/app/src/main/java/com/airos/staff/` — `LocationTrackingService`
   (foreground FGS + Fused Location Provider + on-disk JSONL retry queue +
-  self-refresh on 401 + session re-mint on INVALID_TRACKING_SESSION),
+  self-refresh on 401 + session re-mint on INVALID_TRACKING_SESSION +
+  60s work-feed poll on the `airos_work` channel posting OS notifications
+  for unseen unread items — this is the OS-level allocation alert; the
+  app may be closed as long as tracking runs),
   `LocationTrackerPlugin` (`AirosLocation`), `AppUpdatePlugin`
   (`AirosUpdate` — APK download/install), `MainActivity`.
 - Version source of truth: `app.json` (`expo.version` +
