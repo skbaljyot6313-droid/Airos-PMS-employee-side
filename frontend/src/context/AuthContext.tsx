@@ -4,6 +4,7 @@ import { secureStorage, errorMessage } from '../api/client';
 import { loginApi, getMeApi, logoutApi, updateMeApi } from '../api/auth';
 import { getZoneNameMap, invalidateZoneCache } from '../api/directory';
 import { isEmployeeSession, EMPLOYEE_GATE_MESSAGE } from './authGate';
+import { unregisterPushDevice } from '../services/pushRegistration';
 
 interface AuthContextType {
   user: User | null;
@@ -30,6 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(() => {
     const refresh = secureStorage.getRefreshToken();
+    void unregisterPushDevice(); // deactivates this device's push token first
     secureStorage.clearTokens();
     invalidateZoneCache();
     setUser(null);

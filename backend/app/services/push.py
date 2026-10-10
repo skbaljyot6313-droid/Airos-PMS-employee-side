@@ -48,7 +48,12 @@ class PushResult:
 
 class PushProvider(Protocol):
     async def send(
-        self, tokens: list[str], title: str, body: str, data: dict
+        self,
+        tokens: list[str],
+        title: str,
+        body: str,
+        data: dict,
+        tag: str | None = None,
     ) -> PushResult: ...
 
 
@@ -57,11 +62,16 @@ class LogPushProvider:
     exist. Cannot detect dead tokens: invalid_tokens is always empty."""
 
     async def send(
-        self, tokens: list[str], title: str, body: str, data: dict
+        self,
+        tokens: list[str],
+        title: str,
+        body: str,
+        data: dict,
+        tag: str | None = None,
     ) -> PushResult:
         logger.info(
-            "push:stub tokens=%d title=%r body=%r data=%s",
-            len(tokens), title, body, data,
+            "push:stub tokens=%d title=%r body=%r data=%s tag=%s",
+            len(tokens), title, body, data, tag,
         )
         return PushResult(delivered=list(tokens))
 
@@ -137,7 +147,12 @@ class FCMProvider:
         return self._token[0]
 
     async def send(
-        self, tokens: list[str], title: str, body: str, data: dict
+        self,
+        tokens: list[str],
+        title: str,
+        body: str,
+        data: dict,
+        tag: str | None = None,
     ) -> PushResult:
         result = PushResult()
         if not tokens:
@@ -145,6 +160,11 @@ class FCMProvider:
         url = FCM_V1_URL.format(project=self.project_id)
         # FCM data payloads are string-only maps.
         str_data = {k: str(v) for k, v in (data or {}).items()}
+        # tag = notification uid — matches the native work-feed poller's
+        # tray tag so push + poll never double-alert the same item.
+        android_block = (
+            {"notification": {"tag": tag}} if tag else {}
+        )
         async with httpx.AsyncClient(timeout=10.0) as client:
             access = await self._access_token(client)
             for token in tokens:
@@ -156,6 +176,7 @@ class FCMProvider:
                             "token": token,
                             "notification": {"title": title, "body": body},
                             "data": str_data,
+                            "android": android_block,
                         }
                     },
                 )

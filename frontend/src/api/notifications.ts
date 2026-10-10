@@ -51,3 +51,32 @@ export async function markNotificationReadApi(
     method: 'POST',
   });
 }
+
+/**
+ * Push-device registration — POST /devices/{register,unregister}.
+ * Tokens belong to the caller's own employee record only (backend
+ * scopes by user.employee_id); upserts on (employee, device_id).
+ */
+export async function registerDeviceApi(input: {
+  deviceId: string;
+  pushToken: string;
+  platform: 'android' | 'ios' | 'web';
+  appVersion?: string;
+}): Promise<void> {
+  await apiClient('/devices/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      device_id: input.deviceId,
+      push_token: input.pushToken,
+      platform: input.platform,
+      app_version: input.appVersion,
+    }),
+  });
+}
+
+export async function unregisterDeviceApi(deviceId: string): Promise<void> {
+  await apiClient('/devices/unregister', {
+    method: 'POST',
+    body: JSON.stringify({ device_id: deviceId }),
+  });
+}

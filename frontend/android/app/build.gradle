@@ -85,6 +85,9 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    // FCM — required by @capacitor/push-notifications; inert until
+    // google-services.json lands (plugin apply is conditional below).
+    implementation "com.google.firebase:firebase-messaging:$firebaseMessagingVersion"
 }
 
 apply from: 'capacitor.build.gradle'

@@ -510,8 +510,11 @@ public class LocationTrackingService extends Service {
                 .build();
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (nm != null) {
-            nm.notify(WORK_NOTIF_BASE
-                    + Math.floorMod(uid.hashCode(), 4096), n);
+            // Tag = notification uid — matches the FCM notification's
+            // android.notification.tag, so a server push and this poll
+            // coalesce into one tray entry instead of double-alerting.
+            nm.notify(uid,
+                    WORK_NOTIF_BASE + Math.floorMod(uid.hashCode(), 4096), n);
         }
     }
 

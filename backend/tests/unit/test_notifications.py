@@ -44,7 +44,7 @@ from app.services.task import TaskService
 class _FailingPush:
     """Provider that always raises — must never break the caller."""
 
-    async def send(self, tokens, title, body, data):
+    async def send(self, tokens, title, body, data, tag=None):
         raise RuntimeError("push backend down")
 
 
@@ -53,9 +53,9 @@ class _RecordingPush:
         self.calls = []
         self.invalid = list(invalid)
 
-    async def send(self, tokens, title, body, data):
+    async def send(self, tokens, title, body, data, tag=None):
         self.calls.append({"tokens": list(tokens), "title": title,
-                           "body": body, "data": data})
+                           "body": body, "data": data, "tag": tag})
         return PushResult(delivered=list(tokens), invalid_tokens=self.invalid)
 
 

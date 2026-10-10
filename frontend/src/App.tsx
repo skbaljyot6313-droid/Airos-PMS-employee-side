@@ -22,6 +22,10 @@ import {
   startNotificationPolling,
   subscribeNotifications,
 } from './services/notificationService';
+import {
+  initPushNotifications,
+  subscribeForegroundPush,
+} from './services/pushRegistration';
 import { markNotificationReadApi } from './api/notifications';
 import { StaffNotification } from './types';
 import { DeviceFrame } from './components/common/DeviceFrame';
@@ -63,9 +67,18 @@ const AppNavigator: React.FC = () => {
     const unsub = subscribeNotifications((n) =>
       setPopupQueue((q) => [...q, n])
     );
+    const unsubFg = subscribeForegroundPush((n) =>
+      setPopupQueue((q) => [...q, n])
+    );
+    const teardownPush = initPushNotifications(({ taskId, ticketId }) => {
+      if (taskId) setRoute({ type: 'task-detail', taskId });
+      else if (ticketId) setRoute({ type: 'maintenance-detail', ticketId });
+    });
     return () => {
       stop();
       unsub();
+      unsubFg();
+      teardownPush();
     };
   }, [isAuthenticated]);
 

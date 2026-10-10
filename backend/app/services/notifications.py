@@ -130,7 +130,10 @@ class NotificationService:
             tokens = [t for t in res.scalars() if t]
             if not tokens:
                 return
-            data = {"type": notification.type}
+            data = {
+                "type": notification.type,
+                "notification_uid": str(notification.id),
+            }
             if notification.task_id:
                 data["task_uid"] = str(notification.task_id)
             if notification.ticket_id:
@@ -138,6 +141,7 @@ class NotificationService:
             provider = self._push or get_push_provider()
             result = await provider.send(
                 tokens, notification.title, notification.body, data,
+                tag=str(notification.id),
             )
             dead = getattr(result, "invalid_tokens", None) or []
             if dead:
