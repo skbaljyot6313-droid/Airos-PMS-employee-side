@@ -115,11 +115,46 @@ public class AppUpdatePlugin extends Plugin {
         }
     }
 
+    /** True when the APK is signed by the same certificate as the
+     *  installed app. A signature mismatch makes Android reject the
+     *  install silently, so such files are worthless — callers must
+     *  drop them and re-download instead of retrying forever. */
+    private boolean signatureMatchesInstalled(PackageInfo apkInfo) {
+        try {
+            PackageInfo installed;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                installed = getContext().getPackageManager().getPackageInfo(
+                        getContext().getPackageName(),
+                        PackageManager.GET_SIGNING_CERTIFICATES);
+                if (installed.signingInfo == null || apkInfo.signingInfo == null) {
+                    return false;
+                }
+                android.content.pm.Signature[] a =
+                        installed.signingInfo.getApkContentsSigners();
+                android.content.pm.Signature[] b =
+                        apkInfo.signingInfo.getApkContentsSigners();
+                return a != null && b != null
+                        && a.length == b.length && a.length > 0
+                        && a[0].equals(b[0]);
+            }
+            installed = getContext().getPackageManager().getPackageInfo(
+                    getContext().getPackageName(), PackageManager.GET_SIGNATURES);
+            return installed.signatures != null && apkInfo.signatures != null
+                    && installed.signatures.length > 0
+                    && installed.signatures[0].equals(apkInfo.signatures[0]);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     /** Parse an APK on disk; returns null when it isn't our package. */
     private PackageInfo inspectApk(File apk) {
         try {
+            int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+                    ? PackageManager.GET_SIGNING_CERTIFICATES
+                    : PackageManager.GET_SIGNATURES;
             PackageInfo info = getContext().getPackageManager()
-                    .getPackageArchiveInfo(apk.getAbsolutePath(), 0);
+                    .getPackageArchiveInfo(apk.getAbsolutePath(), flags);
             if (info == null || !EXPECTED_PACKAGE.equals(info.packageName)) {
                 return null;
             }
@@ -154,6 +189,13 @@ public class AppUpdatePlugin extends Plugin {
             File apk = new File(path);
             if (apk.exists() && apk.length() > 0) {
                 PackageInfo info = inspectApk(apk);
+                if (info != null && !signatureMatchesInstalled(info)) {
+                    Log.w(TAG, "pending APK signer differs from installed app — dropping");
+                    clearPending();
+                    out.put("exists", false);
+                    call.resolve(out);
+                    return;
+                }
                 if (info != null) {
                     out.put("exists", true);
                     out.put("versionCode", PackageInfoCompat.getLongVersionCode(info));
@@ -205,6 +247,11 @@ public class AppUpdatePlugin extends Plugin {
         if (info == null) {
             clearPending();
             deny(call,"INVALID_APK");
+            return;
+        }
+        if (!signatureMatchesInstalled(info)) {
+            clearPending();
+            deny(call,"SIGNATURE_MISMATCH");
             return;
         }
         long installed = installedCode();
@@ -342,6 +389,12 @@ public class AppUpdatePlugin extends Plugin {
                     //noinspection ResultOfMethodCallIgnored
                     target.delete();
                     deny(call,"WRONG_PACKAGE");
+                    return;
+                }
+                if (!signatureMatchesInstalled(info)) {
+                    //noinspection ResultOfMethodCallIgnored
+                    target.delete();
+                    deny(call,"WRONG_SIGNATURE");
                     return;
                 }
                 long code = PackageInfoCompat.getLongVersionCode(info);
