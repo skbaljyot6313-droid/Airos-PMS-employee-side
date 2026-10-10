@@ -24,7 +24,6 @@ coverage/
 *.p12
 *.pem
 keystore.properties
-google-services.json
 
 # Release artifacts
 *.apk

@@ -2,10 +2,10 @@
   "expo": {
     "name": "AiROS Staff",
     "slug": "airos-employee",
-    "version": "1.0.10",
+    "version": "1.0.11",
     "android": {
       "package": "com.theairco.airos.employee",
-      "versionCode": 12
+      "versionCode": 13
     },
     "extra": {
       "eas": {
