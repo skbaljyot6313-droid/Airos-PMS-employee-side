@@ -28,7 +28,7 @@ import {
 import { registerDeviceApi, unregisterDeviceApi } from '../api/notifications';
 import { StaffNotification } from '../types';
 
-const APP_VERSION = '1.0.8'; // keep in sync with app.json expo.version
+const APP_VERSION = '1.0.9'; // keep in sync with app.json expo.version
 const DEVICE_ID_KEY = 'airos_device_id';
 
 export type PushTap = { taskId?: string; ticketId?: string };
