@@ -145,7 +145,7 @@ async function refreshAccessToken(): Promise<boolean> {
   const refreshToken = secureStorage.getRefreshToken();
   if (!refreshToken) return false;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => controller.abort(), 30000);
   try {
     const res = await fetch(`${API_BASE}/auth/refresh`, {
       method: 'POST',
@@ -177,7 +177,7 @@ const singleFlightRefresh = (): Promise<boolean> => {
 };
 
 export async function apiClient<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { timeoutMs = 20000, auth = true, _retried, ...init } = options;
+  const { timeoutMs = 45000, auth = true, _retried, ...init } = options;
 
   const headers = new Headers(init.headers || {});
   if (!headers.has('Content-Type') && !(init.body instanceof FormData)) {

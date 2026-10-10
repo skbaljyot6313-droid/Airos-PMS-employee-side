@@ -175,3 +175,66 @@ describe('mapEligibleLocations', () => {
     expect(out).toEqual([]);
   });
 });
+
+import { buildWorkspaceResources, ZoneBucket } from '../maintenance';
+import { MaintenanceTicket } from '../../types';
+
+const bucket = (): ZoneBucket => ({
+  id: 'zone-1',
+  name: 'dorms',
+  type: 'stay',
+  area_uid: 'a-1',
+  rooms: [{ uid: 'room-1', label: 'Room 101' }],
+  dorms: [{ uid: 'dorm-1', label: 'dorm 104', bed_count: 2 }],
+  beds: [
+    { uid: 'bed-1', label: 'Bed 01', dorm_uid: 'dorm-1' },
+    { uid: 'bed-2', label: 'Bed 02', dorm_uid: 'dorm-1' },
+  ],
+  washrooms: [{ uid: 'wr-1', label: 'dorm 104 - Washroom · dorm 104', dorm_uid: 'dorm-1' }],
+  fixtures: [
+    { uid: 'fx-1', label: 'Sink 1', washroom_uid: 'wr-1' },
+    { uid: 'fx-2', label: 'Shower 1', washroom_uid: 'wr-1' },
+  ],
+  unitUids: new Set(['room-1', 'dorm-1', 'bed-1', 'bed-2', 'wr-1', 'fx-1', 'fx-2']),
+});
+
+const ticket = (over: Partial<MaintenanceTicket> = {}): MaintenanceTicket => ({
+  id: 't-1', ticket_number: 'MT-1', issue: 'x', category: 'plumbing',
+  status: 'open', priority: 'medium',
+  room_uid: null, dorm_uid: null, bed_uid: null,
+  washroom_uid: null, washroom_fixture_uid: null,
+  zone_uid: 'zone-1',
+  ...over,
+} as MaintenanceTicket);
+
+describe('buildWorkspaceResources', () => {
+  it('emits all five kinds with parent links and fixture washroom_uid', () => {
+    const res = buildWorkspaceResources(bucket(), 'zone-1', []);
+    expect(res.map((r) => r.kind)).toEqual([
+      'room', 'dorm', 'bed', 'bed', 'washroom', 'fixture', 'fixture',
+    ]);
+    const bed = res.find((r) => r.id === 'bed-1');
+    expect(bed?.parent_uid).toBe('dorm-1');
+    expect(bed?.path).toEqual(['dorms', 'dorm 104', 'Bed 01']);
+    const fx = res.find((r) => r.id === 'fx-1');
+    expect(fx?.parent_uid).toBe('wr-1');
+    expect(fx?.washroom_uid).toBe('wr-1');
+    expect(res.find((r) => r.id === 'dorm-1')?.detail_available).toBe(true);
+  });
+
+  it('pins a fixture ticket to the fixture tile, not the washroom', () => {
+    const res = buildWorkspaceResources(bucket(), 'zone-1', [
+      ticket({ id: 't-fx', washroom_uid: 'wr-1', washroom_fixture_uid: 'fx-2' }),
+    ]);
+    expect(res.find((r) => r.id === 'fx-2')?.active_ticket_id).toBe('t-fx');
+    expect(res.find((r) => r.id === 'wr-1')?.active_ticket_id).toBeNull();
+  });
+
+  it('pins a bed ticket to the exact bed', () => {
+    const res = buildWorkspaceResources(bucket(), 'zone-1', [
+      ticket({ id: 't-bed', bed_uid: 'bed-2' }),
+    ]);
+    expect(res.find((r) => r.id === 'bed-2')?.active_ticket_id).toBe('t-bed');
+    expect(res.find((r) => r.id === 'bed-1')?.active_ticket_id).toBeNull();
+  });
+});

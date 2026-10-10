@@ -273,7 +273,7 @@ export async function fetchEligibleLocationsApi(): Promise<EligibleLocation[]> {
 // Zone workspace — /zones + /maintenance/eligible-locations + /maintenance
 // ---------------------------------------------------------------------------
 
-interface ZoneBucket {
+export interface ZoneBucket {
   /** ZoneSummary.id — zone_uid or the synthetic '__unzoned__'. */
   id: string;
   name: string;
@@ -281,6 +281,9 @@ interface ZoneBucket {
   area_uid: string | null;
   rooms: { uid: string; label: string }[];
   dorms: { uid: string; label: string; bed_count: number | null }[];
+  beds: { uid: string; label: string; dorm_uid: string }[];
+  washrooms: { uid: string; label: string; dorm_uid: string | null }[];
+  fixtures: { uid: string; label: string; washroom_uid: string }[];
   unitUids: Set<string>;
 }
 
@@ -294,7 +297,7 @@ const buildZoneBuckets = (
     let b = buckets.find((x) => (zoneName ? x.name === zoneName : x.id === UNZONED_ID));
     if (!b) {
       if (zoneName === null) {
-        b = { id: UNZONED_ID, name: UNZONED_NAME, type: null, area_uid: null, rooms: [], dorms: [], unitUids: new Set() };
+        b = { id: UNZONED_ID, name: UNZONED_NAME, type: null, area_uid: null, rooms: [], dorms: [], beds: [], washrooms: [], fixtures: [], unitUids: new Set() };
       } else {
         const z = zones.find((zz) => zz.name === zoneName);
         b = {
@@ -304,6 +307,9 @@ const buildZoneBuckets = (
           area_uid: z?.area_uid ?? null,
           rooms: [],
           dorms: [],
+          beds: [],
+          washrooms: [],
+          fixtures: [],
           unitUids: new Set(),
         };
       }
@@ -323,6 +329,26 @@ const buildZoneBuckets = (
     b.dorms.push({ uid: d.dorm_uid, label: d.name, bed_count: d.bed_count ?? null });
     b.unitUids.add(d.dorm_uid);
   }
+  for (const bed of eligible.beds ?? []) {
+    const b = bucketFor(bed.zone_name ?? null);
+    b.beds.push({ uid: bed.bed_uid, label: bed.bed_number, dorm_uid: bed.dorm_uid });
+    b.unitUids.add(bed.bed_uid);
+  }
+  for (const w of eligible.washrooms ?? []) {
+    const b = bucketFor(w.zone_name ?? null);
+    const label = w.dorm_name ? `${w.name} · ${w.dorm_name}` : w.name;
+    b.washrooms.push({ uid: w.washroom_uid, label, dorm_uid: w.dorm_uid ?? null });
+    b.unitUids.add(w.washroom_uid);
+  }
+  for (const f of eligible.fixtures ?? []) {
+    const b = bucketFor(f.zone_name ?? null);
+    b.fixtures.push({
+      uid: f.fixture_uid,
+      label: `${titleCase(f.fixture_type)} ${f.fixture_number}`,
+      washroom_uid: f.washroom_uid,
+    });
+    b.unitUids.add(f.fixture_uid);
+  }
   return buckets;
 };
 
@@ -339,12 +365,14 @@ const zoneActiveTickets = (
   });
 
 const ticketTargetUid = (t: MaintenanceTicket): string =>
-  t.room_uid ?? t.dorm_uid ?? t.bed_uid ?? t.washroom_uid ?? t.washroom_fixture_uid ?? '';
+  // Most-specific first — a fixture ticket also carries washroom_uid and
+  // should pin to the fixture tile, not the whole washroom.
+  t.washroom_fixture_uid ?? t.bed_uid ?? t.room_uid ?? t.dorm_uid ?? t.washroom_uid ?? '';
 
 /**
  * Covered zones = zones containing at least one eligible (coverage-scoped)
- * room or dorm. Beds, washrooms and fixtures are not listable through this
- * backend, so counts other than rooms/dorms/beds report as unknown (null).
+ * unit — rooms, dorms, beds, washrooms and fixtures all list through
+ * /maintenance/eligible-locations and roll up into these buckets.
  *
  * The single /maintenance fetch doubles as the ticket list — the caller gets
  * the assigned/reported split in the same payload (no second request).
@@ -376,7 +404,7 @@ export async function fetchMaintenanceZonesApi(myEmployeeUid?: string): Promise<
       rooms: b.rooms.length,
       dorms: b.dorms.length,
       beds: b.dorms.reduce((n, d) => n + (d.bed_count ?? 0), 0),
-      washrooms: null, // not exposed by this backend
+      washrooms: b.washrooms.length,
       other: 0,
     },
     open_issues: zoneActiveTickets(tickets, b).length,
@@ -388,6 +416,104 @@ export async function fetchMaintenanceZonesApi(myEmployeeUid?: string): Promise<
     reported_by_me: tickets.filter((t) => t.is_reported_by_me),
   };
 }
+
+/** Zone bucket + active tickets → flat ZoneResource list. Pure — the
+ *  hierarchy and ticket pinning are unit-tested directly. */
+export const buildWorkspaceResources = (
+  bucket: ZoneBucket,
+  zoneId: string,
+  active: MaintenanceTicket[],
+): ZoneResource[] => {
+  const ticketForUnit = (uid: string) =>
+    active.find((t) => ticketTargetUid(t) === uid) ?? null;
+  const resources: ZoneResource[] = [];
+  for (const r of bucket.rooms) {
+    const t = ticketForUnit(r.uid);
+    resources.push({
+      id: r.uid,
+      kind: 'room',
+      type: 'room',
+      name: r.label,
+      state: null, // unit state is not exposed through these endpoints
+      zone_uid: zoneId,
+      parent_uid: null,
+      path: [bucket.name, r.label],
+      active_ticket_id: t?.id ?? null,
+      active_ticket_number: t?.ticket_number ?? null,
+      eligible: true,
+    });
+  }
+  for (const d of bucket.dorms) {
+    const t = ticketForUnit(d.uid);
+    resources.push({
+      id: d.uid,
+      kind: 'dorm',
+      type: 'dorm',
+      name: d.label,
+      state: null,
+      zone_uid: zoneId,
+      parent_uid: null,
+      path: [bucket.name, d.label],
+      active_ticket_id: t?.id ?? null,
+      active_ticket_number: t?.ticket_number ?? null,
+      eligible: true,
+      bed_count: d.bed_count,
+      detail_available: bucket.beds.some((b) => b.dorm_uid === d.uid),
+    });
+  }
+  for (const bed of bucket.beds) {
+    const t = ticketForUnit(bed.uid);
+    const dorm = bucket.dorms.find((d) => d.uid === bed.dorm_uid);
+    resources.push({
+      id: bed.uid,
+      kind: 'bed',
+      type: 'bed',
+      name: bed.label,
+      state: null,
+      zone_uid: zoneId,
+      parent_uid: bed.dorm_uid,
+      path: [bucket.name, dorm?.label ?? '', bed.label].filter(Boolean),
+      active_ticket_id: t?.id ?? null,
+      active_ticket_number: t?.ticket_number ?? null,
+      eligible: true,
+    });
+  }
+  for (const w of bucket.washrooms) {
+    const t = ticketForUnit(w.uid);
+    resources.push({
+      id: w.uid,
+      kind: 'washroom',
+      type: 'washroom',
+      name: w.label,
+      state: null,
+      zone_uid: zoneId,
+      parent_uid: w.dorm_uid,
+      path: [bucket.name, w.label],
+      active_ticket_id: t?.id ?? null,
+      active_ticket_number: t?.ticket_number ?? null,
+      eligible: true,
+    });
+  }
+  for (const f of bucket.fixtures) {
+    const t = ticketForUnit(f.uid);
+    const wr = bucket.washrooms.find((w) => w.uid === f.washroom_uid);
+    resources.push({
+      id: f.uid,
+      kind: 'fixture',
+      type: 'fixture',
+      name: f.label,
+      state: null,
+      zone_uid: zoneId,
+      parent_uid: f.washroom_uid,
+      washroom_uid: f.washroom_uid,
+      path: [bucket.name, wr?.label ?? '', f.label].filter(Boolean),
+      active_ticket_id: t?.id ?? null,
+      active_ticket_number: t?.ticket_number ?? null,
+      eligible: true,
+    });
+  }
+  return resources;
+};
 
 export async function fetchZoneWorkspaceApi(zoneId: string, myEmployeeUid?: string): Promise<ZoneWorkspace> {
   const [zonesItems, eligible, ticketsRes, zoneNames] = await Promise.all([
@@ -403,48 +529,9 @@ export async function fetchZoneWorkspaceApi(zoneId: string, myEmployeeUid?: stri
   const bucket = buckets.find((b) => b.id === zoneId);
   const tickets = ticketsRes.items.map((t) => mapTicket(t, zoneNames, myEmployeeUid));
   const active = bucket ? zoneActiveTickets(tickets, bucket) : [];
-
-  const ticketForUnit = (uid: string) =>
-    active.find((t) => ticketTargetUid(t) === uid) ?? null;
-
-  const resources: ZoneResource[] = [];
-  if (bucket) {
-    for (const r of bucket.rooms) {
-      const t = ticketForUnit(r.uid);
-      resources.push({
-        id: r.uid,
-        kind: 'room',
-        type: 'room',
-        name: r.label,
-        state: null, // unit state is not exposed through these endpoints
-        zone_uid: zoneId,
-        parent_uid: null,
-        path: [bucket.name, r.label],
-        active_ticket_id: t?.id ?? null,
-        active_ticket_number: t?.ticket_number ?? null,
-        eligible: true,
-      });
-    }
-    for (const d of bucket.dorms) {
-      const t = ticketForUnit(d.uid);
-      resources.push({
-        id: d.uid,
-        kind: 'dorm',
-        type: 'dorm',
-        name: d.label,
-        state: null,
-        zone_uid: zoneId,
-        parent_uid: null,
-        path: [bucket.name, d.label],
-        active_ticket_id: t?.id ?? null,
-        active_ticket_number: t?.ticket_number ?? null,
-        eligible: true,
-        bed_count: d.bed_count,
-        // Beds are not enumerable through this backend — no per-bed drill-in.
-        detail_available: false,
-      });
-    }
-  }
+  const resources = bucket
+    ? buildWorkspaceResources(bucket, zoneId, active)
+    : [];
 
   const summary: ZoneSummary = {
     id: zoneId,
@@ -456,7 +543,7 @@ export async function fetchZoneWorkspaceApi(zoneId: string, myEmployeeUid?: stri
       rooms: bucket?.rooms.length ?? 0,
       dorms: bucket?.dorms.length ?? 0,
       beds: bucket?.dorms.reduce((n, d) => n + (d.bed_count ?? 0), 0) ?? 0,
-      washrooms: null,
+      washrooms: bucket?.washrooms.length ?? 0,
       other: 0,
     },
     open_issues: active.length,

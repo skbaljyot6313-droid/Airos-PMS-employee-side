@@ -94,8 +94,8 @@ public class LocationTrackingService extends Service {
     /** Per-drain cap — a reconnect burst must not monopolise the worker. */
     private static final int MAX_FLUSH_PER_DRAIN = 100;
     private static final long REFRESH_BACKOFF_MS = 60_000;
-    /** Work-feed poll cadence — allocations must surface within a minute. */
-    private static final long NOTIF_POLL_MS = 60_000;
+    /** Work-feed poll cadence — allocations surface within ~30 s. */
+    private static final long NOTIF_POLL_MS = 30_000;
     private static final String KEY_SEEN_NOTIFS = "seen_notif_uids";
     private static final int MAX_SEEN_NOTIFS = 200;
 
@@ -161,6 +161,27 @@ public class LocationTrackingService extends Service {
         notifPoller.shutdownNow();
         worker.shutdownNow();
         super.onDestroy();
+    }
+
+    /** Swiping the app from recents fires this on the running service —
+     *  reschedule ourselves so tracking + work notifications don't die
+     *  with the task on OEMs that treat swipe-kill as service death. */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        if (prefs(this).getString(KEY_SESSION, null) != null) {
+            Intent restart = new Intent(this, LocationTrackingService.class);
+            PendingIntent pi = PendingIntent.getForegroundService(
+                    this, 1, restart,
+                    PendingIntent.FLAG_IMMUTABLE
+                            | PendingIntent.FLAG_CANCEL_CURRENT);
+            android.app.AlarmManager am =
+                    (android.app.AlarmManager) getSystemService(ALARM_SERVICE);
+            if (am != null) {
+                am.setExact(android.app.AlarmManager.RTC_WAKEUP,
+                        System.currentTimeMillis() + 1000, pi);
+            }
+        }
+        super.onTaskRemoved(rootIntent);
     }
 
     @Override

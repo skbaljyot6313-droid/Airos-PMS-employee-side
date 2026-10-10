@@ -133,7 +133,8 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 
 ## Frontend layout (`frontend/src/`)
 
-- `api/client.ts` — sole fetch boundary; localStorage tokens
+- `api/client.ts` — sole fetch boundary (45s default timeout — dev latency
+  on Supabase/Railway can exceed 20s; refresh call gets 30s); localStorage tokens
   (`airos_staff_access_token`/`_refresh_token`), single-flight 401 refresh,
   `airos_unauthorized` event → forced sign-out. `api/wire.ts` = wire DTOs;
   per-domain `api/*.ts` map wire → display types in `types/index.ts`.
@@ -153,9 +154,10 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - `android/app/src/main/java/com/airos/staff/` — `LocationTrackingService`
   (foreground FGS + Fused Location Provider + on-disk JSONL retry queue +
   self-refresh on 401 + session re-mint on INVALID_TRACKING_SESSION +
-  60s work-feed poll on the `airos_work` channel posting OS notifications
-  for unseen unread items — this is the OS-level allocation alert; the
-  app may be closed as long as tracking runs),
+  30s work-feed poll on the `airos_work` channel posting OS notifications
+  for unseen unread items — this is the OS-level allocation alert —
+  + onTaskRemoved self-restart via AlarmManager so swipe-kill doesn't
+  end tracking/notifications while a session is active),
   `LocationTrackerPlugin` (`AirosLocation`), `AppUpdatePlugin`
   (`AirosUpdate` — APK download/install), `MainActivity`.
 - Version source of truth: `app.json` (`expo.version` +

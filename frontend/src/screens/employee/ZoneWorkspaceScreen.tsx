@@ -6,6 +6,7 @@ import { errorMessage } from '../../api/client';
 import { ScreenHeader } from '../../components/common/ScreenHeader';
 import { UnitTile } from '../../components/maintenance/UnitTile';
 import { DormCard } from '../../components/maintenance/DormCard';
+import { WashroomCard } from '../../components/maintenance/WashroomCard';
 import { UnitActionSheet } from '../../components/maintenance/UnitActionSheet';
 import { EmptyState, ErrorState, LoadingState } from '../../components/common/FeedbackStates';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
@@ -65,12 +66,16 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
     loadData();
   }, [loadData]);
 
-  // Only rooms and dorms are listable through this backend.
+  // All five unit kinds list through eligible-locations; children are
+  // grouped under their parents for the card drill-ins.
   const grouped = useMemo(() => {
     const resources = workspace?.resources || [];
     return {
       rooms: resources.filter((r) => r.type === 'room'),
       dorms: resources.filter((r) => r.type === 'dorm'),
+      beds: resources.filter((r) => r.type === 'bed'),
+      washrooms: resources.filter((r) => r.type === 'washroom'),
+      fixtures: resources.filter((r) => r.type === 'fixture'),
     };
   }, [workspace]);
 
@@ -87,7 +92,7 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
         title={zone?.name || 'Zone'}
         subtitle={
           zone
-            ? `${zone.counts.rooms} Rooms · ${zone.counts.dorms} Dorms · ${zone.counts.beds} Beds`
+            ? `${zone.counts.rooms} Rooms · ${zone.counts.dorms} Dorms · ${zone.counts.beds} Beds · ${zone.counts.washrooms ?? 0} Washrooms`
             : 'Loading zone...'
         }
         onBack={onBack}
@@ -112,7 +117,7 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
           <EmptyState
             type="maintenance"
             title="No covered units"
-            description="No covered units — you don't have rooms or dorms in your coverage for this zone."
+            description="No covered units — no rooms, dorms or washrooms in your coverage for this zone."
             actionLabel="Refresh"
             onAction={() => loadData(true)}
           />
@@ -137,7 +142,7 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
               </ResourceSection>
             )}
 
-            {/* Dormitories — beds/washrooms are not enumerable via the API */}
+            {/* Dormitories — expandable to individual beds */}
             {grouped.dorms.length > 0 && (
               <ResourceSection title="Dormitories">
                 <div className="space-y-2.5">
@@ -145,6 +150,23 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
                     <DormCard
                       key={dorm.id}
                       dorm={dorm}
+                      beds={grouped.beds.filter((b) => b.parent_uid === dorm.id)}
+                      onUnitPress={setSelectedUnit}
+                    />
+                  ))}
+                </div>
+              </ResourceSection>
+            )}
+
+            {/* Washrooms — expandable to individual fixtures */}
+            {grouped.washrooms.length > 0 && (
+              <ResourceSection title="Washrooms">
+                <div className="space-y-2.5">
+                  {grouped.washrooms.map((w) => (
+                    <WashroomCard
+                      key={w.id}
+                      washroom={w}
+                      fixtures={grouped.fixtures.filter((f) => f.parent_uid === w.id)}
                       onUnitPress={setSelectedUnit}
                     />
                   ))}

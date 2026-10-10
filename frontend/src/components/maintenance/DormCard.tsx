@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { ZoneResource } from '../../types';
-import { RESOURCE_TYPE_ICONS } from './UnitTile';
+import { UnitTile, RESOURCE_TYPE_ICONS } from './UnitTile';
 import { ChevronDown, BedSingle, Droplets } from 'lucide-react';
 
 interface DormCardProps {
   dorm: ZoneResource;
+  beds: ZoneResource[];
   onUnitPress: (resource: ZoneResource) => void;
 }
 
-export const DormCard: React.FC<DormCardProps> = ({ dorm, onUnitPress }) => {
+export const DormCard: React.FC<DormCardProps> = ({ dorm, beds, onUnitPress }) => {
   const [expanded, setExpanded] = useState<boolean>(false);
   const openIssues = dorm.active_ticket_id ? 1 : 0;
   const bedsLabel =
@@ -62,10 +63,12 @@ export const DormCard: React.FC<DormCardProps> = ({ dorm, onUnitPress }) => {
               <BedSingle className="w-3.5 h-3.5" />
               <span>Beds</span>
             </div>
-            {dorm.detail_available === false ? (
-              <p className="text-xs text-[#8D999C]">
-                {dorm.bed_count ?? 0} beds · Bed-level detail is not available in this app
-              </p>
+            {beds.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2">
+                {beds.map((bed) => (
+                  <UnitTile key={bed.id} resource={bed} onPress={onUnitPress} />
+                ))}
+              </div>
             ) : (
               <p className="text-xs text-[#8D999C]">No beds assigned to this dorm.</p>
             )}
