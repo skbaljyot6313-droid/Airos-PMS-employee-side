@@ -102,6 +102,49 @@ async def close_db() -> None:
     await engine.dispose()
 
 
+# ---------------------------------------------------------------------------
+# Post-commit Centrifugo dispatch — services buffer events on
+# session.info[RT_EVENTS] via centrifugo.queue_event(); they publish ONLY
+# after the outer transaction commits, so a rolled-back mutation never
+# emits a success event and a publish failure can never fail the
+# committed business transaction. Listeners attach to the sync Session
+# class (async_sessionmaker isn't a valid event target).
+# ---------------------------------------------------------------------------
+
+from sqlalchemy import event as _sa_event  # noqa: E402
+from sqlalchemy.orm import Session as _SyncSession  # noqa: E402
+
+
+@_sa_event.listens_for(_SyncSession, "after_commit")
+def _rt_events_after_commit(session) -> None:
+    if session.in_nested_transaction():
+        return
+    from app.core.centrifugo import RT_EVENTS, dispatch_realtime_events
+    events = session.info.pop(RT_EVENTS, None)
+    if not events:
+        return
+    try:
+        try:
+            asyncio.get_running_loop().create_task(
+                dispatch_realtime_events(list(events))
+            )
+        except RuntimeError:
+            from sqlalchemy.util.concurrency import await_only
+            await_only(dispatch_realtime_events(list(events)))
+    except Exception as exc:
+        logger.warning(
+            "realtime-event dispatch failed: %s", type(exc).__name__
+        )
+
+
+@_sa_event.listens_for(_SyncSession, "after_rollback")
+def _rt_events_after_rollback(session) -> None:
+    if session.in_nested_transaction():
+        return
+    from app.core.centrifugo import RT_EVENTS
+    session.info.pop(RT_EVENTS, None)
+
+
 async def check_database(timeout: float = 10.0) -> None:
     """Real connectivity probe — runs SELECT 1 through the engine/pool.
 

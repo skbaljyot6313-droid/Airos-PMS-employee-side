@@ -183,6 +183,28 @@ class TaskService:
         from app.services.work_allocation import WorkAllocationService
         self.alloc = WorkAllocationService(session)
 
+    def _emit_task(self, task: Task, event_type: str) -> None:
+        """Post-commit-only hint — call after session.commit() returns.
+        SA task screens subscribe to the property channel; the assignee's
+        own app hears it on its private channel."""
+        from app.core import centrifugo
+        payload = {
+            "task_uid": str(task.id),
+            "status": task.status,
+            "employee_uid": (
+                str(task.employee_id) if task.employee_id else None
+            ),
+        }
+        centrifugo.publish_bg(
+            centrifugo.prop_channel(task.property_id, "tasks"),
+            event_type, payload,
+        )
+        if task.employee_id is not None:
+            centrifugo.publish_bg(
+                centrifugo.emp_channel(task.employee_id),
+                event_type, payload,
+            )
+
     async def _get_task(self, user: User, task_id: uuid.UUID) -> Task:
         res = await self.session.execute(
             select(Task)
@@ -829,6 +851,7 @@ class TaskService:
                 source="task_start", task_id=task.id,
             )
         await self.session.commit()
+        self._emit_task(task, "task.updated")
         return task
 
     async def _flag_resource_cleaning(self, task: Task, user: User) -> None:
@@ -1199,6 +1222,7 @@ class TaskService:
                 source="task_submit", task_id=task.id,
             )
         await self.session.commit()
+        self._emit_task(task, "task.updated")
         return task
 
     async def approve_task(self, user: User, task_id: uuid.UUID, note=None) -> dict:

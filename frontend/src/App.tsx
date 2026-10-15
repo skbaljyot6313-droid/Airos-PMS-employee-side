@@ -26,6 +26,10 @@ import {
   initPushNotifications,
   subscribeForegroundPush,
 } from './services/pushRegistration';
+import {
+  startRealtime,
+  stopRealtime,
+} from './services/realtime';
 import { markNotificationReadApi } from './api/notifications';
 import { StaffNotification } from './types';
 import { DeviceFrame } from './components/common/DeviceFrame';
@@ -50,7 +54,7 @@ type StackRoute =
   | { type: 'maintenance-detail'; ticketId: string; zoneId?: string };
 
 const AppNavigator: React.FC = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [route, setRoute] = useState<StackRoute>({ type: 'tabs', tab: 'tasks' });
   const [todoCount, setTodoCount] = useState<number>(0);
   const [maintenanceCount, setMaintenanceCount] = useState<number>(0);
@@ -81,6 +85,21 @@ const AppNavigator: React.FC = () => {
       teardownPush();
     };
   }, [isAuthenticated]);
+
+  // Realtime — Centrifugo events on the employee's private channel make
+  // assignments/updates arrive instantly (they trigger an immediate
+  // notification-feed poll; the 45 s poll stays as reconciliation).
+  // No-ops when the backend reports realtime unconfigured.
+  const employeeUid = user?.employee_uid ?? null;
+  useEffect(() => {
+    if (!isAuthenticated || !employeeUid) return;
+    const stop = startRealtime(employeeUid);
+    return () => {
+      stop();
+      stopRealtime(); // session-scoped socket dies with the subscription
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, employeeUid]);
 
   const dismissPopup = (n: StaffNotification) =>
     setPopupQueue((q) => q.filter((x) => x.id !== n.id));

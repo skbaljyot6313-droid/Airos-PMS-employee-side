@@ -26,6 +26,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
+from app.core import centrifugo
 from app.core import redis as redis_core
 from app.core.config import settings
 from app.core.exceptions import LiveLocationUnavailable
@@ -286,6 +287,36 @@ async def post_current(user: User, payload: LocationUpdate) -> dict:
             employee_id, type(exc).__name__,
         )
         raise LiveLocationUnavailable() from exc
+
+    # Realtime fan-out — only when this fix became the live position
+    # (a delayed fix that lost the freshness race must not move SA
+    # markers). Throttled per-employee; on-duty filtering is enforced
+    # by the SA live-locations API — an event only HINTS a move for
+    # employees already displayed; unknown employees trigger a
+    # filtered refetch, so tracking-while-off-duty never appears.
+    if user.property_id is not None and (
+        prev_captured is None or captured_ts >= prev_captured
+    ):
+        try:
+            if await centrifugo.location_publish_allowed(employee_id):
+                centrifugo.publish_bg(
+                    centrifugo.prop_channel(
+                        user.property_id, "locations"
+                    ),
+                    "employee.location_updated",
+                    {
+                        "employee_id": str(employee_id),
+                        "latitude": payload.latitude,
+                        "longitude": payload.longitude,
+                        "captured_at": captured_iso,
+                        "device_timestamp": captured_ts,
+                        "accuracy_m": payload.accuracy,
+                        "speed_mps": speed,
+                        "bearing_deg": bearing,
+                    },
+                )
+        except Exception:
+            pass  # publish hints are best-effort
 
     logger.debug(
         "live location updated for employee %s (quality=%s)",

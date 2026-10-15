@@ -37,7 +37,8 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   SecurityHeaders → GZip → CORS), `/health` `/health/db` `/ready`.
 - `api/v1/router.py` — mounts: `auth`, `tasks`, `attendance`, `maintenance`,
   `resources` (`/zones` only), `media`, `notifications` (+`/devices/*`),
-  `location`, `admin`, `mobile`.
+  `location`, `admin`, `mobile`, `realtime` (Centrifugo JWT minting —
+  `priv:emp:{employee_uid}` self-channel only).
 - `dependencies/auth.py` — `get_current_user` (Bearer→User, Redis `sid`
   session check, fails open), `require_employee`/`require_super_admin`/
   `require_attendance_participant`; service-key gates
@@ -80,6 +81,7 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   tokens), `sessions.py` (Redis session registry, fail-open),
   `rate_limit.py` (Redis fixed-window, in-memory fallback, fail-open),
   `redis.py` (`mt:` key prefix convention, accelerator-not-truth),
+  `centrifugo.py` (realtime tokens, post-commit publish, location throttle),
   `storage.py` (S3-compatible object store only — Supabase Storage's S3
   endpoint; no local-disk backend),
   `exceptions.py` (dual `detail`+`error` envelopes), `middleware.py`,

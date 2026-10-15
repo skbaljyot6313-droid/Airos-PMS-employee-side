@@ -127,6 +127,24 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str | None = None
     S3_PUBLIC_BASE_URL: str | None = None  # CDN/public URL prefix for stored objects
 
+    # Centrifugo realtime — unset = realtime disabled, everything degrades
+    # to polling (never a startup/business-path failure).
+    #   CENTRIFUGO_URL           — HTTP API base, e.g. https://rt.example.com
+    #   CENTRIFUGO_API_KEY       — X-API-Key for /api/publish
+    #   CENTRIFUGO_TOKEN_SECRET  — HMAC key signing client JWTs (must match
+    #                              the SA backend + Centrifugo config)
+    #   CENTRIFUGO_WS_URL        — client-facing websocket URL returned by
+    #                              /realtime/token (public value)
+    CENTRIFUGO_URL: str | None = None
+    CENTRIFUGO_API_KEY: str | None = None
+    CENTRIFUGO_TOKEN_SECRET: str | None = None
+    CENTRIFUGO_WS_URL: str | None = None
+    CENTRIFUGO_CONN_TOKEN_TTL_SECONDS: int = 300
+    CENTRIFUGO_SUB_TOKEN_TTL_SECONDS: int = 600
+    # Min seconds between location publishes per employee — devices can
+    # fix every ~10 s; coalescing keeps SA maps live without flooding.
+    LOCATION_PUBLISH_MIN_INTERVAL_SECONDS: int = 8
+
     # Push notifications — "log" (default, STUB) or "fcm". FCM HTTP v1
     # additionally requires FCM_PROJECT_ID and FCM_SERVICE_ACCOUNT_JSON
     # (inline service-account JSON, or a path to the JSON file) plus the

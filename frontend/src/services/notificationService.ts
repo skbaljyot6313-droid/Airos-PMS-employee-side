@@ -47,6 +47,16 @@ export function diffNewNotifications(
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+// The active poll loop registers its tick here so realtime events can
+// trigger an immediate refresh instead of waiting for the next interval.
+let activePoll: (() => void) | null = null;
+
+/** Trigger the feed poll immediately — used by realtime events. Safe
+ *  to call when no poll loop is running (no-op). */
+export function pollNotificationsNow(): void {
+  activePoll?.();
+}
+
 /**
  * Start the poll loop; returns a stop function. Polls immediately, then
  * every POLL_MS, plus on app resume (native) and tab re-focus (web).
@@ -80,6 +90,7 @@ export function startNotificationPolling(): () => void {
   };
 
   poll();
+  activePoll = poll;
   const timer = setInterval(poll, POLL_MS);
 
   const onVisibility = () => {
@@ -98,6 +109,7 @@ export function startNotificationPolling(): () => void {
 
   return () => {
     stopped = true;
+    if (activePoll === poll) activePoll = null;
     clearInterval(timer);
     document.removeEventListener('visibilitychange', onVisibility);
     appStateHandle?.remove();

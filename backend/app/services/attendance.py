@@ -98,6 +98,26 @@ class AttendanceService:
         self.session = session
         self.repo = AttendanceRepository(session)
 
+    def _emit_day(
+        self, prop_id: uuid.UUID, emp_id: uuid.UUID,
+        op_date: str, event_type: str,
+    ) -> None:
+        """Post-commit-only hint — call after session.commit() returns.
+        SA attendance board + live map refresh on these; the employee's
+        own app hears it on its private channel too."""
+        from app.core import centrifugo
+        payload = {
+            "employee_uid": str(emp_id),
+            "attendance_date": op_date,
+        }
+        centrifugo.publish_bg(
+            centrifugo.prop_channel(prop_id, "attendance"),
+            event_type, payload,
+        )
+        centrifugo.publish_bg(
+            centrifugo.emp_channel(emp_id), event_type, payload,
+        )
+
     # ------------------------------------------------------------------
     # Context — who is the caller, which property, which operational day
     # ------------------------------------------------------------------
@@ -211,6 +231,7 @@ class AttendanceService:
             detail={"date": op_date, "state": "working"},
         )
         await self.session.commit()
+        self._emit_day(prop_id, emp.id, op_date, "attendance.checked_in")
         return day, op_date
 
     async def _close_stale_open_days(
@@ -313,6 +334,9 @@ class AttendanceService:
             detail={"date": op_date, "state": "on_break"},
         )
         await self.session.commit()
+        self._emit_day(
+            prop_id, day.employee_id, op_date, "attendance.break_started"
+        )
         return day, op_date
 
     async def resume(self, user: User) -> tuple[AttendanceDay, str]:
@@ -336,6 +360,9 @@ class AttendanceService:
             },
         )
         await self.session.commit()
+        self._emit_day(
+            prop_id, day.employee_id, op_date, "attendance.break_ended"
+        )
         return day, op_date
 
     async def end(self, user: User, geo=None) -> tuple[AttendanceDay, str]:
@@ -372,6 +399,9 @@ class AttendanceService:
             },
         )
         await self.session.commit()
+        self._emit_day(
+            prop_id, day.employee_id, op_date, "attendance.checked_out"
+        )
         return day, op_date
 
     async def calendar(

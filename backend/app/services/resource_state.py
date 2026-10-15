@@ -238,7 +238,27 @@ class ResourceStateService:
             occupancy_id=occupancy_id,
         ))
         await self.session.flush()
+        self._queue_unit_event(resource_type, row, prev, to, source)
         return row, prev, to
+
+    def _queue_unit_event(
+        self, resource_type: str, row, prev: str, to: str, source: str,
+    ) -> None:
+        """Buffer a resource.state_changed hint — published by the
+        after_commit hook only if the surrounding transaction commits."""
+        from app.core import centrifugo
+        centrifugo.queue_event(
+            self.session,
+            centrifugo.prop_channel(row.property_id, "units"),
+            "resource.state_changed",
+            {
+                "resource_type": resource_type,
+                "resource_uid": str(row.id),
+                "previous_state": prev,
+                "new_state": to,
+                "source": source,
+            },
+        )
 
     async def _open_occupancy(
         self, row, *, lock: bool = False
@@ -448,6 +468,9 @@ class ResourceStateService:
             ticket_id=ticket_id,
             occupancy_id=occupancy_id,
         ))
+        self._queue_unit_event(
+            resource_type, row, prev, target, source or SRC_DERIVE
+        )
         return target
 
     async def derive(

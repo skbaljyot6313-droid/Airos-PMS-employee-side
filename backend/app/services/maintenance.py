@@ -104,6 +104,26 @@ class MaintenanceService:
         if "events" not in sa_inspect(ticket).unloaded:
             ticket.events.append(ev)
 
+    def _emit_ticket(self, ticket, event_type: str) -> None:
+        """Post-commit-only hint — call after session.commit() returns."""
+        from app.core import centrifugo
+        payload = {
+            "ticket_uid": str(ticket.id),
+            "status": ticket.status,
+            "assigned_to_uid": (
+                str(ticket.assigned_to) if ticket.assigned_to else None
+            ),
+        }
+        centrifugo.publish_bg(
+            centrifugo.prop_channel(ticket.property_id, "maintenance"),
+            event_type, payload,
+        )
+        if ticket.assigned_to is not None:
+            centrifugo.publish_bg(
+                centrifugo.emp_channel(ticket.assigned_to),
+                event_type, payload,
+            )
+
     async def flag_ticket_resource(
         self, ticket, *, user: User | None, dorm: Dorm | None = None
     ) -> None:
@@ -526,6 +546,7 @@ class MaintenanceService:
         await self.flag_ticket_resource(ticket, user=user, dorm=dorm)
         if commit:
             await self.session.commit()
+            self._emit_ticket(ticket, "maintenance.created")
             return await self._get_ticket(user, ticket.id)
         return ticket
 
@@ -816,6 +837,7 @@ class MaintenanceService:
         ticket.status = "in_progress"
         self._event(ticket, "started", user)
         await self.session.commit()
+        self._emit_ticket(ticket, "maintenance.updated")
         return await self._get_ticket(user, ticket.id)
 
     async def hold(self, user: User, ticket_id: uuid.UUID, note=None):
@@ -909,6 +931,7 @@ class MaintenanceService:
         # Employee completion does NOT release the resource — a "resolved"
         # ticket still blocks until the supervisor closes (acknowledges) it.
         await self.session.commit()
+        self._emit_ticket(ticket, "maintenance.updated")
         return await self._get_ticket(user, ticket.id)
 
     async def disapprove(self, user: User, ticket_id: uuid.UUID, reason: str):
