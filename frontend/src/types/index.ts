@@ -139,7 +139,8 @@ export interface TaskSubmission {
 }
 
 export interface Task {
-  id: string; // task_uid
+  id: string; // task_uid or ticket_uid when kind === 'maintenance'
+  kind?: 'task' | 'maintenance'; // defaults to 'task'
   ticket_number: string | null;
   title: string;
   category: string; // task_type / work_type for display

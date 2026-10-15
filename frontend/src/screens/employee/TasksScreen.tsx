@@ -7,8 +7,13 @@ import { TaskCard } from '../../components/tasks/TaskCard';
 import { EmptyState, ErrorState, LoadingState } from '../../components/common/FeedbackStates';
 import { RefreshCw, MapPin, Building2 } from 'lucide-react';
 
+export interface TaskListSelection {
+  id: string;
+  kind: 'task' | 'maintenance';
+}
+
 interface TasksScreenProps {
-  onSelectTask: (taskId: string) => void;
+  onSelectTask: (selection: TaskListSelection) => void;
   onTasksCountChange?: (count: number) => void;
 }
 
@@ -26,8 +31,8 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
       else setLoading(true);
       setError(null);
 
-      // Fetch all tasks for current employee
-      const data = await fetchTasksApi();
+      // Fetch operational tasks AND assigned maintenance tickets
+      const data = await fetchTasksApi(employee?.id);
       setTasks(data);
 
       const todoCount = data.filter((t) => taskBucket(t.status) === 'to_do').length;
@@ -189,7 +194,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
               <TaskCard
                 key={task.id}
                 task={task}
-                onClick={() => onSelectTask(task.id)}
+                onClick={() => onSelectTask({ id: task.id, kind: task.kind || 'task' })}
               />
             ))}
           </div>

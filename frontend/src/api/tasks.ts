@@ -5,6 +5,7 @@
  */
 
 import { apiClient } from './client';
+import { fetchMaintenanceApi } from './maintenance';
 import { getZoneNameMap } from './directory';
 import { ListResponseWire, TaskCompletionImageWire, TaskWire } from './wire';
 import { Task, TaskBucket, TaskStatus, EvidenceItem, TaskSubmission } from '../types';
@@ -38,6 +39,61 @@ const locationName = (t: TaskWire): string => {
       : t.washroom_name;
   }
   return 'Common area';
+};
+
+/** Map a maintenance ticket onto the same list-card shape so assigned
+ *  maintenance work appears alongside operational tasks in "Your Tasks".
+ *  Statuses are normalised onto the task lifecycle for bucket sorting. */
+export const mapMaintenanceToTask = (m: import('../types').MaintenanceTicket, zoneNames: Map<string, string>): Task => {
+  const statusMap: Record<string, TaskStatus> = {
+    reported: 'assigned',
+    assigned: 'assigned',
+    in_progress: 'in_progress',
+    on_hold: 'assigned',
+    resolved: 'submitted',
+    closed: 'completed',
+    cancelled: 'cancelled',
+  };
+
+  return {
+    id: m.id,
+    kind: 'maintenance',
+    ticket_number: m.ticket_number,
+    title: m.issue,
+    category: `Maint · ${m.category}`,
+    location_name: m.location_name,
+    zone_uid: m.zone_uid,
+    zone_name: m.zone_name,
+    priority: m.priority as Task['priority'],
+    status: statusMap[m.status] ?? 'assigned',
+    due_at: null,
+    due_date: null,
+    due_time: null,
+    scheduled_for: null,
+    expires_at: null,
+    instructions: m.description ?? null,
+    checklist: [],
+    verification_config: {
+      photo_required: false,
+      min_photos: 0,
+      max_photos: 0,
+      checklist_required: false,
+      supervisor_approval: false,
+    },
+    evidence: [],
+    prior_submissions: [],
+    reopen_reason: null,
+    history: (m.history ?? []).map((h) => ({
+      id: `${h.status}-${h.timestamp}`,
+      event_type: h.status,
+      timestamp: h.timestamp,
+      notes: h.notes ?? null,
+      actor_name: h.actor_name ?? null,
+    })),
+    assigned_to_employee_id: m.assigned_to_employee_id,
+    assigned_to_name: m.assigned_to_name,
+    supervisor_name: null,
+  };
 };
 
 export const mapTask = (t: TaskWire, zoneNames: Map<string, string>): Task => {
@@ -127,12 +183,15 @@ export const mapTask = (t: TaskWire, zoneNames: Map<string, string>): Task => {
   };
 };
 
-export async function fetchTasksApi(): Promise<Task[]> {
-  const [tasksRes, zoneNames] = await Promise.all([
+export async function fetchTasksApi(myEmployeeUid?: string): Promise<Task[]> {
+  const [tasksRes, maintenance, zoneNames] = await Promise.all([
     apiClient<ListResponseWire<TaskWire>>('/tasks?limit=200', { method: 'GET' }),
+    fetchMaintenanceApi(myEmployeeUid).catch(() => ({ assigned_to_me: [], reported_by_me: [] })),
     getZoneNameMap(),
   ]);
-  return tasksRes.items.map((t) => mapTask(t, zoneNames));
+  const tasks = tasksRes.items.map((t) => mapTask(t, zoneNames));
+  const maintTasks = maintenance.assigned_to_me.map((m) => mapMaintenanceToTask(m, zoneNames));
+  return [...tasks, ...maintTasks];
 }
 
 export async function getTaskDetailApi(id: string): Promise<Task> {

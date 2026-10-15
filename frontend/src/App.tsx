@@ -192,7 +192,13 @@ const AppNavigator: React.FC = () => {
           <>
             {route.tab === 'tasks' && (
               <TasksScreen
-                onSelectTask={(taskId) => setRoute({ type: 'task-detail', taskId })}
+                onSelectTask={({ id, kind }) =>
+                  setRoute(
+                    kind === 'maintenance'
+                      ? { type: 'maintenance-detail', ticketId: id }
+                      : { type: 'task-detail', taskId: id }
+                  )
+                }
                 onTasksCountChange={setTodoCount}
               />
             )}
