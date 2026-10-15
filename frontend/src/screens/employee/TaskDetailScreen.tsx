@@ -5,6 +5,7 @@ import { Task, EvidenceItem } from '../../types';
 import { getTaskDetailApi, submitTaskApi, startTaskApi } from '../../api/tasks';
 import { uploadMediaApi } from '../../api/media';
 import { mediaUrl, errorMessage } from '../../api/client';
+import { subscribeRealtimeEvents } from '../../services/realtime';
 import { ScreenHeader } from '../../components/common/ScreenHeader';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { PriorityBadge } from '../../components/common/PriorityBadge';
@@ -77,6 +78,16 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
   useEffect(() => {
     loadTask();
   }, [taskId]);
+
+  // Realtime invalidation — a task event re-pulls the authoritative record.
+  useEffect(
+    () =>
+      subscribeRealtimeEvents(['task.'], () => {
+        void loadTask();
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [taskId],
+  );
 
   const handleToggleChecklist = (itemId: string) => {
     if (!task || !canWork) return;

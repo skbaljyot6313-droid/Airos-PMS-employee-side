@@ -15,6 +15,7 @@ import {
 import { PrimaryButton, SecondaryButton } from '../../components/common/Buttons';
 import { ErrorState, LoadingState } from '../../components/common/FeedbackStates';
 import { errorMessage } from '../../api/client';
+import { subscribeRealtimeEvents } from '../../services/realtime';
 import {
   AttendanceMonth,
   LEAVE_TYPE_LABELS,
@@ -244,6 +245,13 @@ export const AttendanceScreen: React.FC = () => {
   useEffect(() => {
     loadWorkday();
   }, [loadWorkday]);
+
+  // Realtime invalidation — attendance events refresh today's workday.
+  useEffect(
+    () =>
+      subscribeRealtimeEvents(['attendance.'], () => loadWorkday(true)),
+    [loadWorkday],
+  );
 
   useEffect(() => {
     loadMonth(monthKey(cursor));

@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Task, TaskBucket } from '../../types';
 import { fetchTasksApi, taskBucket } from '../../api/tasks';
 import { errorMessage } from '../../api/client';
+import { subscribeRealtimeEvents } from '../../services/realtime';
 import { TaskCard } from '../../components/tasks/TaskCard';
 import { EmptyState, ErrorState, LoadingState } from '../../components/common/FeedbackStates';
 import { RefreshCw, MapPin, Building2 } from 'lucide-react';
@@ -50,6 +51,16 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+
+  // Realtime invalidation — task/maintenance events refresh the list
+  // (payloads are hints only; the API stays authoritative).
+  useEffect(
+    () =>
+      subscribeRealtimeEvents(['task.', 'maintenance.', 'ticket.'], () =>
+        loadTasks(true),
+      ),
+    [loadTasks],
+  );
 
   // Filter tasks into the active bucket
   const filteredTasks = tasks.filter((t) => taskBucket(t.status) === activeBucket);

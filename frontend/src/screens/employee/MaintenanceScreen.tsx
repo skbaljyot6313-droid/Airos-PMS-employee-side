@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ZoneSummary } from '../../types';
 import { fetchMaintenanceZonesApi } from '../../api/maintenance';
 import { errorMessage } from '../../api/client';
+import { subscribeRealtimeEvents } from '../../services/realtime';
 import { ZoneCard } from '../../components/maintenance/ZoneCard';
 import { EmptyState, ErrorState, LoadingState } from '../../components/common/FeedbackStates';
 import { RefreshCw } from 'lucide-react';
@@ -51,6 +52,15 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Realtime invalidation — maintenance events refresh zones/counts.
+  useEffect(
+    () =>
+      subscribeRealtimeEvents(['maintenance.', 'ticket.'], () =>
+        loadData(true),
+      ),
+    [loadData],
+  );
 
   return (
     <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">

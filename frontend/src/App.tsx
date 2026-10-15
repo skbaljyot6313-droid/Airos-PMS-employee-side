@@ -26,6 +26,7 @@ import {
   initPushNotifications,
   subscribeForegroundPush,
 } from './services/pushRegistration';
+import { realtimeResume } from './services/realtime';
 import {
   startRealtime,
   stopRealtime,
@@ -122,7 +123,10 @@ const AppNavigator: React.FC = () => {
     void startLocationTracking();
     if (!Capacitor.isNativePlatform()) return;
     const sub = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
-      if (isActive) void startLocationTracking(); // idempotent reconcile
+      if (isActive) {
+        void startLocationTracking(); // idempotent reconcile
+        realtimeResume(); // reattach dead socket + reconcile feed
+      }
     });
     return () => {
       void stopLocationTracking();

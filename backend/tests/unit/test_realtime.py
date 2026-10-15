@@ -132,3 +132,124 @@ def test_queue_event_buffers_and_dispatch_is_bounded():
     assert session.info[centrifugo.RT_EVENTS] == [
         ("c1", "task.updated", {"x": 1})
     ]
+
+
+# ---------------------------------------------------------------------------
+# HTTP-level checks — auth gate, response schema, channel validation
+# ---------------------------------------------------------------------------
+
+import httpx
+
+from app.dependencies.auth import get_current_user
+from app.main import app
+
+RT = "/api/v1/realtime"
+
+
+def _http_user(**kw):
+    return _user(**kw)
+
+
+@pytest.fixture
+async def api():
+    app.dependency_overrides[get_current_user] = lambda: _http_user()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://test"
+    ) as client:
+        yield client
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+async def test_http_token_unauthenticated_401():
+    """No dependency override → real auth gate → missing bearer = 401."""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://test"
+    ) as client:
+        res = await client.get(f"{RT}/token")
+        assert res.status_code == 401
+        res = await client.post(f"{RT}/subscribe", json={"channels": []})
+        assert res.status_code == 401
+
+
+async def test_http_token_response_shape(api):
+    res = await api.get(f"{RT}/token")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["token"]
+    assert body["expires_at"] > int(time.time())
+    # Default derivation: CENTRIFUGO_URL + /connection/websocket
+    assert body["ws_url"] == "http://centrifugo.test/connection/websocket"
+
+
+async def test_http_ws_url_override(api, monkeypatch):
+    monkeypatch.setattr(
+        settings, "CENTRIFUGO_WS_URL", "wss://rt.example.com/websocket"
+    )
+    res = await api.get(f"{RT}/token")
+    assert res.json()["ws_url"] == "wss://rt.example.com/websocket"
+
+
+async def test_http_subscribe_own_channel(api):
+    ch = f"priv:emp:{EMP_ID}"
+    res = await api.post(f"{RT}/subscribe", json={"channels": [ch]})
+    assert res.status_code == 200
+    body = res.json()
+    assert ch in body["tokens"]
+    claims = pyjwt.decode(body["tokens"][ch], SECRET, algorithms=["HS256"])
+    assert claims["channel"] == ch
+    assert claims["exp"] > int(time.time())
+
+
+async def test_http_subscribe_other_employee_403(api):
+    res = await api.post(
+        f"{RT}/subscribe",
+        json={"channels": [f"priv:emp:{uuid.uuid4()}"]},
+    )
+    assert res.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "ch",
+    [
+        "priv:emp:not-a-uuid",
+        f"priv:prop:{uuid.uuid4()}:tasks",
+        f"priv:prop:{uuid.uuid4()}:locations",
+        "public:chat",
+        f"emp:{EMP_ID}",
+        f"priv:emp:{EMP_ID}:extra",
+        f"PRIV:emp:{EMP_ID}",
+        "",
+    ],
+)
+async def test_http_subscribe_rejected_channels(api, ch):
+    res = await api.post(f"{RT}/subscribe", json={"channels": [ch]})
+    assert res.status_code == 403, ch
+
+
+async def test_http_subscribe_unconfigured_503(monkeypatch):
+    monkeypatch.setattr(settings, "CENTRIFUGO_URL", None)
+    app.dependency_overrides[get_current_user] = lambda: _http_user()
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://test"
+    ) as client:
+        res = await client.get(f"{RT}/token")
+        assert res.status_code == 503
+        res = await client.post(
+            f"{RT}/subscribe", json={"channels": [f"priv:emp:{EMP_ID}"]}
+        )
+        assert res.status_code == 503
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+async def test_publish_failure_logged_not_raised(monkeypatch, caplog):
+    """Centrifugo HTTP failure → publish returns False + warning, never raises."""
+    async def _boom(*a, **kw):
+        raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(centrifugo, "_client", None)
+    monkeypatch.setattr(httpx.AsyncClient, "post", _boom)
+    ok = await centrifugo.publish("priv:emp:x", "task.updated", {})
+    assert ok is False

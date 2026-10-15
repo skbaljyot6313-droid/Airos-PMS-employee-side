@@ -8,6 +8,7 @@ import {
 } from '../../api/maintenance';
 import { uploadMediaApi } from '../../api/media';
 import { mediaUrl, errorMessage } from '../../api/client';
+import { subscribeRealtimeEvents } from '../../services/realtime';
 import { ScreenHeader } from '../../components/common/ScreenHeader';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { PriorityBadge } from '../../components/common/PriorityBadge';
@@ -69,6 +70,16 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
   useEffect(() => {
     loadTicket();
   }, [ticketId]);
+
+  // Realtime invalidation — a maintenance event re-pulls the ticket.
+  useEffect(
+    () =>
+      subscribeRealtimeEvents(['maintenance.', 'ticket.'], () => {
+        void loadTicket();
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticketId],
+  );
 
   const isAssignedToMe = !!user?.employee_uid && ticket?.assigned_to_employee_id === user.employee_uid;
   const isReportedByMe = !!ticket?.is_reported_by_me;

@@ -44,7 +44,10 @@ function emit(e: RealtimeEvent): void {
 }
 
 let centrifuge: Centrifuge | null = null;
-let unavailable = false;
+/** Set when the backend reports realtime unconfigured (503). Retried
+ *  after a cooldown so a config rollout during a session still works. */
+let unavailableUntil = 0;
+const UNAVAILABLE_COOLDOWN_MS = 60_000;
 
 async function fetchToken(): Promise<TokenResponse> {
   return apiClient<TokenResponse>('/realtime/token');
@@ -55,7 +58,7 @@ async function fetchToken(): Promise<TokenResponse> {
  * No-ops (returns a dummy stop) when realtime is unconfigured server-side.
  */
 export function startRealtime(employeeUid: string): () => void {
-  if (unavailable) return () => {};
+  if (Date.now() < unavailableUntil) return () => {};
   let stopped = false;
   let sub: { unsubscribe: () => void } | null = null;
 
@@ -99,7 +102,9 @@ export function startRealtime(employeeUid: string): () => void {
         typeof err === 'object' && err !== null && 'status' in err
           ? (err as { status?: number }).status
           : undefined;
-      if (status === 503) unavailable = true; // realtime not configured
+      if (status === 503) {
+        unavailableUntil = Date.now() + UNAVAILABLE_COOLDOWN_MS;
+      }
     }
   })();
 
@@ -109,11 +114,47 @@ export function startRealtime(employeeUid: string): () => void {
   };
 }
 
+/**
+ * Debounced event subscription for screens — coalesces bursts of
+ * publications into one callback, filtered to matching event prefixes.
+ * Returns unsubscribe; also clears the pending debounce timer.
+ */
+export function subscribeRealtimeEvents(
+  prefixes: string[],
+  callback: () => void,
+  debounceMs = 400,
+): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unsub = subscribeRealtime((e) => {
+    if (!e.type || !prefixes.some((p) => e.type!.startsWith(p))) return;
+    clearTimeout(timer);
+    timer = setTimeout(callback, debounceMs);
+  });
+  return () => {
+    clearTimeout(timer);
+    unsub();
+  };
+}
+
+/** App-resume nudge — centrifuge-js auto-reconnects, but a suspended
+ *  Android process may hold a dead socket; connect() is a no-op when
+ *  already connected/connecting. Also reconcile the feed immediately. */
+export function realtimeResume(): void {
+  if (centrifuge) {
+    try {
+      centrifuge.connect();
+    } catch {
+      /* noop */
+    }
+  }
+  pollNotificationsNow();
+}
+
 /** Drop the socket entirely — call on logout. */
 export function stopRealtime(): void {
   const c = centrifuge;
   centrifuge = null;
-  unavailable = false;
+  unavailableUntil = 0;
   if (c) {
     try {
       c.disconnect();
