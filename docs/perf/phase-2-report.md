@@ -3,6 +3,22 @@
 Branch: `perf/phase-2-query-reduction` (from `perf/phase-1-quick-wins`).
 Baseline: `docs/perf/query-audit.md`.
 
+## Hardening pass notes
+
+- **Postgres verification**: NOT run — Docker Desktop's Linux engine is
+  unavailable in this environment, so the suite ran on SQLite in-memory
+  + fakeredis only. The `joinedload`/`UNION ALL`/`LEFT JOIN GROUP BY`
+  query plans, `jsonable_encoder` datetime formats, and real-Redis
+  behavior for all new cache paths **must be verified on staging** —
+  added to the staging checklist.
+- **eligible_locations gap**: ended at **5 sequential queries** vs the
+  ≤3 target. Remaining gap = rooms + zones-map + dorms+beds +
+  washrooms+fixtures as separate statements; closing it needs either
+  bounded parallel fan-out sessions (Phase-0 `X-PoolWait-ms` data first)
+  or a wider UNION restructure that sacrifices serializer clarity.
+  **Future item**, deliberately not extended here.
+- `photo_count` chip consumer fix — see 2.6 note.
+
 ## 2.1 — `GET /bootstrap` consolidated cold-start payload
 
 **Commit**: this commit · **Flag**: `BOOTSTRAP_ENABLED` (default on; `false` → 404).
