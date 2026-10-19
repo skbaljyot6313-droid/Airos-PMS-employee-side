@@ -81,7 +81,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setUser(u);
       setCompany(c);
-      await enrichEmployee(u);
+      // NOT awaited — the zone name is display-only and patches in when
+      // /zones resolves. Awaiting it put a second serial round trip on
+      // the startup critical path (up to a full 45s timeout of spinner).
+      void enrichEmployee(u);
     },
     [enrichEmployee]
   );
