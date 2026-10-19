@@ -105,18 +105,48 @@ def record_ext(ms: float) -> None:
         m["ext_ms"] += ms
 
 
-def _timed(awaitable_fn):
+def _timed(awaitable_fn, on_error=None, on_ok=None):
     """Wrap an awaitable-producing callable; times the awaited call into
-    the Redis bucket. No-op pass-through outside a request context."""
+    the Redis bucket. No-op pass-through outside a request context.
+    Optional lifecycle hooks report op outcome to the owner's health
+    tracking — they must never raise."""
 
     @functools.wraps(awaitable_fn)
     async def wrapper(*args, **kwargs):
         m = _request_metrics.get()
         if m is None:
-            return await awaitable_fn(*args, **kwargs)
+            try:
+                result = await awaitable_fn(*args, **kwargs)
+            except Exception:
+                if on_error is not None:
+                    try:
+                        on_error()
+                    except Exception:
+                        pass
+                raise
+            if on_ok is not None:
+                try:
+                    on_ok()
+                except Exception:
+                    pass
+            return result
         t0 = time.perf_counter()
         try:
-            return await awaitable_fn(*args, **kwargs)
+            result = await awaitable_fn(*args, **kwargs)
+        except Exception:
+            if on_error is not None:
+                try:
+                    on_error()
+                except Exception:
+                    pass
+            raise
+        else:
+            if on_ok is not None:
+                try:
+                    on_ok()
+                except Exception:
+                    pass
+            return result
         finally:
             m["redis_ms"] += (time.perf_counter() - t0) * 1000
             m["redis_ops"] += 1
@@ -128,15 +158,17 @@ class _TimedPipeline:
     """Proxy for a Redis pipeline — sync chain methods pass straight
     through; execute()/aexecute() are timed as ONE round trip."""
 
-    __slots__ = ("_pipe",)
+    __slots__ = ("_pipe", "_on_error", "_on_ok")
 
-    def __init__(self, pipe):
+    def __init__(self, pipe, on_error=None, on_ok=None):
         self._pipe = pipe
+        self._on_error = on_error
+        self._on_ok = on_ok
 
     def __getattr__(self, name):
         attr = getattr(self._pipe, name)
         if name in ("execute", "aexecute") and callable(attr):
-            return _timed(attr)
+            return _timed(attr, self._on_error, self._on_ok)
         return attr
 
     async def __aenter__(self):
@@ -152,18 +184,25 @@ class TimedRedis:
 
     Every awaited command lands in the request's X-Redis bucket when a
     metrics context exists — zero call-site changes, and pipelines are
-    counted once. Non-callable attributes pass through untouched."""
+    counted once. Non-callable attributes pass through untouched. Op
+    outcomes are reported through optional on_error/on_ok hooks so the
+    owner re-probes health only when it actually changed."""
 
-    __slots__ = ("_client",)
+    __slots__ = ("_client", "_on_error", "_on_ok")
 
-    def __init__(self, client):
+    def __init__(self, client, on_error=None, on_ok=None):
         self._client = client
+        self._on_error = on_error
+        self._on_ok = on_ok
 
     def pipeline(self, *args, **kwargs):
-        return _TimedPipeline(self._client.pipeline(*args, **kwargs))
+        return _TimedPipeline(
+            self._client.pipeline(*args, **kwargs),
+            self._on_error, self._on_ok,
+        )
 
     def __getattr__(self, name) -> Any:
         attr = getattr(self._client, name)
         if not callable(attr):
             return attr
-        return _timed(attr)
+        return _timed(attr, self._on_error, self._on_ok)
