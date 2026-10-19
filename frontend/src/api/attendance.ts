@@ -21,6 +21,7 @@
  */
 
 import { apiClient } from './client';
+import { cacheInvalidate, swr } from '../services/dataCache';
 import {
   AttendanceDayWire,
   AttendanceMonthWire,
@@ -185,13 +186,23 @@ export const nextWorkdayState = (
 // ---------------------------------------------------------------------------
 
 /** GET /attendance/today — null body → caller substitutes emptyWorkday(). */
-export async function getWorkdayApi(): Promise<Workday | null> {
-  const w = await apiClient<WorkdayWire | undefined>('/attendance/today');
-  return w ? mapWorkday(w) : null;
+export async function getWorkdayApi(
+  opts?: { onUpdate?: (w: Workday | null) => void },
+): Promise<Workday | null> {
+  const data = await swr(
+    'attendance:today',
+    async () => {
+      const w = await apiClient<WorkdayWire | undefined>('/attendance/today');
+      return w ? mapWorkday(w) : null;
+    },
+    { ttlMs: 45_000, onUpdate: opts?.onUpdate },
+  );
+  return data === undefined ? null : data;
 }
 
 const postWorkday = async (path: string): Promise<Workday | null> => {
   const w = await apiClient<WorkdayWire | undefined>(path, { method: 'POST' });
+  cacheInvalidate('attendance:');
   return w ? mapWorkday(w) : null;
 };
 
@@ -214,16 +225,26 @@ export interface AttendanceMonth {
 
 /** GET /attendance/calendar?month=YYYY-MM — tolerates a bare-day-array body
  *  as well as the { days, requests } envelope. */
-export async function getMonthApi(month: string): Promise<AttendanceMonth> {
-  const res = await apiClient<
-    AttendanceMonthWire | AttendanceDayWire[] | undefined
-  >(`/attendance/calendar?month=${encodeURIComponent(month)}`);
-  const days = Array.isArray(res) ? res : res?.days ?? [];
-  const requests = Array.isArray(res) ? [] : res?.requests ?? [];
-  return {
-    days: days.map(mapAttendanceDay),
-    requests: requests.map(mapDayOffRequest),
-  };
+export async function getMonthApi(
+  month: string,
+  opts?: { onUpdate?: (m: AttendanceMonth) => void },
+): Promise<AttendanceMonth> {
+  const data = await swr(
+    `attendance:month:${month}`,
+    async () => {
+      const res = await apiClient<
+        AttendanceMonthWire | AttendanceDayWire[] | undefined
+      >(`/attendance/calendar?month=${encodeURIComponent(month)}`);
+      const days = Array.isArray(res) ? res : res?.days ?? [];
+      const requests = Array.isArray(res) ? [] : res?.requests ?? [];
+      return {
+        days: days.map(mapAttendanceDay),
+        requests: requests.map(mapDayOffRequest),
+      };
+    },
+    { ttlMs: 60_000, onUpdate: opts?.onUpdate },
+  );
+  return data ?? { days: [], requests: [] };
 }
 
 /** POST /attendance/requests — null body → the screen invalidates its
@@ -239,5 +260,6 @@ export async function createDayOffRequestApi(payload: {
     '/attendance/requests',
     { method: 'POST', body: JSON.stringify(payload) }
   );
+  cacheInvalidate('attendance:');
   return r ? mapDayOffRequest(r) : null;
 }

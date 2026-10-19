@@ -5,6 +5,7 @@
  */
 
 import { apiClient } from './client';
+import { cacheInvalidate, swr } from '../services/dataCache';
 import { fetchMaintenanceApi } from './maintenance';
 import { getZoneNameMap } from './directory';
 import { ListResponseWire, TaskCompletionImageWire, TaskWire } from './wire';
@@ -183,7 +184,9 @@ export const mapTask = (t: TaskWire, zoneNames: Map<string, string>): Task => {
   };
 };
 
-export async function fetchTasksApi(myEmployeeUid?: string): Promise<Task[]> {
+/** Network path — the display model fans out over /tasks + /maintenance
+ *  + zones; the swr() wrapper above caches the composed result. */
+const fetchTasksNetwork = async (myEmployeeUid?: string): Promise<Task[]> => {
   const [tasksRes, maintenance, zoneNames] = await Promise.all([
     apiClient<ListResponseWire<TaskWire>>('/tasks?limit=200', { method: 'GET' }),
     fetchMaintenanceApi(myEmployeeUid).catch(() => ({ assigned_to_me: [], reported_by_me: [] })),
@@ -192,11 +195,28 @@ export async function fetchTasksApi(myEmployeeUid?: string): Promise<Task[]> {
   const tasks = tasksRes.items.map((t) => mapTask(t, zoneNames));
   const maintTasks = maintenance.assigned_to_me.map((m) => mapMaintenanceToTask(m, zoneNames));
   return [...tasks, ...maintTasks];
+};
+
+export async function fetchTasksApi(
+  myEmployeeUid?: string,
+  opts?: { onUpdate?: (t: Task[]) => void },
+): Promise<Task[]> {
+  const data = await swr('tasks:list', () => fetchTasksNetwork(myEmployeeUid), {
+    ttlMs: 45_000,
+    onUpdate: opts?.onUpdate,
+  });
+  return data ?? [];
 }
 
-export async function getTaskDetailApi(id: string): Promise<Task> {
+export async function getTaskDetailApi(
+  id: string,
+  opts?: { signal?: AbortSignal },
+): Promise<Task> {
   const [t, zoneNames] = await Promise.all([
-    apiClient<TaskWire>(`/tasks/${encodeURIComponent(id)}`, { method: 'GET' }),
+    apiClient<TaskWire>(`/tasks/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      signal: opts?.signal,
+    }),
     getZoneNameMap(),
   ]);
   return mapTask(t, zoneNames);
@@ -204,6 +224,8 @@ export async function getTaskDetailApi(id: string): Promise<Task> {
 
 export async function startTaskApi(id: string): Promise<Task> {
   const t = await apiClient<TaskWire>(`/tasks/${encodeURIComponent(id)}/start`, { method: 'POST' });
+  cacheInvalidate('tasks:');
+  cacheInvalidate('maintenance:');
   return mapTask(t, new Map());
 }
 
@@ -221,5 +243,7 @@ export async function submitTaskApi(
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  cacheInvalidate('tasks:');
+  cacheInvalidate('maintenance:');
   return mapTask(t, new Map());
 }

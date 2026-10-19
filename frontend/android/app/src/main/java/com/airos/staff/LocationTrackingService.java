@@ -143,10 +143,17 @@ public class LocationTrackingService extends Service {
         // Poll the work feed on its own cadence — independent of the GPS
         // heartbeat so a dead fix source can't silence allocations. A
         // throwing run cancels every future run — nothing escapes.
+        // GATE (Phase 3): while the WebView is foreground, its own 45 s
+        // poll + Centrifugo channel own the feed — the native poll is the
+        // BACKGROUND fallback only, so it's skipped when the app is
+        // visible. Process importance, not a bridge flag — the Capacitor
+        // plugin boundary is untouched.
         notifPoller.scheduleWithFixedDelay(
                 () -> {
                     try {
-                        pollNotificationsSync();
+                        if (!webViewLikelyPolling()) {
+                            pollNotificationsSync();
+                        }
                     } catch (Throwable ignored) {
                     }
                 }, 15, NOTIF_POLL_MS / 1000,
@@ -428,6 +435,20 @@ public class LocationTrackingService extends Service {
     }
 
     // ------------------------------------------------------------------
+    /** True when the app's UI process is foreground — the WebView's own
+     *  poll is alive then, so this service's 30 s poll is redundant. When
+     *  the app is backgrounded (FGS keeps the process at
+     *  PERCEPTIBLE/FOREGROUND_SERVICE), the WebView may be suspended —
+     *  the native poll stays the notification fallback. No permission or
+     *  bridge call needed — getMyMemoryState reads our own importance. */
+    private boolean webViewLikelyPolling() {
+        android.app.ActivityManager.RunningAppProcessInfo info =
+                new android.app.ActivityManager.RunningAppProcessInfo();
+        android.app.ActivityManager.getMyMemoryState(info);
+        return info.importance <=
+                android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
+    }
+
     // Work-feed poll → OS notifications for unseen unread items
     // ------------------------------------------------------------------
     // GET /notifications runs the server-side allocation synthesis, so

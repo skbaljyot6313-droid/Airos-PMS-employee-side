@@ -4,7 +4,8 @@ import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/
 import { Task, EvidenceItem } from '../../types';
 import { getTaskDetailApi, submitTaskApi, startTaskApi } from '../../api/tasks';
 import { uploadMediaApi } from '../../api/media';
-import { mediaUrl, errorMessage } from '../../api/client';
+import { mediaUrl, errorMessage, isCancelledError } from '../../api/client';
+import { useUnmountSignal } from '../../utils/useUnmountSignal';
 import { subscribeRealtimeEvents } from '../../services/realtime';
 import { ScreenHeader } from '../../components/common/ScreenHeader';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -58,17 +59,20 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
+  const unmountSignal = useUnmountSignal();
+
   const loadTask = async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getTaskDetailApi(taskId);
+      const data = await getTaskDetailApi(taskId, { signal: unmountSignal });
       setTask(data);
       setChecklist(data.checklist);
       // Reopened tasks start with an empty editable list — earlier photos
       // stay visible read-only under "Previously Submitted" instead.
       setEvidenceList(data.status === 'reopened' ? [] : data.evidence);
     } catch (err: unknown) {
+      if (isCancelledError(err)) return; // unmounted — no error UI
       setError(errorMessage(err, 'Unable to load task details.'));
     } finally {
       setLoading(false);

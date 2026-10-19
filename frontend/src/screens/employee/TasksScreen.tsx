@@ -33,8 +33,12 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
       else setLoading(true);
       setError(null);
 
-      // Fetch operational tasks AND assigned maintenance tickets
-      const data = await fetchTasksApi(employee?.id);
+      // Fetch operational tasks AND assigned maintenance tickets —
+      // swr serves the cached list instantly; onUpdate lands the
+      // revalidated payload when the window is stale.
+      const data = await fetchTasksApi(employee?.id, {
+        onUpdate: setTasks,
+      });
       setTasks(data);
       perfMarkOnce('t6_data');
 
