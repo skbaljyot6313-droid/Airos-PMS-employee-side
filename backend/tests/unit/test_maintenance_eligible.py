@@ -142,6 +142,28 @@ async def test_dorm_attached_washroom_passes_coverage(session, seed):
         seed["emp_user"], washroom=att)
 
 
+async def test_eligible_locations_query_budget(session, seed):
+    """Phase-2.3 — sequential query budget: coverage(1) + rooms(1) +
+    dorms+beds(1) + zones(1) + washrooms+fixtures(1) = 5, down from ~8
+    (coverage get+IN, selectinload beds, selectinload fixtures)."""
+    await _coverage_seed(session, seed)
+    calls = {"n": 0}
+    orig = session.execute
+
+    async def wrapped(*a, **kw):
+        calls["n"] += 1
+        return await orig(*a, **kw)
+
+    session.execute = wrapped
+    try:
+        out = await MaintenanceService(session).eligible_locations(
+            seed["emp_user"])
+    finally:
+        session.execute = orig
+    assert calls["n"] <= 5, f"ran {calls['n']} sequential queries"
+    assert out["rooms"] and out["dorms"] and out["washrooms"]
+
+
 async def test_out_of_scope_washroom_still_rejected(session, seed):
     z1 = await _coverage_seed(session, seed)
     out_z = _zone(seed["prop"], "Z9-out")

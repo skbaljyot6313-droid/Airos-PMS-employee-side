@@ -185,18 +185,25 @@ class MaintenanceService:
         zone_ids: set[uuid.UUID] = set()
         area_id = None
         if user.role == UserRole.EMPLOYEE:
-            emp = await self.session.get(Employee, user.employee_id)
-            if emp is None:
-                return zone_ids, area_id
-            if emp.zone_id:
-                zone_ids.add(emp.zone_id)
-            if emp.area_id:
-                area_id = emp.area_id
-                from app.models.structure import Zone
-                res = await self.session.execute(
-                    select(Zone.id).where(Zone.area_id == emp.area_id)
-                )
-                zone_ids |= set(res.scalars())
+            # One query: the employee row outer-joined to all zones in the
+            # employee's area — replaces the get()+IN() two-step.
+            from app.models.structure import Zone
+            res = await self.session.execute(
+                select(Employee.zone_id, Employee.area_id, Zone.id)
+                .outerjoin(Zone, Zone.area_id == Employee.area_id)
+                .where(Employee.id == user.employee_id)
+            )
+            first = True
+            for emp_zone_id, emp_area_id, area_zone_id in res.all():
+                if first:
+                    area_id = emp_area_id
+                    if emp_zone_id:
+                        zone_ids.add(emp_zone_id)
+                    first = False
+                if area_zone_id:
+                    zone_ids.add(area_zone_id)
+            if first:
+                return zone_ids, area_id  # employee row missing
         return zone_ids, area_id
 
     async def _enforce_employee_coverage(self, user: User, room=None,
@@ -255,13 +262,14 @@ class MaintenanceService:
             .order_by(Room.room_number)
         )
         rooms = list(res.scalars())
+        from sqlalchemy.orm import joinedload
         res = await self.session.execute(
             select(Dorm)
-            .options(selectinload(Dorm.beds))
+            .options(joinedload(Dorm.beds))
             .where(Dorm.property_id == user.property_id, scope_d)
             .order_by(Dorm.name)
         )
-        dorms = list(res.scalars())
+        dorms = list(res.unique().scalars())
         zmap = {}
         if zone_ids:
             res = await self.session.execute(
@@ -285,11 +293,11 @@ class MaintenanceService:
         if wscope is not None:
             res = await self.session.execute(
                 select(Washroom)
-                .options(selectinload(Washroom.fixtures))
+                .options(joinedload(Washroom.fixtures))
                 .where(Washroom.property_id == user.property_id, wscope)
                 .order_by(Washroom.name)
             )
-            washrooms = list(res.scalars())
+            washrooms = list(res.unique().scalars())
 
         return {
             "rooms": [{

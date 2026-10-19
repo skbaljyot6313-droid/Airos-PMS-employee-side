@@ -62,3 +62,24 @@ no-Redis fallback). Suite: **328/328** green.
 **Net effect**: `X-DB-Count` drops by 1 on every authenticated request
 (cache-warm), and `X-DB-Exec-ms`/`X-PoolWait-ms` move correspondingly —
 exactly what the Phase-0 headers are there to measure.
+
+## 2.3 — `eligible_locations` query reduction
+
+**Commit**: this commit.
+
+| Query | Before | After |
+|---|---|---|
+| `_employee_coverage` | `session.get(Employee)` + `SELECT zone.id WHERE area_id` (2) | ONE `Employee ⋈ Zone ON area_id` outer join (1) |
+| dorms + beds | `selectinload` → 2 queries | `joinedload` → 1 (`.unique().scalars()`) |
+| washrooms + fixtures | `selectinload` → 2 queries | `joinedload` → 1 (`.unique().scalars()`) |
+| rooms, zones map | unchanged | 2 |
+| **Total** | ~8 sequential | **5 sequential** (covered by `test_eligible_locations_query_budget`) |
+
+**Bounded parallelism deliberately not used**: one `AsyncSession` cannot
+`asyncio.gather` executes, and opening per-query sessions needs pool
+headroom we have not measured yet (Phase 0 `X-PoolWait-ms` data first) —
+also breaks in-memory-SQLite test sessions (each connection = a fresh DB).
+Joins are cheaper anyway: each removed query saves a full 300–700 ms RTT.
+
+Also benefits `_enforce_employee_coverage` (ticket-submit path) — same
+merged coverage query.
