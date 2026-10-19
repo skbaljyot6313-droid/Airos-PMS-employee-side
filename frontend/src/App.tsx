@@ -45,6 +45,7 @@ import { MaintenanceNewScreen } from './screens/employee/MaintenanceNewScreen';
 import { MaintenanceDetailScreen } from './screens/employee/MaintenanceDetailScreen';
 import { ProfileScreen } from './screens/employee/ProfileScreen';
 import { LoadingState } from './components/common/FeedbackStates';
+import { ConnectionErrorScreen } from './components/auth/ConnectionErrorScreen';
 import { MaintenanceTarget, ZoneResource, ZoneSummary } from './types';
 import { perfMarkOnce, perfReportOnce } from './utils/perf';
 
@@ -160,25 +161,11 @@ const AppNavigator: React.FC = () => {
   if (!isAuthenticated) {
     if (connectionError) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center bg-white p-6">
-          <div className="w-12 h-12 rounded-2xl bg-[#667174] flex items-center justify-center text-white mb-3 shadow-sm">
-            <span className="font-bold text-lg font-['Space_Grotesk']">A</span>
-          </div>
-          <p className="text-base font-semibold text-[#20292C] mb-1">Can't reach the server</p>
-          <p className="text-sm text-[#667174] text-center mb-6 max-w-xs">{connectionError}</p>
-          <button
-            onClick={() => void retrySession()}
-            className="px-6 py-2.5 rounded-xl bg-[#33B059] text-white font-semibold text-sm active:scale-95 transition-all"
-          >
-            Try again
-          </button>
-          <button
-            onClick={logout}
-            className="mt-3 text-sm text-[#667174] underline"
-          >
-            Sign in with a different account
-          </button>
-        </div>
+        <ConnectionErrorScreen
+          message={connectionError}
+          onRetry={() => void retrySession()}
+          onLogout={logout}
+        />
       );
     }
     return <LoginScreen />;
