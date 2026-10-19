@@ -154,21 +154,40 @@ def _rt_events_after_commit(session) -> None:
     if session.in_nested_transaction():
         return
     from app.core.centrifugo import RT_EVENTS, dispatch_realtime_events
+    from app.services.notifications import (
+        PUSH_QUEUE,
+        dispatch_queued_pushes,
+    )
     events = session.info.pop(RT_EVENTS, None)
-    if not events:
-        return
-    try:
+    pushes = session.info.pop(PUSH_QUEUE, None)
+    if events:
         try:
-            asyncio.get_running_loop().create_task(
-                dispatch_realtime_events(list(events))
+            try:
+                asyncio.get_running_loop().create_task(
+                    dispatch_realtime_events(list(events))
+                )
+            except RuntimeError:
+                from sqlalchemy.util.concurrency import await_only
+                await_only(dispatch_realtime_events(list(events)))
+        except Exception as exc:
+            logger.warning(
+                "realtime-event dispatch failed: %s", type(exc).__name__
             )
-        except RuntimeError:
-            from sqlalchemy.util.concurrency import await_only
-            await_only(dispatch_realtime_events(list(events)))
-    except Exception as exc:
-        logger.warning(
-            "realtime-event dispatch failed: %s", type(exc).__name__
-        )
+    if pushes:
+        # Push sends run OUTSIDE the committed transaction on a fresh
+        # session — external HTTPS must never hold a pool connection.
+        try:
+            try:
+                asyncio.get_running_loop().create_task(
+                    dispatch_queued_pushes(list(pushes))
+                )
+            except RuntimeError:
+                from sqlalchemy.util.concurrency import await_only
+                await_only(dispatch_queued_pushes(list(pushes)))
+        except Exception as exc:
+            logger.warning(
+                "push dispatch scheduling failed: %s", type(exc).__name__
+            )
 
 
 @_sa_event.listens_for(_SyncSession, "after_rollback")
@@ -176,7 +195,9 @@ def _rt_events_after_rollback(session) -> None:
     if session.in_nested_transaction():
         return
     from app.core.centrifugo import RT_EVENTS
+    from app.services.notifications import PUSH_QUEUE
     session.info.pop(RT_EVENTS, None)
+    session.info.pop(PUSH_QUEUE, None)
 
 
 async def check_database(timeout: float = 10.0) -> None:
