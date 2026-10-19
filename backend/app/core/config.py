@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     # Phase-0 observability headers (X-DB-*/X-Redis-*/X-Ext/X-PoolWait).
     # None → on unless APP_ENV=production; explicit true/false overrides.
     PERF_HEADERS_ENABLED: bool | None = None
+    # Phase-2 consolidated cold-start endpoint; false → 404 kill-switch.
+    BOOTSTRAP_ENABLED: bool = True
 
     # Supabase services (storage configured, not yet implemented)
     SUPABASE_URL: str = ""

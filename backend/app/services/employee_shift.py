@@ -44,37 +44,46 @@ def shift_applies_on(working_days: str, op_date: str) -> bool:
 
 
 async def resolve_my_shift(
-    user: User, session: AsyncSession
+    user: User,
+    session: AsyncSession,
+    *,
+    op_date: str | None = None,
 ) -> tuple[EmployeeShiftAssignment | None, Shift | None, str]:
     """(assignment, shift, op_date) — the pair in force today, or
-    (None, None, op_date) when the caller has no current assignment."""
+    (None, None, op_date) when the caller has no current assignment.
+
+    op_date is normally derived via an Employee→Property→Company lookup
+    for the operational-day start; callers that already hold the caller's
+    company (e.g. /bootstrap) may pass a precomputed op_date to skip that
+    query — the value is identical for employee-scoped users."""
     from app.dependencies.auth import Forbidden
 
     if user.employee_id is None:
         raise Forbidden(
             "Your account is not linked to an employee record."
         )
-    prop_param = bindparam("caller_prop", user.property_id, type_=Uuid)
-    res = await session.execute(
-        select(Employee, Company.operational_day_start)
-        .select_from(Employee)
-        .join(
-            Property,
-            Property.id
-            == func.coalesce(prop_param, Employee.property_id),
+    if op_date is None:
+        prop_param = bindparam("caller_prop", user.property_id, type_=Uuid)
+        res = await session.execute(
+            select(Employee, Company.operational_day_start)
+            .select_from(Employee)
+            .join(
+                Property,
+                Property.id
+                == func.coalesce(prop_param, Employee.property_id),
+            )
+            .join(Company, Company.id == Property.company_id)
+            .where(Employee.id == user.employee_id)
         )
-        .join(Company, Company.id == Property.company_id)
-        .where(Employee.id == user.employee_id)
-    )
-    row = res.first()
-    if row is None:
-        raise Forbidden(
-            "Your account is not linked to an employee record."
+        row = res.first()
+        if row is None:
+            raise Forbidden(
+                "Your account is not linked to an employee record."
+            )
+        _employee, day_start = row
+        op_date = operational_day_key(
+            datetime.now(IST), parse_day_start(day_start)
         )
-    _employee, day_start = row
-    op_date = operational_day_key(
-        datetime.now(IST), parse_day_start(day_start)
-    )
 
     res = await session.execute(
         select(EmployeeShiftAssignment, Shift)

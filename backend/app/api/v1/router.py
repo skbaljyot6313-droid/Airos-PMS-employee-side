@@ -6,6 +6,7 @@ from app.api.v1 import (
     admin,
     auth,
     attendance,
+    bootstrap,
     location,
     maintenance,
     media,
@@ -21,6 +22,7 @@ api_router.include_router(admin.router)
 api_router.include_router(auth.router)
 api_router.include_router(tasks.router)
 api_router.include_router(attendance.router)
+api_router.include_router(bootstrap.router)
 api_router.include_router(maintenance.router)
 api_router.include_router(resources.router)
 api_router.include_router(media.router)
