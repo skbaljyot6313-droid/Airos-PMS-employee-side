@@ -146,3 +146,17 @@ is unchanged, only the list payloads slim.
 **Serializer safety note**: `_ticket_fields` was extracted so the summary
 never touches an unloaded relationship — `ticket_out` on a lazy instance
 would have fired an N+1 lazy load per row.
+
+**Consumer fix (hardening pass)**: `MaintenanceCard` renders a
+photo-count chip from `ticket.photos.length` — it would have silently
+dropped to zero. `list_tickets` now returns `(ticket, photo_count)`
+tuples — the issue-attachment count arrives via LEFT JOIN + GROUP BY
+inside the ONE list query — and `ticket_summary_out(t, photo_count)`
+emits `photo_count` on the wire. Frontend `mapTicket` maps it and the
+card reads `photo_count ?? photos.length`. (A `hybrid_property` +
+`with_expression` attempt was reverted: SQLAlchemy 2.1 does not accept a
+hybrid as a with_expression key; the join is simpler anyway.)
+Consumer audit: `MaintenanceScreen`/`ZoneWorkspaceScreen`/`tasks.ts`
+list fan-out read no events/attachments; `MaintenanceDetailScreen` is
+the only consumer and it refetches the detail endpoint. Contract tests
+on both sides.

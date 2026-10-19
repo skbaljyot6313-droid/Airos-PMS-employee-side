@@ -18,7 +18,7 @@ router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 @router.get("")
 async def list_maintenance(user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db)):
     tickets = await MaintenanceService(session).list_tickets(user)
-    return {"items": [ticket_summary_out(ticket) for ticket in tickets], "total": len(tickets)}
+    return {"items": [ticket_summary_out(ticket, photo_count=count) for ticket, count in tickets], "total": len(tickets)}
 
 
 @router.get("/eligible-locations")

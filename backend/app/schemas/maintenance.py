@@ -146,11 +146,14 @@ def ticket_out(t) -> dict:
     return out
 
 
-def ticket_summary_out(t) -> dict:
+def ticket_summary_out(t, photo_count=None) -> dict:
     """List-shape parity with ticket_out minus the nested events/
     attachments payloads — the list never renders them; the detail
-    endpoint loads them on demand."""
+    endpoint loads them on demand. `photo_count` keeps the card's
+    photo chip working: counted via LEFT JOIN inside list_tickets so
+    it costs no extra query and never lazy-loads the collection."""
     out = _ticket_fields(t)
     out["events"] = []
     out["attachments"] = []
+    out["photo_count"] = photo_count
     return out

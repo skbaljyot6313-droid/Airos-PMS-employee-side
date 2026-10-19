@@ -16,7 +16,7 @@ permanent record; the room status is derived state.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -566,8 +566,22 @@ class MaintenanceService:
         self, user: User, *, property_id=None, room_id=None, washroom_id=None,
         status_=None, priority=None, assigned_to=None, search=None,
     ) -> list[MaintenanceTicket]:
+        # photo_count arrives INSIDE the list query via LEFT JOIN +
+        # GROUP BY — no collection load, no N+1.
+        photo_count_col = func.count(
+            MaintenanceTicketAttachment.id
+        ).label("photo_count")
         q = (
-            select(MaintenanceTicket)
+            select(MaintenanceTicket, photo_count_col)
+            .outerjoin(
+                MaintenanceTicketAttachment,
+                and_(
+                    MaintenanceTicketAttachment.ticket_id
+                    == MaintenanceTicket.id,
+                    MaintenanceTicketAttachment.kind == "issue",
+                ),
+            )
+            .group_by(MaintenanceTicket.id)
             .order_by(MaintenanceTicket.created_at.desc())
         )
         if user.role == UserRole.SUPER_ADMIN:
@@ -605,7 +619,7 @@ class MaintenanceService:
                 | MaintenanceTicket.washroom_name.ilike(like)
             )
         res = await self.session.execute(q)
-        return list(res.scalars())
+        return [(t, count) for t, count in res.all()]
 
     async def get_ticket(self, user: User, ticket_id: uuid.UUID):
         ticket = await self._get_ticket(user, ticket_id)
