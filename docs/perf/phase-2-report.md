@@ -83,3 +83,20 @@ Joins are cheaper anyway: each removed query saves a full 300–700 ms RTT.
 
 Also benefits `_enforce_employee_coverage` (ticket-submit path) — same
 merged coverage query.
+
+## 2.4 — Notification ledger sync: 2 queries → 1
+
+**Commit**: this commit.
+
+`sync_assignment_notifications` (runs inside `GET /notifications` on
+every feed poll) issued the same ledger shape twice — once for
+`ticket_kind='task'`, once for `'maintenance'`. Now one `UNION ALL` with
+a `kind` discriminator + per-branch dedupe `EXISTS` (semantics identical:
+same joins, same predicates, same `ORDER BY created_at LIMIT 50`). The
+per-event `notify()` loop is unchanged — materialization count and
+behavior are identical (all 8 sync tests pass unchanged).
+
+Saves one remote RTT per feed poll (~300–700 ms each). The per-event
+`notify()` calls each still run their own device-token lookup at drain
+time — batching that is a Phase-4 candidate, not a correctness issue
+since it's post-commit now.
