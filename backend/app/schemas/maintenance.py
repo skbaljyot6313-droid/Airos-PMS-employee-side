@@ -90,7 +90,9 @@ def event_out(e) -> dict:
     }
 
 
-def ticket_out(t) -> dict:
+def _ticket_fields(t) -> dict:
+    """Scalar ticket fields — safe on instances loaded WITHOUT the
+    events/attachments relationships (no lazy-load triggers)."""
     return {
         "ticket_uid": str(t.id),
         "ticket_number": t.ticket_number,
@@ -132,6 +134,23 @@ def ticket_out(t) -> dict:
         "resolution_notes": t.resolution_notes,
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "updated_at": t.updated_at.isoformat() if t.updated_at else None,
-        "events": [event_out(e) for e in getattr(t, "events", [])],
-        "attachments": [attachment_out(a) for a in getattr(t, "attachments", [])],
     }
+
+
+def ticket_out(t) -> dict:
+    out = _ticket_fields(t)
+    out["events"] = [event_out(e) for e in getattr(t, "events", [])]
+    out["attachments"] = [
+        attachment_out(a) for a in getattr(t, "attachments", [])
+    ]
+    return out
+
+
+def ticket_summary_out(t) -> dict:
+    """List-shape parity with ticket_out minus the nested events/
+    attachments payloads — the list never renders them; the detail
+    endpoint loads them on demand."""
+    out = _ticket_fields(t)
+    out["events"] = []
+    out["attachments"] = []
+    return out

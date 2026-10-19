@@ -115,3 +115,24 @@ cache already does. Client-side adoption (`If-None-Match` on
 
 **Tests**: `tests/unit/test_zones_etag.py` — 3 tests (stable weak tag,
 304 on match, content change bumps tag).
+
+## 2.6 — Maintenance list: drop eager events/attachments
+
+**Commit**: this commit.
+
+`list_tickets` eagerly `selectinload`ed `events` + `attachments` for
+every row — two extra collection queries plus the full nested payload
+per ticket, none of it rendered by the list screens. Now the list query
+loads ticket columns only (1 query), and the route serializes via the
+new `ticket_summary_out` — identical field set with `events`/`attachments`
+emitted as `[]` (wire-shape parity; the frontend maps `?? []` anyway).
+
+Detail endpoints are untouched: `GET /maintenance/{id}`, `room_history`,
+and the mutation responses still eager-load and return the full nested
+data via `ticket_out`. `getMaintenanceDetailApi` already fetches the
+detail endpoint on open, so no client change is needed — the wire shape
+is unchanged, only the list payloads slim.
+
+**Serializer safety note**: `_ticket_fields` was extracted so the summary
+never touches an unloaded relationship — `ticket_out` on a lazy instance
+would have fired an N+1 lazy load per row.

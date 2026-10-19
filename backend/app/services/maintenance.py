@@ -568,10 +568,6 @@ class MaintenanceService:
     ) -> list[MaintenanceTicket]:
         q = (
             select(MaintenanceTicket)
-            .options(
-                selectinload(MaintenanceTicket.events),
-                selectinload(MaintenanceTicket.attachments),
-            )
             .order_by(MaintenanceTicket.created_at.desc())
         )
         if user.role == UserRole.SUPER_ADMIN:

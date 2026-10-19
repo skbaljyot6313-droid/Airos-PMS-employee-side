@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user, require_employee
 from app.models.user import User
 from app.schemas.v1.maintenance.ticket import MaintenanceCreateRequest, MaintenanceResolveRequest, ticket_out
+from app.schemas.maintenance import ticket_summary_out
 from app.services.maintenance import MaintenanceService
 
 router = APIRouter(prefix="/maintenance", tags=["maintenance"])
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/maintenance", tags=["maintenance"])
 @router.get("")
 async def list_maintenance(user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db)):
     tickets = await MaintenanceService(session).list_tickets(user)
-    return {"items": [ticket_out(ticket) for ticket in tickets], "total": len(tickets)}
+    return {"items": [ticket_summary_out(ticket) for ticket in tickets], "total": len(tickets)}
 
 
 @router.get("/eligible-locations")
