@@ -28,12 +28,12 @@ revertable.
 
 - Backend `pytest`: **299/299**. Frontend `vitest`: **151/151**, `tsc --noEmit` clean, `npm run build` clean.
 - In-process ASGI smoke run (SQLite app DB + fakeredis client): 23/23 checks — headers emitted per request, push drain fired post-commit with the registered token, `POST /location/current` did `db_n=1` on cache miss then `db_n=0` on hit, `GET /location/current` `db_n=0`, 401/503 paths intact.
-- `GET` timeout/retry/abort semantics unchanged: apiClient keeps the 45 s `AbortController` timeout, single-flight refresh retries the original request once on 401, and mutations are not auto-replayed.
+- `GET` timeout/retry/abort semantics unchanged: apiClient keeps the 45 s `AbortController` timeout, single-flight refresh retries the original request once on 401, and mutations are not auto-replayed. **OPEN — Phase 3:** shorter timeout (~15 s), up to 2 retries with exponential backoff + jitter on network/5xx for idempotent GETs only, and `AbortController` cancel on screen unmount.
 
 ## Design confirmations
 
 - **Push drain**: bounded by `_PUSH_DRAIN_SEMAPHORE(4)`; each failure logs the notification id; always opens a fresh `AsyncSessionLocal` — never the request-scoped session; the queue is dropped on rollback.
-- **Pool wait signal**: `X-PoolWait-ms` = first `execute()` entry → first `before_cursor_execute` gap (acquisition + first-statement setup). Use it, not intuition, for pool sizing.
+- **Pool wait signal**: `X-PoolWait-ms` = first `execute()` entry → first `before_cursor_execute` gap (acquisition + first-statement setup). It **includes event-loop scheduling delay** — on a contended loop the gap overstates real pool wait — so read it as an **upper bound**, not a measurement. Use it, not intuition, for pool sizing.
 - **`idle_in_transaction_session_timeout`**: NOT sent as an asyncpg `server_settings` startup parameter. Opt-in via `DB_IDLE_TX_TIMEOUT_MS`, applied as a per-connection `SET` at engine connect, default 0 (off), and **skipped entirely on pooler hosts** (Supavisor/PgBouncer) until verified on staging — session state can carry between checkouts on a shared server connection.
 - **`PERF_HEADERS_ENABLED`**: `None` → headers on when `APP_ENV != production`; explicit `true`/`false` overrides. Log-line stage data is unconditional.
 
@@ -68,5 +68,9 @@ Each commit reverts independently. Order matters only for
 
 - `/bootstrap` consolidated endpoint, query reduction, ETag, Redis user
   cache → Phase 2 (`perf/phase-2-query-reduction`).
+- **GET timeout/retry/abort hardening** (OPEN, scheduled Phase 3):
+  ~15 s timeout for list reads, up to 2 retries with exponential backoff
+  + jitter on network/5xx responses for idempotent GETs only, and
+  `AbortController` cancel on screen unmount.
 - Workers/pool sizing, arq worker, region review → Phase 5, gated on
   Phase-0 header data.
