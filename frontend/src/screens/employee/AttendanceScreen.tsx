@@ -195,7 +195,9 @@ export const AttendanceScreen: React.FC = () => {
       else setLoading(true);
       setError(null);
 
-      const w = await getWorkdayApi();
+      const w = await getWorkdayApi({
+        onUpdate: (fresh) => setWorkday(fresh ?? emptyWorkday(businessDate())),
+      });
       setWorkday(w ?? emptyWorkday(businessDate()));
       setSynced(true);
     } catch (err: unknown) {
@@ -224,7 +226,12 @@ export const AttendanceScreen: React.FC = () => {
     setMonthLoading(true);
     setMonthError(null);
     try {
-      const data = await getMonthApi(key);
+      const data = await getMonthApi(key, {
+        onUpdate: (fresh) => {
+          monthCache.current.set(key, fresh);
+          setMonthData(fresh);
+        },
+      });
       monthCache.current.set(key, data);
       setMonthData(data);
     } catch (err: unknown) {

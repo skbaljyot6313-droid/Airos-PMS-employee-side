@@ -11,6 +11,7 @@
  */
 
 import { apiClient } from './client';
+import { cacheInvalidate, swr } from '../services/dataCache';
 import { getZoneNameMap, getZonesCached } from './directory';
 import {
   EligibleLocationsWire,
@@ -152,10 +153,14 @@ export const mapTicket = (
 // Ticket endpoints
 // ---------------------------------------------------------------------------
 
-export async function fetchMaintenanceApi(myEmployeeUid?: string): Promise<{
+interface MaintenanceList {
   assigned_to_me: MaintenanceTicket[];
   reported_by_me: MaintenanceTicket[];
-}> {
+}
+
+const fetchMaintenanceNetwork = async (
+  myEmployeeUid?: string,
+): Promise<MaintenanceList> => {
   const [res, zoneNames] = await Promise.all([
     apiClient<ListResponseWire<MaintenanceTicketWire>>('/maintenance', { method: 'GET' }),
     getZoneNameMap(),
@@ -165,11 +170,30 @@ export async function fetchMaintenanceApi(myEmployeeUid?: string): Promise<{
     assigned_to_me: tickets.filter((t) => !t.is_reported_by_me),
     reported_by_me: tickets.filter((t) => t.is_reported_by_me),
   };
+};
+
+export async function fetchMaintenanceApi(
+  myEmployeeUid?: string,
+  opts?: { onUpdate?: (l: MaintenanceList) => void },
+): Promise<MaintenanceList> {
+  const data = await swr(
+    'maintenance:list',
+    () => fetchMaintenanceNetwork(myEmployeeUid),
+    { ttlMs: 45_000, onUpdate: opts?.onUpdate },
+  );
+  return data ?? { assigned_to_me: [], reported_by_me: [] };
 }
 
-export async function getMaintenanceDetailApi(id: string, myEmployeeUid?: string): Promise<MaintenanceTicket> {
+export async function getMaintenanceDetailApi(
+  id: string,
+  myEmployeeUid?: string,
+  opts?: { signal?: AbortSignal },
+): Promise<MaintenanceTicket> {
   const [t, zoneNames] = await Promise.all([
-    apiClient<MaintenanceTicketWire>(`/maintenance/${encodeURIComponent(id)}`, { method: 'GET' }),
+    apiClient<MaintenanceTicketWire>(`/maintenance/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      signal: opts?.signal,
+    }),
     getZoneNameMap(),
   ]);
   return mapTicket(t, zoneNames, myEmployeeUid);
@@ -193,6 +217,8 @@ export async function createMaintenanceTicketApi(payload: {
     method: 'POST',
     body: JSON.stringify({ ...rest, maintenance_type: maintenanceTypeToWire(category) }),
   });
+  cacheInvalidate('maintenance:');
+  cacheInvalidate('tasks:');
   return mapTicket(t, new Map());
 }
 
@@ -200,6 +226,8 @@ export async function startMaintenanceTicketApi(id: string): Promise<Maintenance
   const t = await apiClient<MaintenanceTicketWire>(`/maintenance/${encodeURIComponent(id)}/start`, {
     method: 'POST',
   });
+  cacheInvalidate('maintenance:');
+  cacheInvalidate('tasks:');
   return mapTicket(t, new Map());
 }
 
@@ -211,6 +239,8 @@ export async function resolveMaintenanceTicketApi(
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  cacheInvalidate('maintenance:');
+  cacheInvalidate('tasks:');
   return mapTicket(t, new Map());
 }
 
@@ -218,8 +248,14 @@ export async function resolveMaintenanceTicketApi(
 // Eligible locations (coverage-scoped raise targets)
 // ---------------------------------------------------------------------------
 
-const fetchEligibleWire = (): Promise<EligibleLocationsWire> =>
-  apiClient<EligibleLocationsWire>('/maintenance/eligible-locations');
+const fetchEligibleWire = async (): Promise<EligibleLocationsWire> => {
+  const data = await swr(
+    'maintenance:eligible',
+    () => apiClient<EligibleLocationsWire>('/maintenance/eligible-locations'),
+    { ttlMs: 60_000 },
+  );
+  return data ?? { rooms: [], dorms: [] };
+};
 
 /** Wire payload → picker hierarchy: rooms, dorms (+beds), washrooms
  *  (+fixtures). Children ride on `children` for the drill-in picker. */
@@ -379,11 +415,15 @@ const ticketTargetUid = (t: MaintenanceTicket): string =>
  * The single /maintenance fetch doubles as the ticket list — the caller gets
  * the assigned/reported split in the same payload (no second request).
  */
-export async function fetchMaintenanceZonesApi(myEmployeeUid?: string): Promise<{
+interface MaintenanceZonesResult {
   zones: ZoneSummary[];
   assigned_to_me: MaintenanceTicket[];
   reported_by_me: MaintenanceTicket[];
-}> {
+}
+
+const fetchMaintenanceZonesNetwork = async (
+  myEmployeeUid?: string,
+): Promise<MaintenanceZonesResult> => {
   const [zonesItems, eligible, ticketsRes, zoneNames] = await Promise.all([
     getZonesCached(),
     fetchEligibleWire().catch(() => ({ rooms: [], dorms: [] })),
@@ -417,6 +457,18 @@ export async function fetchMaintenanceZonesApi(myEmployeeUid?: string): Promise<
     assigned_to_me: tickets.filter((t) => !t.is_reported_by_me),
     reported_by_me: tickets.filter((t) => t.is_reported_by_me),
   };
+};
+
+export async function fetchMaintenanceZonesApi(
+  myEmployeeUid?: string,
+  opts?: { onUpdate?: (r: MaintenanceZonesResult) => void },
+): Promise<MaintenanceZonesResult> {
+  const data = await swr(
+    'maintenance:zones',
+    () => fetchMaintenanceZonesNetwork(myEmployeeUid),
+    { ttlMs: 45_000, onUpdate: opts?.onUpdate },
+  );
+  return data ?? { zones: [], assigned_to_me: [], reported_by_me: [] };
 }
 
 /** Zone bucket + active tickets → flat ZoneResource list. Pure — the
@@ -517,7 +569,10 @@ export const buildWorkspaceResources = (
   return resources;
 };
 
-export async function fetchZoneWorkspaceApi(zoneId: string, myEmployeeUid?: string): Promise<ZoneWorkspace> {
+const fetchZoneWorkspaceNetwork = async (
+  zoneId: string,
+  myEmployeeUid?: string,
+): Promise<ZoneWorkspace> => {
   const [zonesItems, eligible, ticketsRes, zoneNames] = await Promise.all([
     getZonesCached(),
     fetchEligibleWire(),
@@ -566,4 +621,24 @@ export async function fetchZoneWorkspaceApi(zoneId: string, myEmployeeUid?: stri
       priority: t.priority,
     })),
   };
+};
+
+export async function fetchZoneWorkspaceApi(
+  zoneId: string,
+  myEmployeeUid?: string,
+  opts?: { onUpdate?: (w: ZoneWorkspace) => void },
+): Promise<ZoneWorkspace> {
+  const data = await swr(
+    `maintenance:workspace:${zoneId}`,
+    () => fetchZoneWorkspaceNetwork(zoneId, myEmployeeUid),
+    { ttlMs: 45_000, onUpdate: opts?.onUpdate },
+  );
+  if (!data) {
+    throw {
+      status: 0,
+      code: 'NETWORK_ERROR',
+      message: 'Unable to load zone.',
+    };
+  }
+  return data;
 }

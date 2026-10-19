@@ -7,7 +7,8 @@ import {
   resolveMaintenanceTicketApi,
 } from '../../api/maintenance';
 import { uploadMediaApi } from '../../api/media';
-import { mediaUrl, errorMessage } from '../../api/client';
+import { mediaUrl, errorMessage, isCancelledError } from '../../api/client';
+import { useUnmountSignal } from '../../utils/useUnmountSignal';
 import { subscribeRealtimeEvents } from '../../services/realtime';
 import { ScreenHeader } from '../../components/common/ScreenHeader';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -46,6 +47,7 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const unmountSignal = useUnmountSignal();
 
   // Resolve sheet modal state
   const [isResolving, setIsResolving] = useState<boolean>(false);
@@ -58,9 +60,13 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
     try {
       setLoading(true);
       setError(null);
-      const data = await getMaintenanceDetailApi(ticketId, user?.employee_uid ?? undefined);
+      const data = await getMaintenanceDetailApi(
+        ticketId, user?.employee_uid ?? undefined,
+        { signal: unmountSignal },
+      );
       setTicket(data);
     } catch (err: unknown) {
+      if (isCancelledError(err)) return; // unmounted — no error UI
       setError(errorMessage(err, 'Unable to retrieve maintenance ticket.'));
     } finally {
       setLoading(false);

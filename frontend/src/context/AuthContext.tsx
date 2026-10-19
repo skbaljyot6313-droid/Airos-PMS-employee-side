@@ -5,6 +5,9 @@ import { loginApi, getMeApi, logoutApi, updateMeApi } from '../api/auth';
 import { getZoneNameMap, invalidateZoneCache } from '../api/directory';
 import { isEmployeeSession, EMPLOYEE_GATE_MESSAGE } from './authGate';
 import { unregisterPushDevice } from '../services/pushRegistration';
+import { setCacheScope, cacheInvalidateAll } from '../services/dataCache';
+import { purgeStaticCaches } from '../services/staticCache';
+import { warmStaticCache, BOOTSTRAP_ENABLED } from '../api/bootstrap';
 import { perfMarkOnce } from '../utils/perf';
 
 interface AuthContextType {
@@ -41,6 +44,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     void unregisterPushDevice(); // deactivates this device's push token first
     secureStorage.clearTokens();
     invalidateZoneCache();
+    setCacheScope(null); // purges every namespaced entry
+    cacheInvalidateAll();
+    void purgeStaticCaches();
     setUser(null);
     setCompany(null);
     setEmployee(null);
@@ -88,10 +94,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setUser(u);
       setCompany(c);
+      // Cache namespace follows the account — a switch purges the
+      // previous user's lists automatically.
+      setCacheScope(u.uid);
       // NOT awaited — the zone name is display-only and patches in when
       // /zones resolves. Awaiting it put a second serial round trip on
       // the startup critical path (up to a full 45s timeout of spinner).
       void enrichEmployee(u);
+      // Phase-3 flag — refreshes the persistent static cache (zones /
+      // company / shift) via /bootstrap with per-section legacy fallback.
+      // Default OFF → identical startup behavior as before.
+      if (BOOTSTRAP_ENABLED) {
+        void warmStaticCache(u.uid, c);
+      }
     },
     [enrichEmployee]
   );
@@ -139,6 +154,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const handleUnauthorized = () => {
       secureStorage.clearTokens();
+      invalidateZoneCache();
+      setCacheScope(null);
+      cacheInvalidateAll();
+      void purgeStaticCaches();
       setUser(null);
       setCompany(null);
       setEmployee(null);

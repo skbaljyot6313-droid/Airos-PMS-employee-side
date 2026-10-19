@@ -136,9 +136,66 @@ interface RequestOptions extends RequestInit {
   timeoutMs?: number;
   /** false for /auth/login and /auth/refresh themselves. */
   auth?: boolean;
+  /** Abort the request externally (screen unmount). Throws
+   *  {status:0, code:'CANCELLED'} — callers filter it from error UI. */
+  signal?: AbortSignal;
   /** internal — set by the retry pass so we only refresh once per call. */
   _retried?: boolean;
+  /** internal — skip the GET single-flight dedupe. */
+  _noSingleFlight?: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// GET policy (Phase 3): 15s timeout, ≤2 retries with exponential backoff +
+// jitter on network/5xx ONLY for idempotent GETs. Mutations keep the old
+// 45s timeout and are NEVER replayed.
+// ---------------------------------------------------------------------------
+
+export const GET_TIMEOUT_MS = 15_000;
+export const MUTATION_TIMEOUT_MS = 45_000;
+const GET_MAX_ATTEMPTS = 3; // 1 initial + 2 retries
+const BACKOFF_BASE_MS = 400;
+const BACKOFF_CAP_MS = 3_000;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Exponential backoff with ±25% jitter — decorrelates retry storms. */
+const backoffDelay = (attempt: number): number =>
+  Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** attempt) *
+  (0.75 + Math.random() * 0.5);
+
+const CANCELLED: ApiError = {
+  status: 0,
+  code: 'CANCELLED',
+  message: 'Request cancelled.',
+};
+
+export const isCancelledError = (e: unknown): boolean =>
+  typeof e === 'object' && e !== null &&
+  (e as ApiError).code === 'CANCELLED';
+
+// ---------------------------------------------------------------------------
+// Single-flight GET dedupe — concurrent identical GETs share one request.
+// Keyed by user id + method + full URL (query included in the endpoint).
+// Callers passing an external signal get their own request — sharing an
+// AbortController would let one unmount cancel everyone's fetch.
+// ---------------------------------------------------------------------------
+
+const getInFlight = new Map<string, Promise<unknown>>();
+
+/** User-id component of the dedupe key — client-side JWT payload parse
+ *  (NOT validation; only namespaces the key). */
+const currentUserKey = (): string => {
+  const token = secureStorage.getToken();
+  if (!token) return 'anon';
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return typeof payload?.sub === 'string' ? payload.sub : 'sess';
+  } catch {
+    return 'sess';
+  }
+};
 
 let refreshInFlight: Promise<boolean> | null = null;
 
@@ -177,8 +234,16 @@ const singleFlightRefresh = (): Promise<boolean> => {
   return refreshInFlight;
 };
 
-export async function apiClient<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { timeoutMs = 45000, auth = true, _retried, ...init } = options;
+/** One attempt — timeout via AbortController, external signal linked in,
+ *  401 → single-flight refresh → one recursion (flags _retried). */
+async function performRequest<T>(
+  endpoint: string,
+  options: RequestOptions,
+): Promise<T> {
+  const { timeoutMs, auth = true, _retried, signal: external, ...init } = options;
+  const method = (init.method ?? 'GET').toUpperCase();
+  const effectiveTimeout =
+    timeoutMs ?? (method === 'GET' ? GET_TIMEOUT_MS : MUTATION_TIMEOUT_MS);
 
   const headers = new Headers(init.headers || {});
   if (!headers.has('Content-Type') && !(init.body instanceof FormData)) {
@@ -193,7 +258,12 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
   const url = `${API_BASE}${cleanEndpoint}`;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = (): void => controller.abort();
+  if (external) {
+    if (external.aborted) throw CANCELLED;
+    external.addEventListener('abort', onExternalAbort, { once: true });
+  }
+  const timer = setTimeout(() => controller.abort(), effectiveTimeout);
 
   perfMarkOnce('t4_first_req');
   try {
@@ -225,6 +295,7 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     if (!res.ok) throw normalizeError(res.status, data);
     return data as T;
   } catch (err: unknown) {
+    if (external?.aborted) throw CANCELLED;
     if (typeof err === 'object' && err !== null && 'status' in err) throw err as ApiError;
     if (
       typeof err === 'object' && err !== null &&
@@ -243,5 +314,52 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     } as ApiError;
   } finally {
     clearTimeout(timer);
+    external?.removeEventListener('abort', onExternalAbort);
   }
+}
+
+const retryable = (err: unknown): boolean => {
+  const e = err as ApiError;
+  return (
+    (e.status === 0 && (e.code === 'TIMEOUT' || e.code === 'NETWORK_ERROR')) ||
+    e.status >= 500
+  );
+};
+
+async function executeWithRetry<T>(
+  endpoint: string,
+  options: RequestOptions,
+): Promise<T> {
+  const method = (options.method ?? 'GET').toUpperCase();
+  const attempts = method === 'GET' ? GET_MAX_ATTEMPTS : 1;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await performRequest<T>(endpoint, options);
+    } catch (err) {
+      lastErr = err;
+      if (isCancelledError(err)) throw err;
+      if (attempt >= attempts - 1 || !retryable(err)) throw err;
+      await sleep(backoffDelay(attempt));
+      if (options.signal?.aborted) throw CANCELLED;
+    }
+  }
+  throw lastErr;
+}
+
+export async function apiClient<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  const method = (options.method ?? 'GET').toUpperCase();
+  // Single-flight dedupe — only for GETs without an external signal.
+  if (method === 'GET' && !options._retried && !options._noSingleFlight && !options.signal) {
+    const clean = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const key = `${currentUserKey()}|GET|${API_BASE}${clean}`;
+    const existing = getInFlight.get(key);
+    if (existing) return existing as Promise<T>;
+    const promise = executeWithRetry<T>(endpoint, options).finally(() =>
+      getInFlight.delete(key)
+    );
+    getInFlight.set(key, promise);
+    return promise;
+  }
+  return executeWithRetry<T>(endpoint, options);
 }

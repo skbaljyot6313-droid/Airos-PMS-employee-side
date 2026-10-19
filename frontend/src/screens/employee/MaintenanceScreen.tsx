@@ -30,7 +30,10 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
         else setLoading(true);
         setError(null);
 
-        const data = await fetchMaintenanceZonesApi(user?.employee_uid ?? undefined);
+        const data = await fetchMaintenanceZonesApi(
+          user?.employee_uid ?? undefined,
+          { onUpdate: (r) => setZones(r.zones || []) },
+        );
         setZones(data.zones || []);
 
         const activeAssigned = (data.assigned_to_me || []).filter(

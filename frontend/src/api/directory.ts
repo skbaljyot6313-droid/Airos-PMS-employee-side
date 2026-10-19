@@ -29,6 +29,22 @@ export async function getZonesCached(): Promise<ZoneWire[]> {
   if (zoneCache && Date.now() - zoneCache.at < ZONE_CACHE_TTL_MS) {
     return zoneCache.items;
   }
+  // Bootstrap flag on → the persistent static cache (filled by
+  // warmStaticCache) satisfies the read without a network call.
+  if (import.meta.env.VITE_BOOTSTRAP === '1') {
+    try {
+      const { readStaticZones } = await import('./bootstrap');
+      const { cacheScopeUid } = await import('../services/dataCache');
+      const uid = cacheScopeUid();
+      const items = uid ? await readStaticZones(uid) : undefined;
+      if (items && items.length > 0) {
+        zoneCache = { at: Date.now(), items };
+        return items;
+      }
+    } catch {
+      /* fall through to the network path */
+    }
+  }
   zoneInFlight ??= listZonesApi()
     .then((res) => {
       zoneCache = { at: Date.now(), items: res.items };
