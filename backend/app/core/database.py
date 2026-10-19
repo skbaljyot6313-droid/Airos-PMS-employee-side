@@ -41,13 +41,20 @@ class DatabaseUnavailable(AppError):
     message = "The database is temporarily unavailable. Please try again."
 
 
+def _is_pooler_host() -> bool:
+    try:
+        parsed = make_url(settings.database_url)
+        return bool(parsed.host and "pooler" in parsed.host)
+    except Exception:
+        return False
+
+
 def _pgbouncer_connect_args() -> dict:
     """pgbouncer transaction/statement poolers do not support asyncpg's
     prepared-statement cache. Disable the cache when the URL points at a
     Supabase pooler host so migrations and queries work reliably."""
     try:
-        parsed = make_url(settings.database_url)
-        if parsed.host and "pooler" in parsed.host:
+        if _is_pooler_host():
             # Dialect-level args (not raw asyncpg kwargs): disable the
             # prepared-statement cache AND give every statement a unique
             # name — pooler transaction mode shares server connections, so
@@ -63,9 +70,21 @@ def _pgbouncer_connect_args() -> dict:
     return {}
 
 
+def _connect_args() -> dict:
+    """asyncpg-only connect args — skipped for sqlite (tests, tooling)
+    and merged with the pgBouncer opts for Supabase pooler hosts."""
+    args = _pgbouncer_connect_args()
+    if settings.database_url.startswith("postgresql+asyncpg"):
+        # command_timeout → PostgreSQL statement_timeout: a runaway
+        # statement can no longer hold a pool connection indefinitely.
+        # timeout → asyncpg connect() timeout (TLS + pooler handshake).
+        args = {"command_timeout": 30, "timeout": 15, **args}
+    return args
+
+
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
-    connect_args=_pgbouncer_connect_args(),
+    connect_args=_connect_args(),
     # pool_recycle handles stale connections at checkout — avoids paying an
     # extra DB round trip (~300ms to remote Supabase) on EVERY request.
     pool_pre_ping=False,
@@ -114,6 +133,32 @@ def _metrics_after_cursor(conn, cursor, statement, parameters, context, executem
     t0 = conn.info.pop("_airos_stmt_t0", None)
     if t0 is not None:
         metrics.record_db_query((time.perf_counter() - t0) * 1000)
+
+
+# OPT-IN PostgreSQL idle_in_transaction_session_timeout — applied as a
+# per-connection SET at engine connect (safe under transaction poolers
+# in that it is not a startup server_settings parameter baked into the
+# connection spec, but session state can still carry between checkouts
+# on a shared server connection — therefore OFF by default AND skipped
+# entirely on pooler hosts until verified on staging).
+if settings.DB_IDLE_TX_TIMEOUT_MS > 0:
+    if _is_pooler_host():
+        logger.warning(
+            "DB_IDLE_TX_TIMEOUT_MS is set but DATABASE_URL points at a "
+            "pooler host — skipping; session-level SET can leak across "
+            "shared server connections. Verify on staging first."
+        )
+    elif settings.database_url.startswith("postgresql+asyncpg"):
+        @_sa_engine_event.listens_for(engine.sync_engine, "connect")
+        def _set_idle_tx_timeout(dbapi_conn, conn_record):
+            cursor = dbapi_conn.cursor()
+            try:
+                cursor.execute(
+                    "SET idle_in_transaction_session_timeout = "
+                    f"{int(settings.DB_IDLE_TX_TIMEOUT_MS)}"
+                )
+            finally:
+                cursor.close()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

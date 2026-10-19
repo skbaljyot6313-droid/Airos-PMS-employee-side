@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 5
     DB_POOL_RECYCLE: int = 1800  # Supabase idles connections; recycle below their timeout
     DB_POOL_TIMEOUT: int = 30
+    # OPT-IN: PostgreSQL idle_in_transaction_session_timeout (ms). Session
+    # state applied per connection — under a transaction pooler (Supavisor/
+    # PgBouncer) it is applied at engine connect time but has NOT been
+    # verified there, so it stays 0 (off) by default and is skipped
+    # entirely on pooler hosts until proven safe on staging.
+    DB_IDLE_TX_TIMEOUT_MS: int = 0
     # Phase-0 observability headers (X-DB-*/X-Redis-*/X-Ext/X-PoolWait).
     # None → on unless APP_ENV=production; explicit true/false overrides.
     PERF_HEADERS_ENABLED: bool | None = None
