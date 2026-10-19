@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     # endpoints on this service — sid/session revocation is never cached.
     # 0 disables the cache (every request reads Postgres).
     USER_CACHE_TTL_S: int = 30
+    # Optional shared company:{company_uid} Centrifugo channel carrying
+    # ONLY ref_version markers (Phase 4 — see docs/perf/centrifugo-
+    # proposal.md). Subscription tokens mint only for the caller's own
+    # company_id. Default OFF until the namespace config is applied.
+    REALTIME_COMPANY_CHANNEL_ENABLED: bool = False
 
     # Supabase services (storage configured, not yet implemented)
     SUPABASE_URL: str = ""

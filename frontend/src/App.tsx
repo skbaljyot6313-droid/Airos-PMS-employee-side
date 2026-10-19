@@ -94,15 +94,16 @@ const AppNavigator: React.FC = () => {
   // notification-feed poll; the 45 s poll stays as reconciliation).
   // No-ops when the backend reports realtime unconfigured.
   const employeeUid = user?.employee_uid ?? null;
+  const companyUid = user?.company_uid ?? undefined;
   useEffect(() => {
     if (!isAuthenticated || !employeeUid) return;
-    const stop = startRealtime(employeeUid);
+    const stop = startRealtime(employeeUid, companyUid);
     return () => {
       stop();
       stopRealtime(); // session-scoped socket dies with the subscription
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, employeeUid]);
+  }, [isAuthenticated, employeeUid, companyUid]);
 
   const dismissPopup = (n: StaffNotification) =>
     setPopupQueue((q) => q.filter((x) => x.id !== n.id));

@@ -13,6 +13,7 @@
 import { Centrifuge } from 'centrifuge';
 import { apiClient } from '../api/client';
 import { pollNotificationsNow } from './notificationService';
+import { cacheInvalidate, cacheInvalidateAll } from './dataCache';
 
 interface TokenResponse {
   token: string;
@@ -30,6 +31,35 @@ export interface RealtimeEvent {
 }
 
 const listeners = new Set<(e: RealtimeEvent) => void>();
+
+// ---------------------------------------------------------------------------
+// Event → cache-invalidation map (Phase 4). Each publication is a hint
+// ONLY — the API stays authoritative; the affected list prefix is dropped
+// so the next read (or the screen's own re-pull) hits the network. Event
+// payloads are {type, uid, v, ts} + minimal metadata — never full records.
+// ---------------------------------------------------------------------------
+
+const INVALIDATION_MAP: [prefix: string, keys: string[]][] = [
+  ['task.', ['tasks:']],
+  ['maintenance.', ['maintenance:', 'tasks:']],
+  ['ticket.', ['maintenance:', 'tasks:']],
+  ['attendance.', ['attendance:']],
+  ['notification.', ['notifications:']],
+  ['resource.', ['maintenance:']],
+  ['company.ref_', ['bootstrap']],
+];
+
+/** Synthetic type emitted when a subscription could not recover missed
+ *  publications — screens treat it like their own prefixes. */
+export const UNRECOVERED_EVENT = 'realtime.unrecovered';
+
+const invalidateForEvent = (type: string): void => {
+  for (const [prefix, keys] of INVALIDATION_MAP) {
+    if (type.startsWith(prefix)) {
+      for (const k of keys) cacheInvalidate(k);
+    }
+  }
+};
 
 /** Subscribe to realtime events for the session — returns unsubscribe. */
 export function subscribeRealtime(
@@ -57,7 +87,10 @@ async function fetchToken(): Promise<TokenResponse> {
  * Start the realtime session for an employee; returns a stop function.
  * No-ops (returns a dummy stop) when realtime is unconfigured server-side.
  */
-export function startRealtime(employeeUid: string): () => void {
+export function startRealtime(
+  employeeUid: string,
+  companyUid?: string,
+): () => void {
   if (Date.now() < unavailableUntil) return () => {};
   let stopped = false;
   let sub: { unsubscribe: () => void } | null = null;
@@ -86,12 +119,50 @@ export function startRealtime(employeeUid: string): () => void {
       });
       s.on('publication', (ctx) => {
         const ev = (ctx.data ?? {}) as RealtimeEvent;
+        if (ev.type) invalidateForEvent(ev.type);
         // Any business event can carry a new assignment — re-poll the
         // feed so popups/notifications arrive instantly.
         pollNotificationsNow();
         emit(ev);
       });
+      // Centrifugo recovery: a RESUBSCRIBE that couldn't recover missed
+      // publications is a silent gap — wipe the data caches and let
+      // screens reconcile via UNRECOVERED_EVENT + the poll floor. The
+      // initial subscribe reports recovered=false legitimately; the
+      // gap case is wasRecovering && !recovered.
+      s.on('subscribed', (ctx) => {
+        if (ctx.wasRecovering === true && ctx.recovered === false) {
+          cacheInvalidateAll();
+          pollNotificationsNow();
+          emit({ type: UNRECOVERED_EVENT });
+        }
+      });
       s.subscribe();
+      // Optional shared company channel — ref_version markers only,
+      // behind VITE_COMPANY_CHANNEL (default OFF); tokens are minted
+      // server-side for the caller's own company only.
+      if (import.meta.env.VITE_COMPANY_CHANNEL === '1' && companyUid) {
+        const cs = centrifuge.newSubscription(`company:${companyUid}`, {
+          getToken: async () => {
+            const res = await apiClient<SubscribeResponse>(
+              '/realtime/subscribe',
+              {
+                method: 'POST',
+                body: JSON.stringify({
+                  channels: [`company:${companyUid}`],
+                }),
+              },
+            );
+            return res.tokens[`company:${companyUid}`];
+          },
+        });
+        cs.on('publication', (ctx) => {
+          const ev = (ctx.data ?? {}) as RealtimeEvent;
+          if (ev.type) invalidateForEvent(ev.type);
+          emit(ev);
+        });
+        cs.subscribe();
+      }
       if (stopped) {
         s.unsubscribe();
       } else {
@@ -126,7 +197,12 @@ export function subscribeRealtimeEvents(
 ): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const unsub = subscribeRealtime((e) => {
-    if (!e.type || !prefixes.some((p) => e.type!.startsWith(p))) return;
+    // An unrecovered subscription silently dropped events — every
+    // subscribed screen reconciles.
+    const match =
+      e.type === UNRECOVERED_EVENT ||
+      (e.type && prefixes.some((p) => e.type!.startsWith(p)));
+    if (!match) return;
     clearTimeout(timer);
     timer = setTimeout(callback, debounceMs);
   });

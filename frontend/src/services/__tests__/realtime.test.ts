@@ -27,6 +27,9 @@ class FakeSubscription {
   emitPub(data: unknown) {
     this.handlers.get('publication')?.({ data });
   }
+  emitEvent(ev: string, ctx: unknown) {
+    this.handlers.get(ev)?.(ctx as { data?: unknown });
+  }
 }
 
 const lastSub = { current: null as FakeSubscription | null };
@@ -54,6 +57,8 @@ vi.mock('../notificationService', () => ({
   pollNotificationsNow: () => pollMock(),
 }));
 
+import { swr, cachePeek, cacheInvalidateAll, setCacheScope } from '../dataCache';
+
 import {
   startRealtime,
   stopRealtime,
@@ -67,6 +72,8 @@ const CHANNEL = `priv:emp:${EMP}`;
 
 beforeEach(() => {
   vi.useRealTimers();
+  cacheInvalidateAll();
+  setCacheScope(null);
   apiMock.mockReset();
   pollMock.mockReset();
   connectMock.mockReset();
@@ -217,6 +224,95 @@ describe('subscribeRealtimeEvents', () => {
     lastSub.current!.emitPub({ type: 'task.updated' });
     lastSub.current!.emitPub({ type: 'task.updated' });
     vi.advanceTimersByTime(300);
+    expect(cb).toHaveBeenCalledTimes(1);
+    un();
+  });
+});
+
+describe('event → cache invalidation map (Phase 4)', () => {
+  const start = async () => {
+    apiMock.mockImplementation((path: string) =>
+      path === '/realtime/token'
+        ? Promise.resolve(okToken())
+        : Promise.resolve({ tokens: { [CHANNEL]: 's' } }),
+    );
+    startRealtime(EMP);
+    await flush();
+    await flush();
+  };
+
+  it('task.updated invalidates tasks:* only', async () => {
+    await start();
+    await swr('tasks:list', async () => ['t'], { ttlMs: 60_000 });
+    await swr('attendance:today', async () => 'w', { ttlMs: 60_000 });
+    lastSub.current!.emitPub({ type: 'task.updated', uid: 'x' });
+    expect(cachePeek('tasks:list')).toBeUndefined();
+    expect(cachePeek('attendance:today')).not.toBeUndefined();
+  });
+
+  it('maintenance.updated invalidates both maintenance: and tasks:', async () => {
+    await start();
+    await swr('maintenance:list', async () => ['m'], { ttlMs: 60_000 });
+    await swr('tasks:list', async () => ['t'], { ttlMs: 60_000 });
+    lastSub.current!.emitPub({ type: 'maintenance.updated', uid: 'x' });
+    expect(cachePeek('maintenance:list')).toBeUndefined();
+    expect(cachePeek('tasks:list')).toBeUndefined();
+  });
+
+  it('unrecovered resubscribe wipes caches and fires UNRECOVERED_EVENT', async () => {
+    await start();
+    await swr('tasks:list', async () => ['t'], { ttlMs: 60_000 });
+    const seen: unknown[] = [];
+    const un = subscribeRealtime((e) => seen.push(e));
+    const sub = lastSub.current!;
+    // wasRecovering && !recovered → silent gap → full invalidate
+    sub.emitEvent('subscribed', {
+      wasRecovering: true, recovered: false,
+    });
+    expect(cachePeek('tasks:list')).toBeUndefined();
+    expect(seen).toEqual([{ type: 'realtime.unrecovered' }]);
+    expect(pollMock).toHaveBeenCalled();
+    un();
+  });
+
+  it('initial subscribe (wasRecovering=false) does NOT purge caches', async () => {
+    await start();
+    await swr('tasks:list', async () => ['t'], { ttlMs: 60_000 });
+    lastSub.current!.emitEvent('subscribed', {
+      wasRecovering: false, recovered: false,
+    });
+    expect(cachePeek('tasks:list')).not.toBeUndefined();
+  });
+
+  it('screens reconcile on unrecovered events via subscribeRealtimeEvents', async () => {
+    await start();
+    const cb = vi.fn();
+    const un = subscribeRealtimeEvents(['task.'], cb, 10);
+    lastSub.current!.emitEvent('subscribed', {
+      wasRecovering: true, recovered: false,
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(cb).toHaveBeenCalledTimes(1);
+    un();
+  });
+
+  it('burst of events coalesces to one callback (400ms debounce)', async () => {
+    vi.useFakeTimers();
+    apiMock.mockImplementation((path: string) =>
+      path === '/realtime/token'
+        ? Promise.resolve(okToken())
+        : Promise.resolve({ tokens: { [CHANNEL]: 's' } }),
+    );
+    startRealtime(EMP);
+    // flush() uses setTimeout — drive it via fake timers here.
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+    const cb = vi.fn();
+    const un = subscribeRealtimeEvents(['task.'], cb, 400);
+    for (let i = 0; i < 8; i += 1) {
+      lastSub.current!.emitPub({ type: 'task.updated', uid: String(i) });
+    }
+    vi.advanceTimersByTime(400);
     expect(cb).toHaveBeenCalledTimes(1);
     un();
   });

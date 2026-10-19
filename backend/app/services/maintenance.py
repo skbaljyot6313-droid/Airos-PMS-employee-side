@@ -105,21 +105,27 @@ class MaintenanceService:
             ticket.events.append(ev)
 
     def _emit_ticket(self, ticket, event_type: str) -> None:
-        """Post-commit-only hint — call after session.commit() returns."""
+        """Buffer a realtime hint — the after_commit hook publishes it
+        ONLY if the surrounding transaction commits (Phase 4: queue_event
+        replaces the publish-after-commit convention). Call BEFORE
+        session.commit()."""
         from app.core import centrifugo
         payload = {
+            "uid": str(ticket.id),
             "ticket_uid": str(ticket.id),
             "status": ticket.status,
             "assigned_to_uid": (
                 str(ticket.assigned_to) if ticket.assigned_to else None
             ),
         }
-        centrifugo.publish_bg(
+        centrifugo.queue_event(
+            self.session,
             centrifugo.prop_channel(ticket.property_id, "maintenance"),
             event_type, payload,
         )
         if ticket.assigned_to is not None:
-            centrifugo.publish_bg(
+            centrifugo.queue_event(
+                self.session,
                 centrifugo.emp_channel(ticket.assigned_to),
                 event_type, payload,
             )
@@ -553,8 +559,8 @@ class MaintenanceService:
 
         await self.flag_ticket_resource(ticket, user=user, dorm=dorm)
         if commit:
-            await self.session.commit()
             self._emit_ticket(ticket, "maintenance.created")
+            await self.session.commit()
             return await self._get_ticket(user, ticket.id)
         return ticket
 
@@ -854,8 +860,8 @@ class MaintenanceService:
             raise ConflictErr(f"Cannot start work on a {ticket.status} ticket.")
         ticket.status = "in_progress"
         self._event(ticket, "started", user)
-        await self.session.commit()
         self._emit_ticket(ticket, "maintenance.updated")
+        await self.session.commit()
         return await self._get_ticket(user, ticket.id)
 
     async def hold(self, user: User, ticket_id: uuid.UUID, note=None):
@@ -948,8 +954,8 @@ class MaintenanceService:
         self._event(ticket, "resolved", user, comment=payload.resolution_notes.strip())
         # Employee completion does NOT release the resource — a "resolved"
         # ticket still blocks until the supervisor closes (acknowledges) it.
-        await self.session.commit()
         self._emit_ticket(ticket, "maintenance.updated")
+        await self.session.commit()
         return await self._get_ticket(user, ticket.id)
 
     async def disapprove(self, user: User, ticket_id: uuid.UUID, reason: str):

@@ -218,6 +218,19 @@ class NotificationService:
         )
         self.session.add(notification)
         await self.session.flush()
+        # Realtime hint — buffered; the after_commit hook publishes it
+        # only if the caller's transaction commits (notification.created
+        # on the employee's own channel; uid carries the entity id).
+        try:
+            from app.core import centrifugo
+            centrifugo.queue_event(
+                self.session,
+                centrifugo.emp_channel(employee_id),
+                "notification.created",
+                {"uid": str(notification.id), "notification_type": type},
+            )
+        except Exception:
+            pass  # realtime is a hint — never fail persistence on it
         if self._push is not None:
             # Injected-provider seam (tests) — dispatch inline so callers
             # can assert sends synchronously.
@@ -486,6 +499,19 @@ class NotificationService:
         )
         if n is not None:
             n.created_at = event_created_at or n.created_at
+        # Assignment event on the employee's channel — the client's
+        # invalidation map refetches the affected list on receipt.
+        try:
+            from app.core import centrifugo
+            centrifugo.queue_event(
+                self.session,
+                centrifugo.emp_channel(employee_id),
+                "task.assigned" if ticket_kind == "task"
+                else "maintenance.updated",
+                {"uid": str(ticket_id)},
+            )
+        except Exception:
+            pass
         await self.session.commit()
         return n
 
