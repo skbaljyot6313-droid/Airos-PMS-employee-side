@@ -389,6 +389,29 @@ class StructureService:
     # Zones
     # ------------------------------------------------------------------
 
+    def _emit_ref_changed(self, company_id: uuid.UUID) -> None:
+        """Phase-4 company channel — emit a FRESH ref_version marker on
+        bootstrap-scope mutations (zones here). The marker carries no
+        payload data; the client refetches /bootstrap on mismatch.
+        Gated by REALTIME_COMPANY_CHANNEL_ENABLED (default OFF) and
+        buffered via queue_event so it only fires post-commit."""
+        from app.core import centrifugo
+        from app.core.config import settings
+        if not settings.REALTIME_COMPANY_CHANNEL_ENABLED:
+            return
+        try:
+            centrifugo.queue_event(
+                self.session,
+                f"company:{company_id}",
+                "company.ref_changed",
+                {
+                    "uid": str(company_id),
+                    "ref_version": uuid.uuid4().hex[:16],
+                },
+            )
+        except Exception:
+            pass  # realtime is a hint — never fail the mutation
+
     async def create_zone(self, user: User, payload: ZoneCreateRequest) -> Zone:
         prop = await self._property_for_write(user, payload.property_uid)
         await self._area_in_property(payload.area_uid, prop.id)
@@ -402,6 +425,7 @@ class StructureService:
             description=payload.description,
         )
         self.session.add(zone)
+        self._emit_ref_changed(prop.company_id)
         await self._commit()
         from app.services.bootstrap import evict_scope_cache
         await evict_scope_cache(prop.company_id, prop.id)
@@ -435,6 +459,7 @@ class StructureService:
                 dorm.zone_id = None
         for k, v in data.items():
             setattr(zone, k, v)
+        self._emit_ref_changed(prop.company_id)
         await self._commit()
         from app.services.bootstrap import evict_scope_cache
         await evict_scope_cache(prop.company_id, prop.id)
@@ -469,6 +494,7 @@ class StructureService:
         await self.session.execute(
             sa_delete(Zone).where(Zone.id == zone.id)
         )
+        self._emit_ref_changed(prop.company_id)
         await self._commit()
         from app.services.bootstrap import evict_scope_cache
         await evict_scope_cache(prop.company_id, prop.id)

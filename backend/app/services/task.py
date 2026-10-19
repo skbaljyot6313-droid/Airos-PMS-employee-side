@@ -184,23 +184,28 @@ class TaskService:
         self.alloc = WorkAllocationService(session)
 
     def _emit_task(self, task: Task, event_type: str) -> None:
-        """Post-commit-only hint — call after session.commit() returns.
-        SA task screens subscribe to the property channel; the assignee's
-        own app hears it on its private channel."""
+        """Buffer a realtime hint — the after_commit hook publishes it
+        ONLY if the surrounding transaction commits (Phase 4: queue_event
+        replaces the publish-after-commit convention). Call BEFORE
+        session.commit(). SA task screens subscribe to the property
+        channel; the assignee's own app hears it on its private channel."""
         from app.core import centrifugo
         payload = {
+            "uid": str(task.id),
             "task_uid": str(task.id),
             "status": task.status,
             "employee_uid": (
                 str(task.employee_id) if task.employee_id else None
             ),
         }
-        centrifugo.publish_bg(
+        centrifugo.queue_event(
+            self.session,
             centrifugo.prop_channel(task.property_id, "tasks"),
             event_type, payload,
         )
         if task.employee_id is not None:
-            centrifugo.publish_bg(
+            centrifugo.queue_event(
+                self.session,
                 centrifugo.emp_channel(task.employee_id),
                 event_type, payload,
             )
@@ -850,8 +855,8 @@ class TaskService:
                 employee_id=user.employee_id, fix=fix,
                 source="task_start", task_id=task.id,
             )
-        await self.session.commit()
         self._emit_task(task, "task.updated")
+        await self.session.commit()
         return task
 
     async def _flag_resource_cleaning(self, task: Task, user: User) -> None:
@@ -1221,8 +1226,8 @@ class TaskService:
                 employee_id=user.employee_id, fix=fix,
                 source="task_submit", task_id=task.id,
             )
-        await self.session.commit()
         self._emit_task(task, "task.updated")
+        await self.session.commit()
         return task
 
     async def approve_task(self, user: User, task_id: uuid.UUID, note=None) -> dict:
@@ -1296,6 +1301,7 @@ class TaskService:
         if not already_completed and task.recurrence \
                 and task.task_type == "repetitive":
             generated = await self._next_instance(user, task)
+        self._emit_task(task, "task.completed")
         await self.session.commit()
         result = {"task": task}
         if generated:

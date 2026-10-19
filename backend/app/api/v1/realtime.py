@@ -3,11 +3,15 @@
     GET  /realtime/token      → short-lived Centrifugo connection JWT
     POST /realtime/subscribe  → per-channel subscription JWTs
 
-This API mints subscription tokens for ONE channel shape only:
+This API mints subscription tokens for TWO channel shapes only:
     priv:emp:{employee_uid} — and only when the caller's own
     `user.employee_id` matches. Property/admin channels are minted by
     the Super Admin backend; employees must never subscribe to another
     employee's channel or to property-wide data.
+    company:{company_uid}  — OPTIONAL, only when
+    REALTIME_COMPANY_CHANNEL_ENABLED=true, and only for the caller's own
+    `user.company_id`. The channel carries ref_version markers only —
+    never payload data.
 """
 
 import re
@@ -17,6 +21,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.core import centrifugo
+from app.core.config import settings
 from app.core.exceptions import AppError
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -26,6 +31,7 @@ router = APIRouter(prefix="/realtime", tags=["realtime"])
 _EMP_RE = re.compile(
     rf"^{centrifugo.PRIVATE_NS}:emp:([0-9a-f-]{{36}})$"
 )
+_COMPANY_RE = re.compile(r"^company:([0-9a-f-]{36})$")
 
 
 class RealtimeUnavailable(AppError):
@@ -65,12 +71,20 @@ async def subscribe(
         raise RealtimeUnavailable()
     for ch in payload.channels:
         m = _EMP_RE.match(ch)
-        if m is None:
-            raise ChannelDenied()
-        if user.employee_id is None or user.employee_id != uuid.UUID(
-            m.group(1)
+        if m is not None:
+            if user.employee_id is None or user.employee_id != uuid.UUID(
+                m.group(1)
+            ):
+                raise ChannelDenied()
+            continue
+        cm = _COMPANY_RE.match(ch)
+        if (
+            cm is not None
+            and settings.REALTIME_COMPANY_CHANNEL_ENABLED
+            and uuid.UUID(cm.group(1)) == user.company_id
         ):
-            raise ChannelDenied()
+            continue
+        raise ChannelDenied()
     tokens = {}
     for ch in payload.channels:
         tokens[ch], exp = centrifugo.subscription_token(user, ch)

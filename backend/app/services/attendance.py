@@ -100,21 +100,26 @@ class AttendanceService:
 
     def _emit_day(
         self, prop_id: uuid.UUID, emp_id: uuid.UUID,
-        op_date: str, event_type: str,
+        op_date: str, event_type: str, day_uid: uuid.UUID | None = None,
     ) -> None:
-        """Post-commit-only hint — call after session.commit() returns.
-        SA attendance board + live map refresh on these; the employee's
-        own app hears it on its private channel too."""
+        """Buffer a realtime hint — the after_commit hook publishes it
+        ONLY if the surrounding transaction commits (Phase 4: queue_event
+        replaces the publish-after-commit convention). SA attendance
+        board + live map refresh on these; the employee's own app hears
+        it on its private channel too. Call BEFORE session.commit()."""
         from app.core import centrifugo
         payload = {
+            "uid": str(day_uid) if day_uid else str(emp_id),
             "employee_uid": str(emp_id),
             "attendance_date": op_date,
         }
-        centrifugo.publish_bg(
+        centrifugo.queue_event(
+            self.session,
             centrifugo.prop_channel(prop_id, "attendance"),
             event_type, payload,
         )
-        centrifugo.publish_bg(
+        centrifugo.queue_event(
+            self.session,
             centrifugo.emp_channel(emp_id), event_type, payload,
         )
 
@@ -230,8 +235,10 @@ class AttendanceService:
             entity_name=emp.name, property_id=prop_id,
             detail={"date": op_date, "state": "working"},
         )
+        self._emit_day(
+            prop_id, emp.id, op_date, "attendance.checked_in", day.id
+        )
         await self.session.commit()
-        self._emit_day(prop_id, emp.id, op_date, "attendance.checked_in")
         return day, op_date
 
     async def _close_stale_open_days(
@@ -333,10 +340,11 @@ class AttendanceService:
             entity_name=day.employee_name, property_id=prop_id,
             detail={"date": op_date, "state": "on_break"},
         )
-        await self.session.commit()
         self._emit_day(
-            prop_id, day.employee_id, op_date, "attendance.break_started"
+            prop_id, day.employee_id, op_date, "attendance.break_started",
+            day.id,
         )
+        await self.session.commit()
         return day, op_date
 
     async def resume(self, user: User) -> tuple[AttendanceDay, str]:
@@ -359,10 +367,11 @@ class AttendanceService:
                 "break_seconds": day.break_seconds,
             },
         )
-        await self.session.commit()
         self._emit_day(
-            prop_id, day.employee_id, op_date, "attendance.break_ended"
+            prop_id, day.employee_id, op_date, "attendance.break_ended",
+            day.id,
         )
+        await self.session.commit()
         return day, op_date
 
     async def end(self, user: User, geo=None) -> tuple[AttendanceDay, str]:
@@ -398,10 +407,11 @@ class AttendanceService:
                 "work_seconds": day.work_seconds,
             },
         )
-        await self.session.commit()
         self._emit_day(
-            prop_id, day.employee_id, op_date, "attendance.checked_out"
+            prop_id, day.employee_id, op_date, "attendance.checked_out",
+            day.id,
         )
+        await self.session.commit()
         return day, op_date
 
     async def calendar(
