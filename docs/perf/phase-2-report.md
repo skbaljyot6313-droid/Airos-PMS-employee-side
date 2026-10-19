@@ -37,7 +37,17 @@ identical payloads and drift across content changes.
 
 ## 2.2 — User-row cache for `get_current_user`
 
-**Commit**: this commit · **Key**: `mt:authctx:user:{uid}` · **TTL**: 60 s.
+**Commit**: this commit · **Key**: `mt:authctx:user:{uid}` · **TTL**: `USER_CACHE_TTL_S`, default **30 s**, `0` disables the cache (every request reads Postgres).
+
+**STALENESS BOUND (human decision required)**: a deactivated account,
+role change, or employee/zone link change made by the SA backend takes up
+to this TTL to take effect on **every authenticated endpoint** of this
+service — those fields are written by the SA backend against the shared
+DB and there is no eviction hook. `sid`/session revocation is checked
+before the cache on every request and is **never cached** — logout still
+kills access instantly. `PATCH /auth/me` evicts explicitly. If the 30 s
+window is unacceptable for deactivation, options are: shorter TTL,
+`USER_CACHE_TTL_S=0`, or an SA-backend eviction call (new dependency).
 
 Every authenticated request used to pay one Postgres round trip
 (`SELECT users … joinedload(company)`) just to resolve the caller. Now the

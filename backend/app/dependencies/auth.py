@@ -77,9 +77,9 @@ async def get_current_user(
 
 
 # ---------------------------------------------------------------------------
-# User-row cache — a 60s Redis sidecar copy of the users+company row so
-# every authenticated request does not pay a Postgres round trip for a row
-# that changes minutes-to-days apart (mt:authctx:user:{uid}).
+# User-row cache — a Redis sidecar copy of the users+company row so every
+# authenticated request does not pay a Postgres round trip for a row that
+# changes minutes-to-days apart (mt:authctx:user:{uid}).
 #
 # Reconstruction: ORM instances are rebuilt from cached columns, marked
 # detached (identity key) and added to the request session — detached-add
@@ -89,13 +89,16 @@ async def get_current_user(
 # user.company is attached straight into __dict__ (manual eager-load) so
 # the joined load survives the round trip.
 #
-# Staleness: is_active / role / zone/employee links are SA-backend writes —
-# the 60s TTL is the bound. This service's own user writes (PATCH /auth/me)
-# evict via evict_user_cache. Logout needs no eviction — the sid check is
-# never cached.
+# STALENESS CONTRACT: is_active / role / zone/employee links are written by
+# the SA backend against the shared DB — there is no eviction hook here, so
+# a deactivation or role change can take up to USER_CACHE_TTL_S (default
+# 30s) to take effect on EVERY authenticated endpoint. Sid/session
+# revocation is checked before the cache on every request and is NEVER
+# cached — logout still kills access instantly. This service's own user
+# writes (PATCH /auth/me) evict via evict_user_cache.
+# USER_CACHE_TTL_S=0 disables the cache entirely (every request → Postgres).
 # ---------------------------------------------------------------------------
 
-_USER_CACHE_TTL = 60
 _USER_COLS = [c.key for c in sa_inspect(User).mapper.columns]
 _COMPANY_COLS = [c.key for c in sa_inspect(Company).mapper.columns]
 
@@ -144,7 +147,8 @@ def _restore_columns(model, data: dict):
 
 
 async def _cached_user(session: AsyncSession, user_id: uuid.UUID) -> User | None:
-    client = await get_redis()
+    ttl = settings.USER_CACHE_TTL_S
+    client = await get_redis() if ttl > 0 else None
     if client is not None:
         try:
             raw = await client.get(_user_ctx_key(user_id))
@@ -179,7 +183,7 @@ async def _cached_user(session: AsyncSession, user_id: uuid.UUID) -> User | None
             await client.set(
                 _user_ctx_key(user_id),
                 json.dumps(data),
-                ex=_USER_CACHE_TTL,
+                ex=ttl,
             )
         except Exception as exc:
             logger.warning(

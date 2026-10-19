@@ -158,3 +158,43 @@ async def test_no_redis_uses_db_path(session, seed, no_redis):
     out = await _me(user, session)
     assert out.id == user.id
     assert out.company.company_name == seed["company"].company_name
+
+
+async def test_role_change_bounded_by_ttl(session, seed, fake_redis):
+    """SA-backend role change: the cached role is served within the TTL
+    (the approved staleness bound) and the new role after expiry."""
+    user = seed["emp_user"]
+    sid = await sessions.create_session(user_id=user.id, refresh_hash="h")
+    await _me(user, session, sid=sid)  # prime
+
+    from app.models.user import UserRole
+    user.role = UserRole.PROPERTY_MANAGER
+    await session.commit()
+
+    session.expunge_all()
+    out = await _me(user, session, sid=sid)
+    assert out.role == UserRole.EMPLOYEE  # stale within TTL
+
+    await fake_redis.delete(_user_ctx_key(user.id))
+    session.expunge_all()
+    out = await _me(user, session, sid=sid)
+    assert out.role == UserRole.PROPERTY_MANAGER  # fresh after expiry
+
+
+async def test_ttl_zero_disables_cache(
+    session, seed, fake_redis, monkeypatch
+):
+    """USER_CACHE_TTL_S=0 → every request reads Postgres, no keys written."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "USER_CACHE_TTL_S", 0)
+
+    user = seed["emp_user"]
+    sid = await sessions.create_session(user_id=user.id, refresh_hash="h")
+    await _me(user, session, sid=sid)
+    assert await fake_redis.exists(_user_ctx_key(user.id)) == 0
+
+    user.is_active = False
+    await session.commit()
+    session.expunge_all()
+    with pytest.raises(Unauthenticated):
+        await _me(user, session, sid=sid)

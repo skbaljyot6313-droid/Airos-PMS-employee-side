@@ -53,6 +53,12 @@ class Settings(BaseSettings):
     PERF_HEADERS_ENABLED: bool | None = None
     # Phase-2 consolidated cold-start endpoint; false → 404 kill-switch.
     BOOTSTRAP_ENABLED: bool = True
+    # Seconds the users+company row is cached in Redis for get_current_user
+    # (mt:authctx:user:{uid}). A deactivated account or role change made by
+    # the SA backend takes up to this TTL to propagate to ALL authenticated
+    # endpoints on this service — sid/session revocation is never cached.
+    # 0 disables the cache (every request reads Postgres).
+    USER_CACHE_TTL_S: int = 30
 
     # Supabase services (storage configured, not yet implemented)
     SUPABASE_URL: str = ""
