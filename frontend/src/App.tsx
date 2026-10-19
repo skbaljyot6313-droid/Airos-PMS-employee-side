@@ -45,7 +45,9 @@ import { MaintenanceNewScreen } from './screens/employee/MaintenanceNewScreen';
 import { MaintenanceDetailScreen } from './screens/employee/MaintenanceDetailScreen';
 import { ProfileScreen } from './screens/employee/ProfileScreen';
 import { LoadingState } from './components/common/FeedbackStates';
+import { ConnectionErrorScreen } from './components/auth/ConnectionErrorScreen';
 import { MaintenanceTarget, ZoneResource, ZoneSummary } from './types';
+import { perfMarkOnce, perfReportOnce } from './utils/perf';
 
 type StackRoute =
   | { type: 'tabs'; tab: TabType }
@@ -55,7 +57,7 @@ type StackRoute =
   | { type: 'maintenance-detail'; ticketId: string; zoneId?: string };
 
 const AppNavigator: React.FC = () => {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, connectionError, retrySession, logout } = useAuth();
   const [route, setRoute] = useState<StackRoute>({ type: 'tabs', tab: 'tasks' });
   const [todoCount, setTodoCount] = useState<number>(0);
   const [maintenanceCount, setMaintenanceCount] = useState<number>(0);
@@ -134,6 +136,14 @@ const AppNavigator: React.FC = () => {
     };
   }, [isAuthenticated]);
 
+  // T7 — first authenticated render is the "usable" startup milestone.
+  useEffect(() => {
+    if (isAuthenticated) {
+      perfMarkOnce('t7_usable');
+      perfReportOnce();
+    }
+  }, [isAuthenticated]);
+
   if (isLoading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-white p-6">
@@ -145,8 +155,19 @@ const AppNavigator: React.FC = () => {
     );
   }
 
-  // Route Guard: Unauthenticated users are routed to Login
+  // Route Guard: Unauthenticated users are routed to Login — but a
+  // network/5xx failure during session restore gets an explicit retry
+  // screen first (silently landing on Login read as a random logout).
   if (!isAuthenticated) {
+    if (connectionError) {
+      return (
+        <ConnectionErrorScreen
+          message={connectionError}
+          onRetry={() => void retrySession()}
+          onLogout={logout}
+        />
+      );
+    }
     return <LoginScreen />;
   }
 

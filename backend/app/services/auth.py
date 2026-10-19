@@ -4,6 +4,8 @@ AuthService — signup, login, token issue/refresh/revocation, profile.
 Router → Service → Repository → SQLAlchemy.
 """
 
+import asyncio
+
 from fastapi import status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,7 +144,9 @@ class AuthService:
                 name=name,
                 email=payload.email,
                 username=username,
-                password_hash=hash_password(payload.password),
+                password_hash=await asyncio.to_thread(
+                    hash_password, payload.password
+                ),
                 phone_number=payload.phone,
                 role=UserRole.SUPER_ADMIN,
                 job_title="Administrator",
@@ -162,8 +166,16 @@ class AuthService:
     # ------------------------------------------------------------------
     async def login(self, identifier: str, password: str) -> AuthResponse:
         user = await self.users.get_by_identifier(identifier)
+        # Argon2id verify is ~100–300ms of CPU — run it off the event
+        # loop so login bursts can't stall every concurrent request.
+        verified = (
+            user is not None
+            and await asyncio.to_thread(
+                verify_password, password, user.password_hash
+            )
+        )
         # Uniform failure — never reveal which part was wrong
-        if user is None or not verify_password(password, user.password_hash):
+        if not verified:
             raise InvalidCredentials()
         if not user.is_active:
             raise AccountInactive()

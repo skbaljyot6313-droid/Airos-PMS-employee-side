@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 5
     DB_POOL_RECYCLE: int = 1800  # Supabase idles connections; recycle below their timeout
     DB_POOL_TIMEOUT: int = 30
+    # OPT-IN: PostgreSQL idle_in_transaction_session_timeout (ms). Session
+    # state applied per connection — under a transaction pooler (Supavisor/
+    # PgBouncer) it is applied at engine connect time but has NOT been
+    # verified there, so it stays 0 (off) by default and is skipped
+    # entirely on pooler hosts until proven safe on staging.
+    DB_IDLE_TX_TIMEOUT_MS: int = 0
+    # Phase-0 observability headers (X-DB-*/X-Redis-*/X-Ext/X-PoolWait).
+    # None → on unless APP_ENV=production; explicit true/false overrides.
+    PERF_HEADERS_ENABLED: bool | None = None
 
     # Supabase services (storage configured, not yet implemented)
     SUPABASE_URL: str = ""
@@ -156,6 +165,13 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.APP_ENV.lower() == "production"
+
+    @property
+    def perf_headers_enabled(self) -> bool:
+        """Stage-timing response headers — on by default outside prod."""
+        if self.PERF_HEADERS_ENABLED is not None:
+            return self.PERF_HEADERS_ENABLED
+        return not self.is_production
 
     def production_warnings(self) -> list[str]:
         """Misconfigurations that must block or loudly flag a prod boot."""

@@ -12,6 +12,8 @@ Conventions (mirrors AttendanceService):
   * Employee scope is user.employee_id — NULL → 403/404, never widened.
 """
 
+import asyncio
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -19,6 +21,7 @@ from sqlalchemy import and_, exists, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import metrics
 from app.core.logging import get_logger
 from app.models.audit import AuditEvent
 from app.models.maintenance import MaintenanceTicket
@@ -42,6 +45,108 @@ logger = get_logger(__name__)
 # flooding a fresh feed.
 ALLOCATION_SYNC_WINDOW = timedelta(days=14)
 ALLOCATION_SYNC_CAP = 50  # materialized rows per sync — backstop only
+
+# Post-commit push queue — snapshots parked on session.info are drained
+# AFTER the business transaction commits (database.py after_commit hook),
+# so external FCM HTTPS calls never hold a pool connection hostage.
+PUSH_QUEUE = "airos_queued_pushes"
+
+
+def queue_push(session: AsyncSession, snapshot: dict) -> None:
+    session.info.setdefault(PUSH_QUEUE, []).append(snapshot)
+
+
+def _push_snapshot(n: Notification) -> dict:
+    data = {
+        "type": n.type,
+        "notification_uid": str(n.id),
+    }
+    if n.task_id:
+        data["task_uid"] = str(n.task_id)
+    if n.ticket_id:
+        data["ticket_uid"] = str(n.ticket_id)
+    return {
+        "notification_id": str(n.id),
+        "employee_id": n.employee_id,
+        "title": n.title,
+        "body": n.body,
+        "data": data,
+    }
+
+
+async def _dispatch_snapshot(session: AsyncSession, snap: dict) -> None:
+    """One queued push: token lookup → provider.send → dead-token cleanup.
+    Runs on the drain's own session — failures are per-notification and
+    never propagate (push must never break committed work)."""
+    res = await session.execute(
+        select(DeviceRegistration.push_token).where(
+            DeviceRegistration.employee_id == snap["employee_id"],
+            DeviceRegistration.is_active.is_(True),
+        )
+    )
+    tokens = [t for t in res.scalars() if t]
+    if not tokens:
+        return
+    provider = get_push_provider()
+    t0 = time.monotonic()
+    try:
+        result = await provider.send(
+            tokens, snap["title"], snap["body"], snap["data"],
+            tag=snap["notification_id"],
+        )
+    finally:
+        metrics.record_ext((time.monotonic() - t0) * 1000)
+    dead = getattr(result, "invalid_tokens", None) or []
+    if dead:
+        await session.execute(
+            update(DeviceRegistration)
+            .where(DeviceRegistration.push_token.in_(dead))
+            .values(is_active=False)
+        )
+        logger.info(
+            "Push: deactivated %d dead registration token(s)", len(dead),
+        )
+
+
+# Bound concurrent drain batches — every commit can schedule one task;
+# the semaphore keeps post-commit fan-out from stampeding the provider
+# or the connection pool during a notification burst.
+_PUSH_DRAIN_SEMAPHORE = asyncio.Semaphore(4)
+
+
+async def dispatch_queued_pushes(snapshots: list[dict]) -> None:
+    """Drain queued push snapshots on a FRESH session after commit.
+
+    Runs as a background task (scheduled by the after_commit hook), so it
+    must be fully self-contained and never raise — a dead database or a
+    misconfigured provider only costs a warning line. It never touches
+    the request-scoped session: a new AsyncSessionLocal is opened here."""
+    if not snapshots:
+        return
+    try:
+        from app.core.database import AsyncSessionLocal
+    except Exception as exc:  # engine unconfigured (unit-test context)
+        logger.warning("push drain unavailable: %s", exc)
+        return
+    async with _PUSH_DRAIN_SEMAPHORE:
+        try:
+            async with AsyncSessionLocal() as session:
+                for snap in snapshots:
+                    try:
+                        await _dispatch_snapshot(session, snap)
+                    except Exception as exc:
+                        logger.warning(
+                            "Push dispatch failed for notification %s: %s",
+                            snap.get("notification_id"), exc,
+                        )
+                try:
+                    await session.commit()
+                except Exception as exc:
+                    logger.warning(
+                        "push drain token cleanup commit failed: %s", exc,
+                    )
+        except Exception as exc:
+            logger.warning("push drain failed: %s", exc)
 
 
 def _allocation_notice_parts(kind: str, reassigned: bool) -> tuple[str, str]:
@@ -113,12 +218,23 @@ class NotificationService:
         )
         self.session.add(notification)
         await self.session.flush()
-        await self._dispatch(notification)
+        if self._push is not None:
+            # Injected-provider seam (tests) — dispatch inline so callers
+            # can assert sends synchronously.
+            await self._dispatch(notification)
+        else:
+            # Production path — the send leaves the transaction entirely:
+            # queued snapshots drain post-commit on a fresh session.
+            queue_push(self.session, _push_snapshot(notification))
         return notification
 
     async def _dispatch(self, notification: Notification) -> None:
         """Push to the employee's ACTIVE devices. Every failure mode is
-        swallowed to a warning — the in-app row is the source of truth."""
+        swallowed to a warning — the in-app row is the source of truth.
+
+        Only reached when a provider was injected (self._push); the
+        production path queues for post-commit drain instead, so external
+        HTTPS never runs inside an open transaction."""
         try:
             res = await self.session.execute(
                 select(DeviceRegistration.push_token).where(
@@ -139,10 +255,14 @@ class NotificationService:
             if notification.ticket_id:
                 data["ticket_uid"] = str(notification.ticket_id)
             provider = self._push or get_push_provider()
-            result = await provider.send(
-                tokens, notification.title, notification.body, data,
-                tag=str(notification.id),
-            )
+            t0 = time.monotonic()
+            try:
+                result = await provider.send(
+                    tokens, notification.title, notification.body, data,
+                    tag=str(notification.id),
+                )
+            finally:
+                metrics.record_ext((time.monotonic() - t0) * 1000)
             dead = getattr(result, "invalid_tokens", None) or []
             if dead:
                 await self.session.execute(

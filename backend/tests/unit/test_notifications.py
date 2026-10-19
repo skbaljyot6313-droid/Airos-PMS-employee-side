@@ -151,6 +151,63 @@ async def test_push_failure_does_not_break_allocation(session, seed, monkeypatch
     assert len(rows) == 1
 
 
+async def test_notify_without_provider_queues_post_commit(session, seed):
+    """Production path — notify() with no injected provider must NOT run
+    external I/O inside the transaction; it queues a snapshot on
+    session.info for the after_commit drain instead."""
+    from app.services.notifications import PUSH_QUEUE
+
+    svc = NotificationService(session)
+    n = await svc.notify(
+        employee_id=seed["employee"].id, property_id=seed["prop"].id,
+        type="task_assigned", title="t", body="b", task_id=uuid.uuid4(),
+    )
+    queue = session.info.get(PUSH_QUEUE)
+    assert queue and len(queue) == 1
+    snap = queue[0]
+    assert snap["notification_id"] == str(n.id)
+    assert snap["employee_id"] == seed["employee"].id
+    assert snap["data"]["type"] == "task_assigned"
+    assert "task_uid" in snap["data"]
+
+
+async def test_dispatch_snapshot_sends_and_deactivates(session, seed, monkeypatch):
+    """The post-commit drain resolves the real provider, sends to active
+    devices only, and deactivates tokens the provider reports dead —
+    all on the drain's own session, after the business commit."""
+    from app.services import notifications as notif_mod
+
+    reg = DeviceRegistry(session)
+    await reg.register(
+        seed["emp_user"], device_id="d1", push_token="tok-live",
+        platform="android",
+    )
+    await reg.register(
+        seed["emp_user"], device_id="d2", push_token="tok-dead",
+        platform="android",
+    )
+    push = _RecordingPush(invalid=["tok-dead"])
+    monkeypatch.setattr(notif_mod, "get_push_provider", lambda: push)
+
+    svc = NotificationService(session)
+    await svc.notify(
+        employee_id=seed["employee"].id, property_id=seed["prop"].id,
+        type="task_assigned", title="t", body="b", task_id=uuid.uuid4(),
+    )
+    snap = session.info[notif_mod.PUSH_QUEUE][-1]
+    await notif_mod._dispatch_snapshot(session, snap)
+    await session.commit()
+
+    assert push.calls[0]["tokens"] == ["tok-live", "tok-dead"]
+    assert push.calls[0]["tag"] == snap["notification_id"]
+    res = await session.execute(
+        select(DeviceRegistration).where(
+            DeviceRegistration.push_token == "tok-dead"
+        )
+    )
+    assert res.scalar_one().is_active is False
+
+
 async def test_push_reaches_active_devices_only(session, seed):
     reg = DeviceRegistry(session)
     await reg.register(

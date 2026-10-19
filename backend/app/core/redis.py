@@ -16,6 +16,7 @@ from redis.asyncio import Redis
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.metrics import TimedRedis
 
 logger = get_logger("app.redis")
 
@@ -27,34 +28,63 @@ def redis_configured() -> bool:
     return bool(settings.REDIS_URL)
 
 
+def _mark_failure() -> None:
+    """An op just failed — flip health to UNKNOWN so the NEXT get_redis
+    call re-probes connectivity once, rather than waiting on stale state."""
+    global _available
+    if _available is not None:
+        _available = None
+
+
+def _mark_ok() -> None:
+    """An op just succeeded — the client is live again; no probe needed."""
+    global _available
+    if _available is not True:
+        _available = True
+
+
 async def get_redis() -> Redis | None:
     """Shared async client — None when unconfigured/unreachable.
 
     Bounded by connect/socket timeouts so a dead Redis can never hang a
-    request path.
+    request path. The client is wrapped in TimedRedis so every command
+    lands in the request's X-Redis timing bucket.
+
+    Health is op-outcome driven, not per-call PING: the startup probe runs
+    once; a failed op flips state to unknown and the next get_redis() call
+    re-probes once; a successful op marks the client live again. Ops still
+    execute in every state — fail-open/fail-closed semantics stay with the
+    callers, who degrade as before.
     """
     global _client, _available
     if not settings.REDIS_URL:
         return None
     if _client is None:
-        _client = Redis.from_url(
-            settings.REDIS_URL,
-            decode_responses=True,
-            socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT,
-            socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
-            retry_on_timeout=True,
+        _client = TimedRedis(
+            Redis.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT,
+                socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+                retry_on_timeout=True,
+            ),
+            on_error=_mark_failure,
+            on_ok=_mark_ok,
         )
+    if _available is True:
+        return _client
     if _available is False:
-        return _client  # caller still gets the client; ops fail fast & degrade
+        # Last probe failed — ops still execute (callers degrade); the
+        # next failed op marks unknown → re-probe. No per-call ping.
+        return _client
+    # unknown — probe once
     try:
         await _client.ping()
-        if _available is not True:
-            logger.info("Redis connection verified")
+        logger.info("Redis connection verified")
         _available = True
     except Exception as exc:
-        if _available is not False:
-            logger.warning("Redis unreachable (%s) — degrading to local fallbacks",
-                           type(exc).__name__)
+        logger.warning("Redis unreachable (%s) — degrading to local fallbacks",
+                       type(exc).__name__)
         _available = False
     return _client
 

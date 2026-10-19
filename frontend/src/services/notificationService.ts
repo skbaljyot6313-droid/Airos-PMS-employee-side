@@ -51,10 +51,21 @@ export function diffNewNotifications(
 // trigger an immediate refresh instead of waiting for the next interval.
 let activePoll: (() => void) | null = null;
 
-/** Trigger the feed poll immediately — used by realtime events. Safe
- *  to call when no poll loop is running (no-op). */
+// Every Centrifugo publication calls pollNotificationsNow — a burst of
+// SA-side assignments would otherwise fire a heavy GET /notifications
+// per event. Debounce matches the screen-listener coalescing window.
+const NUDGE_DEBOUNCE_MS = 400;
+let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Trigger the feed poll soon — used by realtime events and resume.
+ *  Coalesced: a burst of calls collapses to one poll. Safe to call when
+ *  no poll loop is running (no-op). */
 export function pollNotificationsNow(): void {
-  activePoll?.();
+  if (nudgeTimer !== null) return;
+  nudgeTimer = setTimeout(() => {
+    nudgeTimer = null;
+    activePoll?.();
+  }, NUDGE_DEBOUNCE_MS);
 }
 
 /**
@@ -110,6 +121,10 @@ export function startNotificationPolling(): () => void {
   return () => {
     stopped = true;
     if (activePoll === poll) activePoll = null;
+    if (nudgeTimer !== null) {
+      clearTimeout(nudgeTimer);
+      nudgeTimer = null;
+    }
     clearInterval(timer);
     document.removeEventListener('visibilitychange', onVisibility);
     appStateHandle?.remove();

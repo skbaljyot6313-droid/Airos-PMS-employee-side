@@ -5,6 +5,7 @@ import { loginApi, getMeApi, logoutApi, updateMeApi } from '../api/auth';
 import { getZoneNameMap, invalidateZoneCache } from '../api/directory';
 import { isEmployeeSession, EMPLOYEE_GATE_MESSAGE } from './authGate';
 import { unregisterPushDevice } from '../services/pushRegistration';
+import { perfMarkOnce } from '../utils/perf';
 
 interface AuthContextType {
   user: User | null;
@@ -14,10 +15,15 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   authError: string | null;
+  /** Set when session restore failed on a network/5xx path — the app
+   *  shows a retry screen instead of silently landing on Login. */
+  connectionError: string | null;
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
   updateProfile: (data: { name?: string; phone?: string; email?: string }) => Promise<void>;
   clearError: () => void;
+  /** Re-run session restoration after a connectionError. */
+  retrySession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,6 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
 
   const logout = useCallback(() => {
     const refresh = secureStorage.getRefreshToken();
@@ -38,6 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCompany(null);
     setEmployee(null);
     setAuthError(null);
+    setConnectionError(null);
     void logoutApi(refresh);
   }, []);
 
@@ -80,7 +88,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setUser(u);
       setCompany(c);
-      await enrichEmployee(u);
+      // NOT awaited — the zone name is display-only and patches in when
+      // /zones resolves. Awaiting it put a second serial round trip on
+      // the startup critical path (up to a full 45s timeout of spinner).
+      void enrichEmployee(u);
     },
     [enrichEmployee]
   );
@@ -94,6 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     try {
       setIsLoading(true);
+      setConnectionError(null);
       const data = await getMeApi();
       await applySession(data.user, data.company);
       setAuthError(null);
@@ -107,11 +119,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // and surface the gate message on the login screen.
         secureStorage.clearTokens();
         setAuthError(errorMessage(err, EMPLOYEE_GATE_MESSAGE));
+      } else {
+        // Network / 5xx / timeout: keep tokens AND surface a retryable
+        // connection-error screen instead of silently landing on Login
+        // (which read as an unlogged session wipe on flaky networks).
+        setConnectionError(
+          errorMessage(err, 'Unable to reach the AiROS server. Check your connection and try again.')
+        );
       }
-      // Network / 5xx: keep tokens so a retry can restore the session.
       console.warn('Session restoration failed:', err);
     } finally {
       setIsLoading(false);
+      perfMarkOnce('t3_auth');
     }
   }, [applySession]);
 
@@ -124,6 +143,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCompany(null);
       setEmployee(null);
       setAuthError('Your session has timed out. Please sign in again.');
+      setConnectionError(null);
     };
     window.addEventListener('airos_unauthorized', handleUnauthorized);
     return () => window.removeEventListener('airos_unauthorized', handleUnauthorized);
@@ -164,10 +184,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: isEmployeeSession(user),
         isLoading,
         authError,
+        connectionError,
         login,
         logout,
         updateProfile,
         clearError,
+        retrySession: refreshSession,
       }}
     >
       {children}

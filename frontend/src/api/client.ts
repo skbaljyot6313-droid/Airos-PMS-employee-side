@@ -13,6 +13,7 @@
  */
 
 import { ApiError, ApiFieldError } from '../types';
+import { perfMarkOnce } from '../utils/perf';
 
 const ACCESS_KEY = 'airos_staff_access_token';
 const REFRESH_KEY = 'airos_staff_refresh_token';
@@ -194,8 +195,10 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  perfMarkOnce('t4_first_req');
   try {
     const res = await fetch(url, { ...init, headers, signal: controller.signal });
+    perfMarkOnce('t5_first_res');
 
     if (res.status === 401 && auth && !_retried) {
       if (await singleFlightRefresh()) {
