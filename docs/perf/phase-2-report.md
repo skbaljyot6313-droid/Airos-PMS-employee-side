@@ -100,3 +100,18 @@ Saves one remote RTT per feed poll (~300–700 ms each). The per-event
 `notify()` calls each still run their own device-token lookup at drain
 time — batching that is a Phase-4 candidate, not a correctness issue
 since it's post-commit now.
+
+## 2.5 — ETag on `GET /zones`
+
+**Commit**: this commit.
+
+Weak ETag (`W/"sha256[:24]"`) over the serialized `{items,total,page,limit}`
+payload; `If-None-Match` → 304. Backward-compatible additive behavior —
+clients not sending the header get the identical response plus an `ETag`
+header. This saves transfer + parse on the client's 60s zone-name
+revalidation; skipping the query entirely is what the `/bootstrap` scope
+cache already does. Client-side adoption (`If-None-Match` on
+`getZoneNameMap`) lands with the Phase-3 data layer.
+
+**Tests**: `tests/unit/test_zones_etag.py` — 3 tests (stable weak tag,
+304 on match, content change bumps tag).
