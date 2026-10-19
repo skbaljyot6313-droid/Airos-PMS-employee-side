@@ -212,6 +212,9 @@ export interface MaintenanceTicket {
   description?: string | null;
   /** Issue photos (attachments kind='issue'). */
   photos: string[];
+  /** Issue-photo count for list rows — detail responses embed full
+   *  attachment URLs; falls back to photos.length. */
+  photo_count?: number;
   resolution_photos?: string[];
   /** Resource linkage for workspace matching. */
   room_uid: string | null;

@@ -126,5 +126,55 @@ def stub_tasks(monkeypatch):
     return calls
 
 
+@pytest.fixture
+async def make_tenant(session):
+    """Second-tenant factory for isolation tests — returns a callable
+    that builds company+property+user(employee)+admin in one commit."""
+    from app.models.company import Company
+    from app.models.employee import Employee
+    from app.models.property import Property
+    from app.models.user import User, UserRole
+
+    async def _make(tag: str):
+        company = Company(
+            company_name=f"Co-{tag}", brand_name=f"Co-{tag}",
+            email=f"c-{tag}@x.test",
+            phone_number="1", address="a", pin_code="1",
+        )
+        session.add(company)
+        await session.flush()
+        prop = Property(
+            company_id=company.id, name=f"Prop-{tag}", code=tag[:4],
+            location="l", city="c", state="s",
+            manager_name="m", manager_email="m@x.test",
+        )
+        session.add(prop)
+        await session.flush()
+        emp = Employee(
+            company_id=company.id, property_id=prop.id,
+            name=f"W-{tag}", email=f"e-{tag}@x.test", status="active",
+        )
+        session.add(emp)
+        await session.flush()
+        user = User(
+            company_id=company.id, property_id=prop.id, name=f"U-{tag}",
+            email=f"u-{tag}@x.test", username=f"u{tag}", password_hash="x",
+            role=UserRole.EMPLOYEE, employee_id=emp.id,
+        )
+        admin = User(
+            company_id=company.id, property_id=prop.id, name=f"A-{tag}",
+            email=f"a-{tag}@x.test", username=f"a{tag}",
+            password_hash="x", role=UserRole.SUPER_ADMIN,
+        )
+        session.add_all([user, admin])
+        await session.commit()
+        return {
+            "company": company, "prop": prop, "user": user,
+            "admin": admin, "employee": emp,
+        }
+
+    return _make
+
+
 def new_id() -> uuid.UUID:
     return uuid.uuid4()

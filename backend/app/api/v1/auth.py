@@ -50,4 +50,6 @@ async def update_me(payload: UpdateProfileRequest, user: User = Depends(get_curr
         raise EmailAlreadyExists()
     await service.users.update_profile(user, name=payload.name, phone_number=payload.phone, email=payload.email)
     await session.commit()
+    from app.dependencies.auth import evict_user_cache
+    await evict_user_cache(user.id)
     return user_to_out(user)

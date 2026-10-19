@@ -120,6 +120,8 @@ export const mapTicket = (
     status: wireToDisplayStatus(t.status),
     description: t.description ?? null,
     photos: issuePhotos,
+    // List summaries carry photo_count only; detail rows compute from URLs.
+    photo_count: t.photo_count ?? issuePhotos.length,
     resolution_photos: resolutionPhotos,
     room_uid: t.room_uid ?? null,
     dorm_uid: t.dorm_uid ?? null,

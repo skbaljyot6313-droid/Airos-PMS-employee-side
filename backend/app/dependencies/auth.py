@@ -9,15 +9,19 @@ The user's company_id is the authoritative tenant scope — services must
 filter by current_user.company_id, never trust a client-supplied value.
 """
 
+import enum
 import json
 import secrets
 import uuid
 from collections.abc import Callable
+from datetime import datetime
 from typing import NamedTuple
 
 from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import make_transient_to_detached
 
 from app.core import sessions
 from app.core.config import settings
@@ -26,6 +30,7 @@ from app.core.exceptions import AppError, LiveLocationUnavailable
 from app.core.logging import get_logger
 from app.core.redis import get_redis
 from app.core.security import decode_access_token
+from app.models.company import Company
 from app.models.user import User, UserRole
 from app.repositories.user import UserRepository
 
@@ -65,10 +70,140 @@ async def get_current_user(
     except (KeyError, ValueError):
         raise Unauthenticated()
 
-    user = await UserRepository(session).get_by_id(user_id)
+    user = await _cached_user(session, user_id)
     if user is None or not user.is_active:
         raise Unauthenticated("Your session has expired. Please sign in again.")
     return user
+
+
+# ---------------------------------------------------------------------------
+# User-row cache — a Redis sidecar copy of the users+company row so every
+# authenticated request does not pay a Postgres round trip for a row that
+# changes minutes-to-days apart (mt:authctx:user:{uid}).
+#
+# Reconstruction: ORM instances are rebuilt from cached columns, marked
+# detached (identity key) and added to the request session — detached-add
+# makes them persistent WITHOUT marking columns dirty, so stale values can
+# never be written back on commit, and later edits produce UPDATE, never
+# INSERT. (merge(load=False) was rejected: it dirties every copied column.)
+# user.company is attached straight into __dict__ (manual eager-load) so
+# the joined load survives the round trip.
+#
+# STALENESS CONTRACT: is_active / role / zone/employee links are written by
+# the SA backend against the shared DB — there is no eviction hook here, so
+# a deactivation or role change can take up to USER_CACHE_TTL_S (default
+# 30s) to take effect on EVERY authenticated endpoint. Sid/session
+# revocation is checked before the cache on every request and is NEVER
+# cached — logout still kills access instantly. This service's own user
+# writes (PATCH /auth/me) evict via evict_user_cache.
+# USER_CACHE_TTL_S=0 disables the cache entirely (every request → Postgres).
+# ---------------------------------------------------------------------------
+
+_USER_COLS = [c.key for c in sa_inspect(User).mapper.columns]
+_COMPANY_COLS = [c.key for c in sa_inspect(Company).mapper.columns]
+
+
+def _user_ctx_key(user_id: uuid.UUID) -> str:
+    return f"mt:authctx:user:{user_id}"
+
+
+def _dump_columns(obj, cols: list[str]) -> dict:
+    out = {}
+    for k in cols:
+        v = getattr(obj, k)
+        if isinstance(v, uuid.UUID):
+            v = str(v)
+        elif isinstance(v, datetime):
+            v = v.isoformat()
+        elif isinstance(v, enum.Enum):
+            v = v.value
+        out[k] = v
+    return out
+
+
+def _restore_columns(model, data: dict):
+    obj = model()
+    mapper = sa_inspect(model).mapper
+    for k, v in data.items():
+        if v is not None:
+            try:
+                t = mapper.columns[k].type.python_type
+            except Exception:
+                t = None
+            try:
+                if t is uuid.UUID:
+                    v = uuid.UUID(str(v))
+                elif t is datetime:
+                    v = datetime.fromisoformat(str(v))
+                elif isinstance(t, type) and issubclass(t, enum.Enum):
+                    v = t(v)
+            except (ValueError, TypeError):
+                pass
+        setattr(obj, k, v)
+    # Detached (identity key present) so session.add() treats the row as
+    # existing — persistent, no INSERT, no dirty columns.
+    make_transient_to_detached(obj)
+    return obj
+
+
+async def _cached_user(session: AsyncSession, user_id: uuid.UUID) -> User | None:
+    ttl = settings.USER_CACHE_TTL_S
+    client = await get_redis() if ttl > 0 else None
+    if client is not None:
+        try:
+            raw = await client.get(_user_ctx_key(user_id))
+            if raw:
+                data = json.loads(raw)
+                restored = _restore_columns(User, data["user"])
+                try:
+                    session.add(restored)
+                except Exception:
+                    # Identity already attached in this session —
+                    # use that instance rather than raising.
+                    restored = await session.get(User, user_id)
+                if restored is not None:
+                    company_data = data.get("company")
+                    if company_data:
+                        restored.__dict__["company"] = (
+                            _restore_columns(Company, company_data)
+                        )
+                return restored
+        except Exception as exc:
+            logger.warning(
+                "user cache read failed: %s", type(exc).__name__
+            )
+    user = await UserRepository(session).get_by_id(user_id)
+    if user is not None and client is not None:
+        try:
+            data = {"user": _dump_columns(user, _USER_COLS)}
+            if user.company is not None:
+                data["company"] = _dump_columns(
+                    user.company, _COMPANY_COLS
+                )
+            await client.set(
+                _user_ctx_key(user_id),
+                json.dumps(data),
+                ex=ttl,
+            )
+        except Exception as exc:
+            logger.warning(
+                "user cache write failed: %s", type(exc).__name__
+            )
+    return user
+
+
+async def evict_user_cache(user_id: uuid.UUID) -> None:
+    """Drop the cached user row — called after this service writes user
+    fields (PATCH /auth/me). SA-backend writes are TTL-bounded."""
+    client = await get_redis()
+    if client is None:
+        return
+    try:
+        await client.delete(_user_ctx_key(user_id))
+    except Exception as exc:
+        logger.warning(
+            "user cache eviction failed: %s", type(exc).__name__
+        )
 
 
 def require_role(*roles: UserRole) -> Callable:

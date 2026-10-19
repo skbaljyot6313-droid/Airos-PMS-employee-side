@@ -75,10 +75,10 @@ export const MaintenanceCard: React.FC<MaintenanceCardProps> = ({
           )}
         </div>
 
-        {ticket.photos.length > 0 && (
+        {(ticket.photo_count ?? ticket.photos.length) > 0 && (
           <div className="flex items-center gap-1 text-[11px] text-[#667174]">
             <ImageIcon className="w-3 h-3 text-[#8D999C]" />
-            <span>{ticket.photos.length}</span>
+            <span>{ticket.photo_count ?? ticket.photos.length}</span>
           </div>
         )}
       </div>

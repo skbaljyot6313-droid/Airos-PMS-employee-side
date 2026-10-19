@@ -403,12 +403,14 @@ class StructureService:
         )
         self.session.add(zone)
         await self._commit()
+        from app.services.bootstrap import evict_scope_cache
+        await evict_scope_cache(prop.company_id, prop.id)
         return zone
 
     async def update_zone(
         self, user: User, zone_id: uuid.UUID, payload: ZoneUpdateRequest
     ) -> Zone:
-        zone, _ = await self._get(Zone, zone_id, user)
+        zone, prop = await self._get(Zone, zone_id, user)
         data = payload.model_dump(exclude_unset=True)
         if "area_uid" in data:
             data["area_id"] = await self._area_in_property(
@@ -434,6 +436,8 @@ class StructureService:
         for k, v in data.items():
             setattr(zone, k, v)
         await self._commit()
+        from app.services.bootstrap import evict_scope_cache
+        await evict_scope_cache(prop.company_id, prop.id)
         return zone
 
     async def delete_zone(self, user: User, zone_id: uuid.UUID) -> None:
@@ -444,7 +448,7 @@ class StructureService:
         history keep their rows via SET NULL references.
         A single transaction — any failure rolls everything back.
         """
-        zone, _ = await self._get(Zone, zone_id, user)
+        zone, prop = await self._get(Zone, zone_id, user)
         # The zone cascade deletes its rooms/dorms/beds — refuse while any
         # unit is occupied.
         occupied_rooms = (await self.session.execute(
@@ -466,6 +470,8 @@ class StructureService:
             sa_delete(Zone).where(Zone.id == zone.id)
         )
         await self._commit()
+        from app.services.bootstrap import evict_scope_cache
+        await evict_scope_cache(prop.company_id, prop.id)
 
     # ------------------------------------------------------------------
     # Rooms

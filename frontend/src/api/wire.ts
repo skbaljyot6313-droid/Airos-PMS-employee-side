@@ -254,6 +254,9 @@ export interface MaintenanceTicketWire {
   updated_at: string;
   events: TicketEventWire[];
   attachments: TicketAttachmentWire[];
+  /** List summary rows carry the issue-photo count only (detail still
+   *  returns full events/attachments). */
+  photo_count?: number;
 }
 
 // ---------------------------------------------------------------------------

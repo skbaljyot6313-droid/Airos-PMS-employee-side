@@ -5,7 +5,7 @@ import {
   MAINTENANCE_TYPE_LABELS,
   maintenanceTypeToWire,
 } from '../maintenance';
-import { MaintenanceTicketWire } from '../wire';
+import { MaintenanceTicketWire, TicketAttachmentWire } from '../wire';
 import { MaintenanceCategory } from '../../types';
 
 const baseWire = (over: Partial<MaintenanceTicketWire> = {}): MaintenanceTicketWire => ({
@@ -57,6 +57,25 @@ describe('mapTicket', () => {
       expect(mapTicket(baseWire({ status: s }), zones).status).toBe(s);
     }
     expect(wireToDisplayStatus('open')).toBe('reported');
+  });
+
+  it('uses photo_count on summary-shaped rows (list never carries attachments)', () => {
+    // Contract: GET /maintenance returns ticket_summary_out — events/
+    // attachments are [] but photo_count carries the card-chip count.
+    const t = mapTicket(baseWire({ photo_count: 3 }), zones);
+    expect(t.photo_count).toBe(3);
+    expect(t.photos).toEqual([]);
+    expect(t.history).toEqual([]);
+    // Detail rows keep url-derived counts.
+    const att = (kind: 'issue' | 'resolution', url: string): TicketAttachmentWire => ({
+      attachment_uid: 'a', url, kind, file_name: null,
+      mime_type: null, size_bytes: null, uploaded_by_name: null,
+      attempt: 1, created_at: '2026-01-01T00:00:00Z',
+    });
+    const d = mapTicket(baseWire({
+      attachments: [att('issue', '/u/1'), att('issue', '/u/2')],
+    }), zones);
+    expect(d.photo_count).toBe(2);
   });
 
   it('splits attachments into issue/resolution photos keeping raw urls', () => {

@@ -330,11 +330,7 @@ class NotificationService:
         when rows were created; returns the count."""
         employee_id = self._require_employee(user)
         cutoff = datetime.now(timezone.utc) - ALLOCATION_SYNC_WINDOW
-        created = 0
-        for kind in ("task", "maintenance"):
-            created += await self._sync_allocation_kind(
-                employee_id, cutoff, kind=kind
-            )
+        created = await self._sync_allocations(employee_id, cutoff)
         if created:
             await self.session.commit()
             logger.info(
@@ -343,63 +339,78 @@ class NotificationService:
             )
         return created
 
-    async def _sync_allocation_kind(
-        self, employee_id: uuid.UUID, cutoff: datetime, *, kind: str
+    async def _sync_allocations(
+        self, employee_id: uuid.UUID, cutoff: datetime
     ) -> int:
-        if kind == "task":
-            entity, assign_col = Task, Task.employee_id
-            link_col, types = Notification.task_id, (
-                "task_assigned", "task_reassigned"
+        """One round trip for both ledger kinds — task and maintenance
+        branches UNIONed with a `kind` discriminator (was two sequential
+        queries; each costs a full remote RTT)."""
+        from sqlalchemy import literal, union_all
+
+        def _branch(entity, assign_col, link_col, types, subject_col,
+                   kind):
+            return (
+                select(
+                    WorkAllocationHistory.ticket_id,
+                    WorkAllocationHistory.property_id,
+                    WorkAllocationHistory.employee_name,
+                    WorkAllocationHistory.previous_employee_id,
+                    WorkAllocationHistory.created_at,
+                    subject_col.label("subject"),
+                    literal(kind).label("kind"),
+                )
+                .join(
+                    entity,
+                    and_(
+                        entity.id == WorkAllocationHistory.ticket_id,
+                        assign_col == employee_id,
+                    ),
+                )
+                .where(
+                    WorkAllocationHistory.ticket_kind == kind,
+                    WorkAllocationHistory.employee_id == employee_id,
+                    WorkAllocationHistory.created_at >= cutoff,
+                    ~exists().where(
+                        Notification.employee_id == employee_id,
+                        link_col == WorkAllocationHistory.ticket_id,
+                        Notification.type.in_(types),
+                        Notification.created_at
+                        >= WorkAllocationHistory.created_at,
+                    ),
+                )
             )
-            subject_col = Task.title
-        else:
-            entity, assign_col = MaintenanceTicket, MaintenanceTicket.assigned_to
-            link_col, types = Notification.ticket_id, ("ticket_assigned",)
-            subject_col = MaintenanceTicket.issue
+
+        u = union_all(
+            _branch(Task, Task.employee_id, Notification.task_id,
+                    ("task_assigned", "task_reassigned"),
+                    Task.title, "task"),
+            _branch(MaintenanceTicket, MaintenanceTicket.assigned_to,
+                    Notification.ticket_id, ("ticket_assigned",),
+                    MaintenanceTicket.issue, "maintenance"),
+        ).subquery()
         res = await self.session.execute(
-            select(WorkAllocationHistory, subject_col)
-            .join(
-                entity,
-                and_(
-                    entity.id == WorkAllocationHistory.ticket_id,
-                    assign_col == employee_id,
-                ),
-            )
-            .where(
-                WorkAllocationHistory.ticket_kind == kind,
-                WorkAllocationHistory.employee_id == employee_id,
-                WorkAllocationHistory.created_at >= cutoff,
-                ~exists().where(
-                    Notification.employee_id == employee_id,
-                    link_col == WorkAllocationHistory.ticket_id,
-                    Notification.type.in_(types),
-                    Notification.created_at
-                    >= WorkAllocationHistory.created_at,
-                ),
-            )
-            .order_by(WorkAllocationHistory.created_at)
-            .limit(ALLOCATION_SYNC_CAP)
+            select(u).order_by(u.c.created_at).limit(ALLOCATION_SYNC_CAP)
         )
         count = 0
-        for event, subject in res.all():
+        for row in res.all():
             n_type, title = _allocation_notice_parts(
-                kind, event.previous_employee_id is not None
+                row.kind, row.previous_employee_id is not None
             )
-            task_id = event.ticket_id if kind == "task" else None
-            ticket_id = event.ticket_id if kind == "maintenance" else None
             n = await self.notify(
                 employee_id=employee_id,
-                property_id=event.property_id,
+                property_id=row.property_id,
                 type=n_type,
                 title=title,
-                body=subject or "A work item was assigned to you.",
-                task_id=task_id,
-                ticket_id=ticket_id,
-                employee_name=event.employee_name,
+                body=row.subject or "A work item was assigned to you.",
+                task_id=row.ticket_id if row.kind == "task" else None,
+                ticket_id=(
+                    row.ticket_id if row.kind == "maintenance" else None
+                ),
+                employee_name=row.employee_name,
             )
             # Stamp the row at the event's instant — see method docstring.
             if n is not None:
-                n.created_at = event.created_at
+                n.created_at = row.created_at
             count += 1
         return count
 
