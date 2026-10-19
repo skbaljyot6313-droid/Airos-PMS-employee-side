@@ -4,6 +4,7 @@ import { Task, TaskBucket } from '../../types';
 import { fetchTasksApi, taskBucket } from '../../api/tasks';
 import { errorMessage } from '../../api/client';
 import { subscribeRealtimeEvents } from '../../services/realtime';
+import { perfMarkOnce } from '../../utils/perf';
 import { TaskCard } from '../../components/tasks/TaskCard';
 import { EmptyState, ErrorState, LoadingState } from '../../components/common/FeedbackStates';
 import { RefreshCw, MapPin, Building2 } from 'lucide-react';
@@ -35,6 +36,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
       // Fetch operational tasks AND assigned maintenance tickets
       const data = await fetchTasksApi(employee?.id);
       setTasks(data);
+      perfMarkOnce('t6_data');
 
       const todoCount = data.filter((t) => taskBucket(t.status) === 'to_do').length;
       if (onTasksCountChange) {

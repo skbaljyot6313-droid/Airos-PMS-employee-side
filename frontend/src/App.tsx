@@ -46,6 +46,7 @@ import { MaintenanceDetailScreen } from './screens/employee/MaintenanceDetailScr
 import { ProfileScreen } from './screens/employee/ProfileScreen';
 import { LoadingState } from './components/common/FeedbackStates';
 import { MaintenanceTarget, ZoneResource, ZoneSummary } from './types';
+import { perfMarkOnce, perfReportOnce } from './utils/perf';
 
 type StackRoute =
   | { type: 'tabs'; tab: TabType }
@@ -132,6 +133,14 @@ const AppNavigator: React.FC = () => {
       void stopLocationTracking();
       sub.then((h) => h.remove());
     };
+  }, [isAuthenticated]);
+
+  // T7 — first authenticated render is the "usable" startup milestone.
+  useEffect(() => {
+    if (isAuthenticated) {
+      perfMarkOnce('t7_usable');
+      perfReportOnce();
+    }
   }, [isAuthenticated]);
 
   if (isLoading) {

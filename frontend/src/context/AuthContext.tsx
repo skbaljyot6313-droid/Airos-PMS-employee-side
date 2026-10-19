@@ -5,6 +5,7 @@ import { loginApi, getMeApi, logoutApi, updateMeApi } from '../api/auth';
 import { getZoneNameMap, invalidateZoneCache } from '../api/directory';
 import { isEmployeeSession, EMPLOYEE_GATE_MESSAGE } from './authGate';
 import { unregisterPushDevice } from '../services/pushRegistration';
+import { perfMarkOnce } from '../utils/perf';
 
 interface AuthContextType {
   user: User | null;
@@ -112,6 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Session restoration failed:', err);
     } finally {
       setIsLoading(false);
+      perfMarkOnce('t3_auth');
     }
   }, [applySession]);
 
