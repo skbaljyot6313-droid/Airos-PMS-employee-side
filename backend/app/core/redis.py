@@ -16,6 +16,7 @@ from redis.asyncio import Redis
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.metrics import TimedRedis
 
 logger = get_logger("app.redis")
 
@@ -37,12 +38,14 @@ async def get_redis() -> Redis | None:
     if not settings.REDIS_URL:
         return None
     if _client is None:
-        _client = Redis.from_url(
-            settings.REDIS_URL,
-            decode_responses=True,
-            socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT,
-            socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
-            retry_on_timeout=True,
+        _client = TimedRedis(
+            Redis.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT,
+                socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+                retry_on_timeout=True,
+            )
         )
     if _available is False:
         return _client  # caller still gets the client; ops fail fast & degrade

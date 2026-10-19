@@ -7,6 +7,7 @@ the `get_db` dependency (see app/dependencies/db.py).
 
 import asyncio
 import socket
+import time
 import uuid
 import ssl as ssl_module
 from collections.abc import AsyncGenerator
@@ -21,6 +22,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from app.core import metrics
 from app.core.config import settings
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
@@ -74,12 +76,44 @@ engine: AsyncEngine = create_async_engine(
     echo=settings.SQL_ECHO,
 )
 
+class TimedAsyncSession(AsyncSession):
+    """Times wall-clock duration of every execute() into the request
+    metrics context — covers session.get/scalar/scalars (they all route
+    through execute). No-op outside HTTP request handling."""
+
+    async def execute(self, *args, **kwargs):
+        if metrics.current() is None:
+            return await super().execute(*args, **kwargs)
+        metrics.mark_first_exec_start()
+        t0 = time.perf_counter()
+        try:
+            return await super().execute(*args, **kwargs)
+        finally:
+            metrics.record_db((time.perf_counter() - t0) * 1000)
+
+
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
-    class_=AsyncSession,
+    class_=TimedAsyncSession,
     expire_on_commit=False,
     autoflush=False,
 )
+
+
+from sqlalchemy import event as _sa_engine_event  # noqa: E402
+
+
+@_sa_engine_event.listens_for(engine.sync_engine, "before_cursor_execute")
+def _metrics_before_cursor(conn, cursor, statement, parameters, context, executemany):
+    metrics.record_pool_wait()  # first execute→cursor gap only
+    conn.info["_airos_stmt_t0"] = time.perf_counter()
+
+
+@_sa_engine_event.listens_for(engine.sync_engine, "after_cursor_execute")
+def _metrics_after_cursor(conn, cursor, statement, parameters, context, executemany):
+    t0 = conn.info.pop("_airos_stmt_t0", None)
+    if t0 is not None:
+        metrics.record_db_query((time.perf_counter() - t0) * 1000)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

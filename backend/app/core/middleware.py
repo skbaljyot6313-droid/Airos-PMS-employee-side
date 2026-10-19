@@ -26,6 +26,7 @@ import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from app.core import metrics
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.core.security import decode_access_token
@@ -66,8 +67,25 @@ _SKIP_LOG = {"/health", "/health/db"}
 class AccessLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         t0 = time.perf_counter()
-        response = await call_next(request)
+        metrics_token = metrics.begin()
+        try:
+            response = await call_next(request)
+        finally:
+            m = metrics.current()
+            metrics.end(metrics_token)
         elapsed_ms = (time.perf_counter() - t0) * 1000
+
+        # Stage-timing headers — Phase-0 observability, opt-out in
+        # production via PERF_HEADERS_ENABLED; the same stage data is
+        # always retained in the access log line below.
+        if m is not None and settings.perf_headers_enabled:
+            response.headers["X-DB-Exec-ms"] = f"{m['db_exec_ms']:.0f}"
+            response.headers["X-DB-Query-ms"] = f"{m['db_query_ms']:.0f}"
+            response.headers["X-DB-Count"] = f"{m['db_count']:.0f}"
+            response.headers["X-Redis-ms"] = f"{m['redis_ms']:.0f}"
+            response.headers["X-Redis-Ops"] = f"{m['redis_ops']:.0f}"
+            response.headers["X-Ext-ms"] = f"{m['ext_ms']:.0f}"
+            response.headers["X-PoolWait-ms"] = f"{m['pool_wait_ms']:.0f}"
 
         path = request.url.path
         if not any(path.startswith(p) for p in _SKIP_LOG):
@@ -77,10 +95,18 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
                 claims = decode_access_token(auth[7:]) or {}
                 user_id = claims.get("sub", "-")
                 company_id = claims.get("company_id", "-")
+            stages = ""
+            if m is not None:
+                stages = (
+                    f" db={m['db_exec_ms']:.0f}/{m['db_query_ms']:.0f}"
+                    f"x{m['db_count']:.0f}"
+                    f" redis={m['redis_ms']:.0f}x{m['redis_ops']:.0f}"
+                    f" ext={m['ext_ms']:.0f}"
+                )
             logger.info(
-                "method=%s path=%s status=%d duration_ms=%.0f user=%s company=%s",
+                "method=%s path=%s status=%d duration_ms=%.0f%s user=%s company=%s",
                 request.method, path, response.status_code, elapsed_ms,
-                user_id, company_id,
+                stages, user_id, company_id,
             )
         response.headers["X-Response-Time"] = f"{elapsed_ms:.0f}ms"
         return response
