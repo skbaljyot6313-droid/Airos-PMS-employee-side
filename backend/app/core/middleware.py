@@ -96,6 +96,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
                 user_id = claims.get("sub", "-")
                 company_id = claims.get("company_id", "-")
             stages = ""
+            pw = ""
             if m is not None:
                 stages = (
                     f" db={m['db_exec_ms']:.0f}/{m['db_query_ms']:.0f}"
@@ -103,10 +104,12 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
                     f" redis={m['redis_ms']:.0f}x{m['redis_ops']:.0f}"
                     f" ext={m['ext_ms']:.0f}"
                 )
+                pw = f" pw={m['pool_wait_ms']:.0f}"
             logger.info(
-                "method=%s path=%s status=%d duration_ms=%.0f%s user=%s company=%s",
+                "method=%s path=%s status=%d duration_ms=%.0f%s"
+                " user=%s company=%s%s",
                 request.method, path, response.status_code, elapsed_ms,
-                stages, user_id, company_id,
+                stages, user_id, company_id, pw,
             )
         response.headers["X-Response-Time"] = f"{elapsed_ms:.0f}ms"
         return response
