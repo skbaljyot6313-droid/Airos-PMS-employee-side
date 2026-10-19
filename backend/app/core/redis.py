@@ -32,7 +32,14 @@ async def get_redis() -> Redis | None:
     """Shared async client — None when unconfigured/unreachable.
 
     Bounded by connect/socket timeouts so a dead Redis can never hang a
-    request path.
+    request path. The client is wrapped in TimedRedis so every command
+    lands in the request's X-Redis timing bucket.
+
+    The startup probe runs ONCE: the previous implementation PINGed on
+    every get_redis() call — 2–3 extra Redis round trips per request for
+    zero benefit, since every consumer already wraps its ops in
+    try/except-and-degrade. Mid-run failures surface through the ops
+    themselves; a later success implies recovery without a probe.
     """
     global _client, _available
     if not settings.REDIS_URL:
@@ -47,17 +54,17 @@ async def get_redis() -> Redis | None:
                 retry_on_timeout=True,
             )
         )
-    if _available is False:
-        return _client  # caller still gets the client; ops fail fast & degrade
+    if _available is True or _available is False:
+        # Verified once (or failed once) — ops still execute either way;
+        # callers degrade on failure. No per-call health probe.
+        return _client
     try:
         await _client.ping()
-        if _available is not True:
-            logger.info("Redis connection verified")
+        logger.info("Redis connection verified")
         _available = True
     except Exception as exc:
-        if _available is not False:
-            logger.warning("Redis unreachable (%s) — degrading to local fallbacks",
-                           type(exc).__name__)
+        logger.warning("Redis unreachable (%s) — degrading to local fallbacks",
+                       type(exc).__name__)
         _available = False
     return _client
 
