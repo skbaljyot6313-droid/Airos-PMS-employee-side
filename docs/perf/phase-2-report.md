@@ -34,3 +34,31 @@ row simply yields `not_assigned`).
 **Staging check**: compare `X-DB-Count` on `/bootstrap` vs the four legacy
 calls on a real property graph; verify `ref_version` stability across
 identical payloads and drift across content changes.
+
+## 2.2 — User-row cache for `get_current_user`
+
+**Commit**: this commit · **Key**: `mt:authctx:user:{uid}` · **TTL**: 60 s.
+
+Every authenticated request used to pay one Postgres round trip
+(`SELECT users … joinedload(company)`) just to resolve the caller. Now the
+users+company row is read-through cached in Redis; a hit rebuilds the ORM
+instances and attaches them to the request session.
+
+| Design point | Implementation |
+|---|---|
+| Reconstruction safety | `_restore_columns` + `make_transient_to_detached` + `session.add` — persistent, columns NOT dirty, updates emit UPDATE (never INSERT, never stale write-back). `merge(load=False)` was tried and rejected — it marks every copied column dirty, which could write stale values back on a later commit. |
+| Joined company survives | `user.__dict__["company"]` manual eager-load — `user.company.*` reads work without a lazy query |
+| is_active semantics | checked on the returned instance in both paths; a warm cache tolerates deactivation ≤60 s (approved bound — SA-backend writes are TTL-guarded) |
+| This service's own writes | `PATCH /auth/me` evicts via `evict_user_cache` post-commit |
+| sid revocation | unchanged — checked on every request before the user load, never cached |
+| Identity conflict | if the row is already in the session, `session.add` raises → falls back to `session.get` (returns the attached instance) |
+| Redis down | falls through to `get_by_id` — identical to before |
+
+**Tests**: `tests/unit/test_user_cache.py` — 7 tests (miss populates,
+hit skips DB + restores company, UPDATE-not-INSERT regression, eviction
+forces DB read, sid revocation on hits, TTL bound both directions,
+no-Redis fallback). Suite: **328/328** green.
+
+**Net effect**: `X-DB-Count` drops by 1 on every authenticated request
+(cache-warm), and `X-DB-Exec-ms`/`X-PoolWait-ms` move correspondingly —
+exactly what the Phase-0 headers are there to measure.
