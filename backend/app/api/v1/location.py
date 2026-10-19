@@ -12,7 +12,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.dependencies.auth import require_attendance_participant
+from app.dependencies.auth import (
+    TrackingPrincipal,
+    get_tracking_principal,
+    require_attendance_participant,
+)
 from app.models.user import User
 from app.schemas.location import (
     LocationStartResponse,
@@ -51,18 +55,19 @@ async def start_tracking(
 @router.post("/current")
 async def post_current_location(
     payload: LocationUpdate,
-    user: User = Depends(require_attendance_participant),
+    principal: TrackingPrincipal = Depends(get_tracking_principal),
 ):
     """Ingest one position fix — Redis only, pipelined, idempotent on
-    (employee, session, sequence)."""
-    return await location_live.post_current(user, payload)
+    (employee, session, sequence). Auth uses the lightweight principal so
+    the ~10 s per-employee hot path doesn't do a users-row lookup."""
+    return await location_live.post_current(principal, payload)
 
 
 @router.get("/current")
 async def get_current_location(
-    user: User = Depends(require_attendance_participant),
+    principal: TrackingPrincipal = Depends(get_tracking_principal),
 ):
-    return await location_live.get_current(user)
+    return await location_live.get_current(principal)
 
 
 @router.post(

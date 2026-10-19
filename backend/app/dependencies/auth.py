@@ -9,9 +9,11 @@ The user's company_id is the authoritative tenant scope — services must
 filter by current_user.company_id, never trust a client-supplied value.
 """
 
+import json
 import secrets
 import uuid
 from collections.abc import Callable
+from typing import NamedTuple
 
 from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -22,6 +24,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import AppError, LiveLocationUnavailable
 from app.core.logging import get_logger
+from app.core.redis import get_redis
 from app.core.security import decode_access_token
 from app.models.user import User, UserRole
 from app.repositories.user import UserRepository
@@ -91,6 +94,122 @@ require_employee = require_role(
 require_attendance_participant = require_role(
     UserRole.SUPER_ADMIN, UserRole.EMPLOYEE,
 )
+
+
+# ---------------------------------------------------------------------------
+# Lightweight principal for the location hot path
+#
+# POST /location/current fires every ~10 s per tracking employee; running
+# the full get_current_user (a users-row lookup) per fix was the single
+# largest steady-state Postgres consumer. This dependency keeps the same
+# guarantees — valid JWT, live Redis session, role gate, employee link —
+# but resolves employee/property context from a 60-second Redis cache,
+# falling back to Postgres on a miss or outage.
+#
+# Trade-off (approved): a deactivated employee can keep ingesting for up
+# to 60 s — the cache TTL bounds it. Logout still kills the session
+# instantly via the sid check, which is NOT cached.
+# ---------------------------------------------------------------------------
+
+
+class TrackingPrincipal(NamedTuple):
+    user_id: uuid.UUID
+    employee_id: uuid.UUID | None
+    property_id: uuid.UUID | None
+    company_id: uuid.UUID | None
+    role: str | None
+
+
+_TRACKING_ROLES = {UserRole.SUPER_ADMIN.value, UserRole.EMPLOYEE.value}
+_AUTH_CTX_TTL = 60  # seconds
+
+
+def _auth_ctx_key(user_id: uuid.UUID) -> str:
+    return f"mt:authctx:{user_id}"
+
+
+async def get_tracking_principal(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: AsyncSession = Depends(get_db),
+) -> TrackingPrincipal:
+    """JWT + session + role gate, with Redis-cached employee context.
+
+    Used ONLY by the location ingest/self-read routes where the handler
+    needs employee_id/property_id but nothing else on the User row."""
+    if credentials is None:
+        raise Unauthenticated()
+    claims = decode_access_token(credentials.credentials)
+    if claims is None:
+        raise Unauthenticated(
+            "Your session has expired. Please sign in again."
+        )
+    sid = claims.get("sid")
+    if sid is not None and not await sessions.alive(sid):
+        raise Unauthenticated(
+            "Your session has expired. Please sign in again."
+        )
+    try:
+        user_id = uuid.UUID(str(claims["sub"]))
+    except (KeyError, ValueError):
+        raise Unauthenticated()
+
+    role = claims.get("role")
+    if role is not None and role not in _TRACKING_ROLES:
+        raise Forbidden()
+
+    # Cache is only trustworthy when the role claim was present (a token
+    # without one must take the DB path so the role gate still applies).
+    ctx = None
+    client = None
+    if role is not None:
+        try:
+            client = await get_redis()
+            if client is not None:
+                raw = await client.get(_auth_ctx_key(user_id))
+                if raw:
+                    ctx = json.loads(raw)
+        except Exception:
+            ctx = None  # cache is an accelerator — miss → DB path
+
+    if ctx is None:
+        user = await UserRepository(session).get_by_id(user_id)
+        if user is None or not user.is_active:
+            raise Unauthenticated(
+                "Your session has expired. Please sign in again."
+            )
+        if user.role.value not in _TRACKING_ROLES:
+            raise Forbidden()
+        ctx = {
+            "employee_id": (
+                str(user.employee_id) if user.employee_id else None
+            ),
+            "property_id": (
+                str(user.property_id) if user.property_id else None
+            ),
+        }
+        try:
+            if client is not None:
+                await client.set(
+                    _auth_ctx_key(user_id), json.dumps(ctx),
+                    ex=_AUTH_CTX_TTL,
+                )
+        except Exception:
+            pass  # cache write is best-effort
+
+    company_raw = claims.get("company_id")
+    return TrackingPrincipal(
+        user_id=user_id,
+        employee_id=(
+            uuid.UUID(ctx["employee_id"]) if ctx.get("employee_id")
+            else None
+        ),
+        property_id=(
+            uuid.UUID(ctx["property_id"]) if ctx.get("property_id")
+            else None
+        ),
+        company_id=uuid.UUID(company_raw) if company_raw else None,
+        role=role,
+    )
 
 
 # ---------------------------------------------------------------------------

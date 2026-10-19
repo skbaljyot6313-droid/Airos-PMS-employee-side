@@ -32,7 +32,6 @@ from app.core.config import settings
 from app.core.exceptions import LiveLocationUnavailable
 from app.core.logging import get_logger
 from app.core.rate_limit import RateLimited, check_rate_limit
-from app.models.user import User
 from app.schemas.location import LocationUpdate
 from app.services import location_tracking as tracking
 from app.services.structure import ValidationErr
@@ -72,7 +71,7 @@ def location_key(employee_id: uuid.UUID) -> str:
 LIVE_TTL_SECONDS = settings.LOCATION_CURRENT_TTL_SECONDS
 
 
-def _require_employee(user: User) -> uuid.UUID:
+def _require_employee(user) -> uuid.UUID:
     from app.dependencies.auth import Forbidden
 
     if user.employee_id is None:
@@ -120,8 +119,11 @@ def _num(value) -> str:
     return repr(float(value))
 
 
-async def post_current(user: User, payload: LocationUpdate) -> dict:
+async def post_current(user, payload: LocationUpdate) -> dict:
     """Ingest one fix: validate → dedupe → pipeline-write all views.
+
+    `user` may be a full User row or a TrackingPrincipal — only
+    employee_id and property_id are read here.
 
     Round trips: (1) event dedup SET NX + HGETALL of the previous fix
     (speed sanity), (2) the write pipeline — current HASH + TTL, live
@@ -360,7 +362,7 @@ def _parse(raw: dict) -> dict:
     return out
 
 
-async def get_current(user: User) -> dict:
+async def get_current(user) -> dict:
     """The caller's own latest fix — {is_live: false} when absent or
     Redis is unreachable (latest-only: a missed/expired key is simply
     'not live'). No other employee's key is ever read."""
