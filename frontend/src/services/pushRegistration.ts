@@ -28,7 +28,7 @@ import {
 import { registerDeviceApi, unregisterDeviceApi } from '../api/notifications';
 import { StaffNotification } from '../types';
 
-const APP_VERSION = '1.0.12'; // keep in sync with app.json expo.version
+const APP_VERSION_FALLBACK = '1.0.13'; // only when App.getInfo is unavailable
 const DEVICE_ID_KEY = 'airos_device_id';
 
 export type PushTap = { taskId?: string; ticketId?: string };
@@ -52,12 +52,27 @@ function deviceId(): string {
   return cachedDeviceId;
 }
 
+let cachedAppVersion: string | null = null;
+
+/** Installed version from native package metadata — keeps /devices/register
+ *  telemetry accurate without a hardcoded constant drifting per release. */
+async function appVersion(): Promise<string> {
+  if (cachedAppVersion === null) {
+    try {
+      cachedAppVersion = (await CapacitorApp.getInfo()).version || APP_VERSION_FALLBACK;
+    } catch {
+      cachedAppVersion = APP_VERSION_FALLBACK;
+    }
+  }
+  return cachedAppVersion;
+}
+
 async function uploadToken(token: string): Promise<void> {
   await registerDeviceApi({
     deviceId: deviceId(),
     pushToken: token,
     platform: 'android',
-    appVersion: APP_VERSION,
+    appVersion: await appVersion(),
   });
 }
 
