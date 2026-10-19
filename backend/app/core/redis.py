@@ -28,6 +28,21 @@ def redis_configured() -> bool:
     return bool(settings.REDIS_URL)
 
 
+def _mark_failure() -> None:
+    """An op just failed — flip health to UNKNOWN so the NEXT get_redis
+    call re-probes connectivity once, rather than waiting on stale state."""
+    global _available
+    if _available is not None:
+        _available = None
+
+
+def _mark_ok() -> None:
+    """An op just succeeded — the client is live again; no probe needed."""
+    global _available
+    if _available is not True:
+        _available = True
+
+
 async def get_redis() -> Redis | None:
     """Shared async client — None when unconfigured/unreachable.
 
@@ -35,11 +50,11 @@ async def get_redis() -> Redis | None:
     request path. The client is wrapped in TimedRedis so every command
     lands in the request's X-Redis timing bucket.
 
-    The startup probe runs ONCE: the previous implementation PINGed on
-    every get_redis() call — 2–3 extra Redis round trips per request for
-    zero benefit, since every consumer already wraps its ops in
-    try/except-and-degrade. Mid-run failures surface through the ops
-    themselves; a later success implies recovery without a probe.
+    Health is op-outcome driven, not per-call PING: the startup probe runs
+    once; a failed op flips state to unknown and the next get_redis() call
+    re-probes once; a successful op marks the client live again. Ops still
+    execute in every state — fail-open/fail-closed semantics stay with the
+    callers, who degrade as before.
     """
     global _client, _available
     if not settings.REDIS_URL:
@@ -52,12 +67,17 @@ async def get_redis() -> Redis | None:
                 socket_connect_timeout=settings.REDIS_CONNECT_TIMEOUT,
                 socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
                 retry_on_timeout=True,
-            )
+            ),
+            on_error=_mark_failure,
+            on_ok=_mark_ok,
         )
-    if _available is True or _available is False:
-        # Verified once (or failed once) — ops still execute either way;
-        # callers degrade on failure. No per-call health probe.
+    if _available is True:
         return _client
+    if _available is False:
+        # Last probe failed — ops still execute (callers degrade); the
+        # next failed op marks unknown → re-probe. No per-call ping.
+        return _client
+    # unknown — probe once
     try:
         await _client.ping()
         logger.info("Redis connection verified")

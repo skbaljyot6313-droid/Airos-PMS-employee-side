@@ -109,6 +109,13 @@ require_attendance_participant = require_role(
 # Trade-off (approved): a deactivated employee can keep ingesting for up
 # to 60 s — the cache TTL bounds it. Logout still kills the session
 # instantly via the sid check, which is NOT cached.
+#
+# No invalidation hook exists for the cached fields (employee_id,
+# property_id): this service never writes them — user.is_active and
+# employee links are mutated by the SA backend against the shared DB,
+# and PATCH /auth/me only touches name/phone/email. The 60s TTL is the
+# sole staleness bound; add an explicit eviction here if this service
+# ever gains a write path for those fields.
 # ---------------------------------------------------------------------------
 
 
