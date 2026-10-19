@@ -194,55 +194,11 @@ async def test_zone_mutation_evicts_scope_cache(session, seed, fake_redis):
     assert len(keys) == 0
 
 
-async def _make_tenant(session, tag: str):
-    """A second tenant (company/property/user/employee) for isolation
-    tests."""
-    from app.models.company import Company
-    from app.models.employee import Employee
-    from app.models.property import Property
-    from app.models.user import User, UserRole
-
-    company = Company(
-        company_name=f"Co-{tag}", brand_name=f"Co-{tag}",
-        email=f"c-{tag}@x.test",
-        phone_number="1", address="a", pin_code="1",
-    )
-    session.add(company)
-    await session.flush()
-    prop = Property(
-        company_id=company.id, name=f"Prop-{tag}", code=tag[:4],
-        location="l", city="c", state="s",
-        manager_name="m", manager_email="m@x.test",
-    )
-    session.add(prop)
-    await session.flush()
-    emp = Employee(
-        company_id=company.id, property_id=prop.id,
-        name=f"W-{tag}", email=f"e-{tag}@x.test", status="active",
-    )
-    session.add(emp)
-    await session.flush()
-    user = User(
-        company_id=company.id, property_id=prop.id, name=f"U-{tag}",
-        email=f"u-{tag}@x.test", username=f"u{tag}", password_hash="x",
-        role=UserRole.EMPLOYEE, employee_id=emp.id,
-    )
-    admin = User(
-        company_id=company.id, property_id=prop.id, name=f"A-{tag}",
-        email=f"a-{tag}@x.test", username=f"a{tag}", password_hash="x",
-        role=UserRole.SUPER_ADMIN,
-    )
-    session.add_all([user, admin])
-    await session.commit()
-    return {"company": company, "prop": prop, "user": user, "admin": admin,
-            "employee": emp}
-
-
-async def test_cross_tenant_isolation(session, seed, fake_redis):
+async def test_cross_tenant_isolation(session, seed, fake_redis, make_tenant):
     """Company-scoped cache entries must never leak between tenants:
     the key embeds company_id + employee property scope."""
     from app.models.structure import Zone
-    t1, t2 = seed, await _make_tenant(session, "B")
+    t1, t2 = seed, await make_tenant("B")
     session.add(Zone(property_id=t1["prop"].id, name="Zone-A", code="ZA",
                      zone_type="stay"))
     session.add(Zone(property_id=t2["prop"].id, name="Zone-B", code="ZB",
@@ -267,13 +223,15 @@ async def test_cross_tenant_isolation(session, seed, fake_redis):
     assert keys == expected
 
 
-async def test_zone_eviction_only_own_scope(session, seed, fake_redis):
+async def test_zone_eviction_only_own_scope(
+    session, seed, fake_redis, make_tenant
+):
     """A zone mutation in tenant 1 evicts tenant-1 keys only — tenant 2's
     cached block survives untouched."""
     from app.services.structure import StructureService
     from app.schemas.structure import ZoneCreateRequest
 
-    t2 = await _make_tenant(session, "B")
+    t2 = await make_tenant("B")
     await boot.get_bootstrap(seed["emp_user"], session)
     await boot.get_bootstrap(t2["user"], session)
     b_key = f"mt:boot:scope:{t2['company'].id}:{t2['user'].property_id}"

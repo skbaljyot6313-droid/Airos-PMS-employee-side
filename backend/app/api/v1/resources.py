@@ -29,10 +29,19 @@ async def list_zones(
     # client does. Still executes the query (one indexed list read);
     # saving the round trip entirely is what /bootstrap's scope cache is
     # for — ETag saves the transfer + parse on every unchanged poll.
+    # private+no-cache: per-tenant payload must revalidate each time;
+    # Vary: Authorization stops shared caches cross-serving tenants.
     etag = 'W/"' + hashlib.sha256(
         json.dumps(jsonable_encoder(result), sort_keys=True).encode()
     ).hexdigest()[:24] + '"'
-    if request.headers.get("if-none-match") == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED)
-    response.headers["ETag"] = etag
+    res = (
+        Response(status_code=status.HTTP_304_NOT_MODIFIED)
+        if request.headers.get("if-none-match") == etag
+        else response
+    )
+    res.headers["ETag"] = etag
+    res.headers["Cache-Control"] = "private, no-cache"
+    res.headers["Vary"] = "Authorization"
+    if res.status_code == status.HTTP_304_NOT_MODIFIED:
+        return res
     return result
