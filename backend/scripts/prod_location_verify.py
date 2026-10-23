@@ -1,8 +1,13 @@
-"""Production location-API verification — runs the real chain against
-the deployed Railway backend:
+"""Live location-API verification — runs the real chain against a
+deployed backend:
 
     login -> /location/start -> /location/current -> /admin/live-locations
     -> /admin/location-history -> duplicate + delayed-ordering checks
+
+The target is LOC_VERIFY_BASE_URL (e.g. https://<your-api-host>/api/v1) —
+required, no default. This repo no longer hardcodes the old Railway
+production URL; point it explicitly at whatever deployment you intend to
+verify.
 
 Prints PASS/FAIL per step; never prints the service key. Employee coords
 in output only for the synthetic test employee.
@@ -14,7 +19,7 @@ import sys
 
 import httpx
 
-BASE = "https://employee-api-production-c0e3.up.railway.app/api/v1"
+BASE = os.environ.get("LOC_VERIFY_BASE_URL", "").rstrip("/")
 LOGIN_ID = os.environ.get("LOC_VERIFY_LOGIN", "locverify@demo.local")
 PASSWORD = os.environ.get("LOC_VERIFY_PASSWORD")
 EMP_ID = "de100000-0000-4000-8000-0000000000e1"
@@ -22,6 +27,10 @@ PROP_ID = "de100000-0000-4000-8000-0000000000d1"
 
 if not PASSWORD:
     raise SystemExit("set LOC_VERIFY_PASSWORD")
+if not BASE:
+    raise SystemExit(
+        "set LOC_VERIFY_BASE_URL (e.g. https://<your-api-host>/api/v1)"
+    )
 
 
 def service_key() -> str:

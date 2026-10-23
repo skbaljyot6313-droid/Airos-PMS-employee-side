@@ -27,9 +27,16 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - Frontend: `npm run dev` (tsx server.ts), `npm run build` (vite), `npm run lint`
   (`tsc --noEmit`), `npm run test` (vitest).
 - CI: `.github/workflows/ci.yml` (backend pytest, frontend typecheck+build,
-  android assembleRelease). Deploy: `deploy-railway.yml` (`railway up --service
-  employee-api`), `release-android.yml` (EAS APK + `POST /mobile/releases`).
-- Railway prod API: `https://employee-api-production-c0e3.up.railway.app/api/v1`.
+  android assembleRelease); `build-android.yml` (manual APK artifact build
+  only — no deploy step).
+- Deployment: NONE configured. This copy was detached from the old Railway
+  production environment (`dev/infrastructure-isolation`): `railway.toml`,
+  `deploy-railway.yml`, `centrifugo-vars.yml`, and `release-android.yml`
+  were removed, and no remaining workflow can reach Railway. Any future
+  hosting is configured fresh — do not resurrect the old Railway wiring.
+- Former prod API (dead reference — this repo no longer deploys there):
+  `https://employee-api-production-c0e3.up.railway.app/api/v1`. Docs like
+  `location_api.md` still cite it for the pre-isolation deployment.
 
 ## Backend layout (`backend/app/`)
 

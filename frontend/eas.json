@@ -5,9 +5,6 @@
   "build": {
     "production": {
       "node": "22.21.0",
-      "env": {
-        "VITE_API_URL": "https://employee-api-production-c0e3.up.railway.app/api/v1"
-      },
       "android": {
         "image": "ubuntu-24.04-jdk-17-ndk-r27b",
         "buildType": "apk"

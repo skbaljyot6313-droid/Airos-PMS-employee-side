@@ -8,7 +8,9 @@ RUN npm ci
 COPY . .
 
 # Baked into the JS bundle at build time — public API base, never a secret.
-ARG VITE_API_URL=https://employee-api-production-c0e3.up.railway.app/api/v1
+# Defaults to localhost; pass --build-arg VITE_API_URL=<your-api>/api/v1 for
+# real deployments (the old Railway production URL was removed on purpose).
+ARG VITE_API_URL=http://localhost:8000/api/v1
 ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 

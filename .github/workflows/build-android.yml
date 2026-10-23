@@ -34,11 +34,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Public API base baked into the bundle — never a secret.
-      - name: Build web bundle against production API
+      # Public API base baked into the bundle — never a secret. This copy is
+      # detached from the old Railway production deployment; point this at your
+      # own backend URL for real device builds (localhost works for web only).
+      - name: Build web bundle
         run: npm run build
         env:
-          VITE_API_URL: https://employee-api-production-c0e3.up.railway.app/api/v1
+          VITE_API_URL: http://localhost:8000/api/v1
 
       - name: Sync Capacitor Android project
         run: npx cap sync android

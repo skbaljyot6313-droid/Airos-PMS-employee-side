@@ -1,4 +1,7 @@
-"""Idempotent test-employee seed for production location verification.
+"""Idempotent test-employee seed for live location-API verification.
+
+Targets whatever DATABASE_URL the backend is configured with — point it at
+your own deployment's database, never one you don't intend to write to.
 
 Creates a dedicated tenant chain — company 'LocVerify', property
 'LOC-VERIFY', employee 'Location Verify', EMPLOYEE user
