@@ -550,7 +550,7 @@ export const ProfileScreen: React.FC = () => {
             </div>
             <div>
               <h3 className="text-lg font-bold text-[#20292C] font-['Space_Grotesk']">
-                Sign Out of AiROS Staff?
+                Sign Out of Airco PMS Staff?
               </h3>
               <p className="text-xs text-[#667174] mt-1 leading-relaxed">
                 You will need your staff credentials to sign back in and access active operational shifts.

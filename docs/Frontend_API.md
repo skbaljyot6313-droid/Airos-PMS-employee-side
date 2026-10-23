@@ -1,8 +1,8 @@
-# AiROS Staff — Frontend API & Data Documentation
+# Airco PMS Staff — Frontend API & Data Documentation
 
 Deep index of the employee-facing frontend (`production/employee/frontend`).
 
-**App:** AiROS Staff — a mobile-first operations app for property employees (tasks, checklists, photo evidence, maintenance ticketing).
+**App:** Airco PMS Staff — a mobile-first operations app for property employees (tasks, checklists, photo evidence, maintenance ticketing).
 **Stack:** React 19 + TypeScript + Vite 8 + Tailwind CSS 4 + Capacitor 7 (Android) + Express static host (`server.ts`).
 **Backend contract:** FastAPI backend mounted at `/api/v1` (base URL from `VITE_API_URL`). All IDs on the wire are `*_uid` strings.
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Eye, EyeOff, ShieldCheck, Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
 import { PrimaryButton } from '../../components/common/Buttons';
 
 export const LoginScreen: React.FC = () => {
@@ -22,16 +22,14 @@ export const LoginScreen: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col justify-between p-6 bg-white overflow-y-auto">
       <div className="w-full max-w-sm mx-auto my-auto py-6">
-        {/* AiROS Staff Enterprise Header */}
+        {/* Airco PMS Staff Enterprise Header */}
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-9 h-9 rounded-xl bg-[#33B059] flex items-center justify-center text-white shadow-sm">
-              <ShieldCheck className="w-5 h-5 stroke-[2.5]" />
-            </div>
+            <img src="/airco-pms-logo.svg" alt="Airco PMS" className="w-9 h-9 rounded-xl shadow-sm" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xl font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
-                  AiROS
+                  Airco PMS
                 </span>
                 <span className="text-[11px] font-bold uppercase tracking-wider bg-[#E8F7ED] text-[#278B46] px-2 py-0.5 rounded-full border border-[#BBECCC]">
                   Staff
@@ -128,7 +126,7 @@ export const LoginScreen: React.FC = () => {
       </div>
 
       <div className="text-center text-[11px] text-[#8D999C] py-2">
-        AiROS Staff Mobile OS · Authorized Field Personnel Only
+        Airco PMS Staff Mobile OS · Authorized Field Personnel Only
       </div>
     </div>
   );

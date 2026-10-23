@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize AiROS employee-api access-log stage timings.
+"""Summarize Airco PMS employee-api access-log stage timings.
 
 Reads exported Railway log lines from a file argument or stdin, parses
 the AccessLogMiddleware line:

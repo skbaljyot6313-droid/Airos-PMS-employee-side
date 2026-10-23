@@ -1,6 +1,6 @@
-# AiROS Employee Backend — API Documentation
+# Airco PMS Employee Backend — API Documentation
 
-Deep index of `production/employee/backend` — a FastAPI modular monolith serving the AiROS Staff mobile/web frontend. Extracted from the AiROS management backend; preserves the existing PostgreSQL schema, JWT auth, and wire contracts (`*_uid` keys, snake_case).
+Deep index of `production/employee/backend` — a FastAPI modular monolith serving the Airco PMS Staff mobile/web frontend. Extracted from the Airco PMS management backend; preserves the existing PostgreSQL schema, JWT auth, and wire contracts (`*_uid` keys, snake_case).
 
 **Stack:** FastAPI · SQLAlchemy 2 async (asyncpg) · PostgreSQL (Supabase-compatible) · Alembic · Argon2id · PyJWT (HS256) · optional Redis (rate limiting) · S3/Supabase/local media storage.
 **API root:** `{origin}/api/v1` (`API_V1_PREFIX`). OpenAPI at `/docs` + `/openapi.json` (disabled in production).
@@ -25,7 +25,7 @@ app/
 │                              # resource_state, work_allocation, task_location
 ├── repositories/              # workspace (scoped reads), user, company, refresh_token
 ├── schemas/                   # unversioned DTOs + serializers; schemas/v1 re-exports
-├── models/                    # SQLAlchemy ORM (existing AiROS schema)
+├── models/                    # SQLAlchemy ORM (existing Airco PMS schema)
 ├── domain/                    # resource_states, transitions, resource_events
 └── core/                      # config, database, security, exceptions, rate_limit,
                                # storage, redis, logging, middleware

@@ -54,7 +54,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * AiROS background location tracking — a location-type foreground service.
+ * Airco PMS background location tracking — a location-type foreground service.
  *
  * Why native: the WebView timer dies with the UI. This service owns a
  * Fused Location Provider subscription (LocationManager fallback when Play
@@ -198,7 +198,7 @@ public class LocationTrackingService extends Service {
             NotificationChannel ch = new NotificationChannel(
                     CHANNEL_ID, "Location tracking",
                     NotificationManager.IMPORTANCE_LOW);
-            ch.setDescription("Shown while AiROS records work location.");
+            ch.setDescription("Shown while Airco PMS records work location.");
             NotificationChannel work = new NotificationChannel(
                     WORK_CHANNEL_ID, "Work assignments",
                     NotificationManager.IMPORTANCE_HIGH);
@@ -221,7 +221,7 @@ public class LocationTrackingService extends Service {
                 : android.R.drawable.ic_menu_mylocation;
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(icon)
-                .setContentTitle("AiROS location tracking")
+                .setContentTitle("Airco PMS location tracking")
                 .setContentText("Your work location is being recorded.")
                 .setOngoing(true)
                 .setContentIntent(pi)

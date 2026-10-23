@@ -1,5 +1,5 @@
 /**
- * AiROS Staff — Design Tokens
+ * Airco PMS Staff — Design Tokens
  * Follows enterprise SaaS + operational clarity principles
  */
 

@@ -1,5 +1,5 @@
 /**
- * Static host for AiROS Staff — Vite dev server (middleware mode) in dev,
+ * Static host for Airco PMS Staff — Vite dev server (middleware mode) in dev,
  * dist/ statics in production. The real API lives on the FastAPI backend
  * (VITE_API_URL); this server serves the app shell only.
  */
@@ -57,7 +57,7 @@ async function start() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`AiROS Staff app listening on port ${PORT}`);
+    console.log(`Airco PMS Staff app listening on port ${PORT}`);
   });
 }
 

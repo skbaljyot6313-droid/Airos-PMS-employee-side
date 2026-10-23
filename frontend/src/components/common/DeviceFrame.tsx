@@ -14,7 +14,7 @@ export const DeviceFrame: React.FC<DeviceFrameProps> = ({ children }) => {
       <div className="hidden md:flex items-center justify-between w-full max-w-[420px] px-3 py-2 text-xs text-[#8D999C] mb-2">
         <div className="flex items-center gap-2">
           <span className="inline-block w-2 h-2 rounded-full bg-[#33B059]" />
-          <span className="font-semibold text-white tracking-wide uppercase text-[10px]">AiROS Staff Mobile</span>
+          <span className="font-semibold text-white tracking-wide uppercase text-[10px]">Airco PMS Staff Mobile</span>
         </div>
         <button
           onClick={() => setFramed(!framed)}

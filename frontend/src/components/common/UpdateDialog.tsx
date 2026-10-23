@@ -32,12 +32,12 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
       case 'downloading':
         return {
           title: 'Downloading update',
-          text: 'Please keep AiROS open while the update downloads.',
+          text: 'Please keep Airco PMS open while the update downloads.',
         };
       case 'needs_permission':
         return {
           title: 'Allow installation',
-          text: 'Android requires permission to install this update. Enable "Install unknown apps" for AiROS Employee, then return here to continue.',
+          text: 'Android requires permission to install this update. Enable "Install unknown apps" for Airco PMS Employee, then return here to continue.',
         };
       case 'error':
         return {
@@ -54,11 +54,11 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
         return required
           ? {
               title: 'Update required',
-              text: 'Your version of AiROS Employee is no longer supported. Please update to continue.',
+              text: 'Your version of Airco PMS Employee is no longer supported. Please update to continue.',
             }
           : {
               title: 'Update available',
-              text: 'A new version of AiROS Employee is available.',
+              text: 'A new version of Airco PMS Employee is available.',
             };
     }
   })();

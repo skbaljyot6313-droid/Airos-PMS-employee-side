@@ -1,4 +1,4 @@
-"""AiROS Staff local launcher.
+             """Airco PMS Staff local launcher.
 
 Default mode runs the whole system in Docker (postgres + redis + migrations
 + api + web) via the root docker-compose.yml:
@@ -102,7 +102,7 @@ def check_port_free(bind_addr: str, port: int, label: str) -> None:
 def port_open(host: str, port: int) -> bool:
     try:
         socket.create_connection((host, port), timeout=0.5).close()
-        return True
+        return True     
     except OSError:
         return False
 
@@ -441,7 +441,7 @@ def docker_mode(args: argparse.Namespace) -> int:
     stream = start_stream(child, "DOCKER")
 
     print("========================================")
-    print("AiROS Staff - Docker stack")
+    print("Airco PMS Staff - Docker stack")
     print("========================================")
     print("Frontend: http://localhost:3000")
     print("API:      http://localhost:8000/api/v1   Docs: http://localhost:8000/docs")
@@ -473,7 +473,7 @@ def docker_mode(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run the AiROS Staff system (Docker by default, "
+        description="Run the Airco PMS Staff system (Docker by default, "
                     "--native for bare-metal dev servers).")
     parser.add_argument("--backend-port", type=int)
     parser.add_argument("--frontend-port", type=int)
@@ -541,7 +541,7 @@ def main() -> int:
         children["FRONTEND"] = spawn([npm, "run", "dev"], FRONTEND, fe_env)
 
     print("========================================")
-    print("AiROS Staff Development Environment")
+    print("Airco PMS Staff Development Environment")
     print("========================================")
     if run_backend:
         print(f"Backend:  http://{host}:{bport}   API: http://{host}:{bport}/api/v1   Docs: http://{host}:{bport}/docs")

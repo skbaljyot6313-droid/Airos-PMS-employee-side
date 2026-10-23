@@ -2,7 +2,7 @@
 
 ## Overview
 
-`AiROS Staff Mobile → FastAPI /api/v1 → domain router → service → repository/query → SQLAlchemy → existing AiROS PostgreSQL`.
+`Airco PMS Staff Mobile → FastAPI /api/v1 → domain router → service → repository/query → SQLAlchemy → existing Airco PMS PostgreSQL`.
 
 This is one deployable modular monolith. The public domains are Auth/Profile, Tasks, Maintenance, Resources/Zones, and Media. API routers contain HTTP concerns; extracted services preserve existing lifecycle rules; repositories preserve tenant-scoped reads; ORM models map the existing schema.
 
@@ -22,7 +22,7 @@ The extraction retains Argon2 password verification, HS256 JWT access tokens, ha
 
 ## Database and migrations
 
-The backend connects to the existing AiROS PostgreSQL schema. All 33 linear Alembic revisions are retained because later employee-required revisions depend on earlier revisions and Alembic must resolve the current database head. Do not initialize an unrelated schema or run destructive migrations against production.
+The backend connects to the existing Airco PMS PostgreSQL schema. All 33 linear Alembic revisions are retained because later employee-required revisions depend on earlier revisions and Alembic must resolve the current database head. Do not initialize an unrelated schema or run destructive migrations against production.
 
 ## Infrastructure
 

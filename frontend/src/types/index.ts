@@ -1,5 +1,5 @@
 /**
- * Type definitions for AiROS Staff
+ * Type definitions for Airco PMS Staff
  *
  * Wire contract: FastAPI backend at /api/v1 (tool_21/backend). IDs are
  * `*_uid` strings; the api layer normalizes responses into the display

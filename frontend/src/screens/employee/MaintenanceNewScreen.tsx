@@ -299,7 +299,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
             Maintenance Request Submitted
           </h2>
           <p className="text-xs text-[#667174] max-w-xs mb-6">
-            The issue has been registered in the AiROS operations system and dispatched.
+            The issue has been registered in the Airco PMS operations system and dispatched.
           </p>
 
           <div className="w-full max-w-sm bg-white rounded-2xl p-4 border border-[#E4E8E6] text-left space-y-3 mb-6 shadow-sm">

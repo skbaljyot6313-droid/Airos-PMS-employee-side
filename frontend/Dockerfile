@@ -1,4 +1,4 @@
-# AiROS Staff web bundle — Vite build + express static host (server.ts)
+# Airco PMS Staff web bundle — Vite build + express static host (server.ts)
 FROM node:20-alpine
 WORKDIR /app
 

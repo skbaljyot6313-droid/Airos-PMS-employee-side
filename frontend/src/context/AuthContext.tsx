@@ -124,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // connection-error screen instead of silently landing on Login
         // (which read as an unlogged session wipe on flaky networks).
         setConnectionError(
-          errorMessage(err, 'Unable to reach the AiROS server. Check your connection and try again.')
+          errorMessage(err, 'Unable to reach the Airco PMS server. Check your connection and try again.')
         );
       }
       console.warn('Session restoration failed:', err);

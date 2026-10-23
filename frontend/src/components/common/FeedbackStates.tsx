@@ -45,7 +45,7 @@ interface ErrorStateProps {
 }
 
 export const ErrorState: React.FC<ErrorStateProps> = ({
-  message = "Couldn't connect to AiROS. Check your internet connection and try again.",
+  message = "Couldn't connect to Airco PMS. Check your internet connection and try again.",
   onRetry,
 }) => {
   return (

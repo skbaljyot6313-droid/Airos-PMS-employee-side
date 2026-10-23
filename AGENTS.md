@@ -1,13 +1,13 @@
-# AiROS Staff — codebase index
+# Airco PMS Staff — codebase index
 
-Employee-facing half of the AiROS property-operations platform (extracted from a
+Employee-facing half of the Airco PMS property-operations platform (extracted from a
 larger management backend). Two deployables:
 
-- `backend/` — FastAPI modular monolith (`AiROS Employee API`), SQLAlchemy 2 async
+- `backend/` — FastAPI modular monolith (`Airco PMS Employee API`), SQLAlchemy 2 async
   + asyncpg → PostgreSQL, Alembic (linear chain, ~50 revisions), optional Redis
   (sessions, rate limits, live-location store), Argon2id + JWT auth.
 - `frontend/` — React 19 + TS + Vite + Tailwind 4 + Capacitor 7 Android app
-  (`com.theairco.airos.employee`, "AiROS Staff") served by `server.ts` (Express;
+  (`com.theairco.airos.employee`, "Airco PMS Staff") served by `server.ts` (Express;
   Vite middleware in dev, `dist/` statics in prod).
 
 Detailed docs already exist: `docs/backend_API.md`, `docs/Frontend_API.md`,

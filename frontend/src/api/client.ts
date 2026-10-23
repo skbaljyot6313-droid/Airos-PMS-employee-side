@@ -239,7 +239,7 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     throw {
       status: 0,
       code: 'NETWORK_ERROR',
-      message: 'Unable to connect to the AiROS server. Check your connection and try again.',
+      message: 'Unable to connect to the Airco PMS server. Check your connection and try again.',
     } as ApiError;
   } finally {
     clearTimeout(timer);

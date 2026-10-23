@@ -1,4 +1,4 @@
-"""AiROS employee backend application entrypoint."""
+"""Airco PMS employee backend application entrypoint."""
 
 from contextlib import asynccontextmanager
 
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AiROS Employee API",
+    title="Airco PMS Employee API",
     version="1.0.0",
     docs_url="/docs" if settings.APP_ENV != "production" else None,
     openapi_url="/openapi.json" if settings.APP_ENV != "production" else None,
@@ -43,7 +43,7 @@ register_exception_handlers(app)
 
 @app.get("/health", tags=["health"])
 async def health():
-    return {"status": "ok", "service": "AiROS Employee API", "env": settings.APP_ENV}
+    return {"status": "ok", "service": "Airco PMS Employee API", "env": settings.APP_ENV}
 
 
 @app.get("/health/db", tags=["health"])

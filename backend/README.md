@@ -1,6 +1,6 @@
-# AiROS Employee Backend
+# Airco PMS Employee Backend
 
-Employee-focused FastAPI modular monolith extracted from the AiROS management backend for Staff Mobile. It preserves existing JWT, task, maintenance, resource-state, storage, tenant-scoping, database, and wire behavior while excluding admin/HR/property-management API surfaces.
+Employee-focused FastAPI modular monolith extracted from the Airco PMS management backend for Staff Mobile. It preserves existing JWT, task, maintenance, resource-state, storage, tenant-scoping, database, and wire behavior while excluding admin/HR/property-management API surfaces.
 
 ## Capabilities
 
@@ -9,7 +9,7 @@ Employee-focused FastAPI modular monolith extracted from the AiROS management ba
 - Assigned/reported maintenance list/detail/create/start/resolve
 - Employee maintenance location coverage and zone reads
 - Authenticated evidence uploads through local or object storage
-- Existing AiROS PostgreSQL schema and Alembic history
+- Existing Airco PMS PostgreSQL schema and Alembic history
 
 ## Structure
 
@@ -53,7 +53,7 @@ For import/OpenAPI-only tests, a syntactically valid PostgreSQL URL is sufficien
 docker compose up --build
 ```
 
-The local stack starts Postgres, Redis, migration, and API services. Production should point at the existing managed AiROS PostgreSQL database and durable S3/Supabase storage.
+The local stack starts Postgres, Redis, migration, and API services. Production should point at the existing managed Airco PMS PostgreSQL database and durable S3/Supabase storage.
 
 ## Database and migrations
 

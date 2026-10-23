@@ -1,4 +1,4 @@
-# AiROS employee stack — everything in Docker, locally.
+# Airco PMS employee stack — everything in Docker, locally.
 #
 #   docker compose up --build          # postgres + redis + migrations + api + web
 #   docker compose --profile seed run --rm seed   # demo tenant + logins
