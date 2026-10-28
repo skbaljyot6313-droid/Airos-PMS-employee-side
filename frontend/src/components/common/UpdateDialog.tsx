@@ -101,7 +101,11 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
           </p>
           {flow.phase === 'error' && flow.error && (
             <p className="mt-1 text-[11px] font-mono text-[#B3BABC]">
-              {flow.error}
+              {/failed to fetch|network|timeout|econn|socket|resolve|refused|abort/i.test(
+                flow.error
+              )
+                ? 'connection_error'
+                : flow.error.slice(0, 120)}
             </p>
           )}
 

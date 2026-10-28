@@ -46,6 +46,7 @@ import { MaintenanceDetailScreen } from './screens/employee/MaintenanceDetailScr
 import { ProfileScreen } from './screens/employee/ProfileScreen';
 import { LoadingState } from './components/common/FeedbackStates';
 import { ConnectionErrorScreen } from './components/auth/ConnectionErrorScreen';
+import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 import { MaintenanceTarget, ZoneResource, ZoneSummary } from './types';
 import { perfMarkOnce, perfReportOnce } from './utils/perf';
 
@@ -333,8 +334,10 @@ export default function App() {
   return (
     <AuthProvider>
       <DeviceFrame>
-        <AppNavigator />
-        <UpdateManager />
+        <AppErrorBoundary>
+          <AppNavigator />
+          <UpdateManager />
+        </AppErrorBoundary>
       </DeviceFrame>
     </AuthProvider>
   );

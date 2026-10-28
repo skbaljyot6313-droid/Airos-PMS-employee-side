@@ -4,7 +4,7 @@ Employee-facing half of the Airco PMS property-operations platform (extracted fr
 larger management backend). Two deployables:
 
 - `backend/` — FastAPI modular monolith (`Airco PMS Employee API`), SQLAlchemy 2 async
-  + asyncpg → PostgreSQL, Alembic (linear chain, ~50 revisions), optional Redis
+  + asyncpg → PostgreSQL, Alembic (linear chain, ~40 revisions), optional Redis
   (sessions, rate limits, live-location store), Argon2id + JWT auth.
 - `frontend/` — React 19 + TS + Vite + Tailwind 4 + Capacitor 7 Android app
   (`com.theairco.airos.employee`, "Airco PMS Staff") served by `server.ts` (Express;
@@ -59,9 +59,12 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   resource-state authority — `transition`/`derive`/`repair`/`explain`),
   `attendance.py` (workday + leave-request review), `location_live.py` +
   `location_tracking.py` (Redis hot path + sessions/history),
+  `location.py` (geo fixes at attendance/task actions — RECORD don't
+  reject; flags `outside_geofence`/`low_accuracy`, server clock only),
   `notifications.py`, `push.py` (log|fcm providers), `rollover.py` (IST
   operational-day rollover — present for models/tests, no scheduler runs
-  here), `occupancy.py`, `auth.py`, `mobile_release.py`, `task_location.py`.
+  here), `occupancy.py`, `auth.py`, `mobile_release.py`, `task_location.py`,
+  `bootstrap.py` + `employee_shift.py` (see API surface + index below).
 - `repositories/` — `workspace.py` (company/property-scoped list reads;
   `list_tasks` enforces `Task.employee_id == user.employee_id` for
   employees), `user.py`, `company.py`, `refresh_token.py`, `attendance.py`.
@@ -92,6 +95,7 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   `storage.py` (S3-compatible object store only — Supabase Storage's S3
   endpoint; no local-disk backend),
   `exceptions.py` (dual `detail`+`error` envelopes), `middleware.py`,
+  `metrics.py` (request-local timing/pool-wait instrumentation),
   `logging.py`.
 
 ## API surface (all under `/api/v1`)
@@ -115,7 +119,12 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   supabase.co/CDN hosts they may not reach. Keys are unguessable uuid
   blobs; the regex whitelist makes traversal impossible.
 - `GET|POST /attendance/*` — today/start/break/resume/end, calendar,
-  requests (+cancel; approve/reject are super_admin-only).
+  requests (+cancel; approve/reject are super_admin-only),
+  `GET /attendance/shift` (read-only My Shift over shared SA tables).
+- `GET /bootstrap` — consolidated cold-start payload
+  (user/company/zones/shift/unread_count + `ref_version` + per-section
+  `errors`); gated by `BOOTSTRAP_ENABLED` (404 when off); frontend does
+  not call it yet.
 - `POST /location/start|current|stop`, `GET /location/current`
   (Redis-backed, sessions minted server-side, seq dedup).
 - `GET /notifications`, `unread-count`, `/{uid}/read`;
@@ -159,7 +168,13 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - `services/` — `locationTracker.ts` (orchestrates native tracking;
   web no-op), `nativeLocation.ts` + `updateInstaller.ts` (Capacitor plugin
   bridges), `updateService.ts` (versionCode compare, 4h throttle, pending
-  APK reconcile).
+  APK reconcile), `realtime.ts` (Centrifugo WS — one session socket,
+  employee private channel, invalidation hints), `notificationService.ts`
+  (45s feed poll + realtime/resume nudges), `pushRegistration.ts`
+  (FCM token → `POST /devices/register`).
+- `api/` domains — `client.ts`, `wire.ts`, `auth.ts`, `tasks.ts`,
+  `attendance.ts`, `shift.ts`, `maintenance.ts`, `directory.ts` (zones),
+  `location.ts`, `media.ts`, `mobile.ts` (version check), `notifications.ts`.
 - `android/app/src/main/java/com/airos/staff/` — `LocationTrackingService`
   (foreground FGS + Fused Location Provider + on-disk JSONL retry queue +
   self-refresh on 401 + session re-mint on INVALID_TRACKING_SESSION +
@@ -168,7 +183,8 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   + onTaskRemoved self-restart via AlarmManager so swipe-kill doesn't
   end tracking/notifications while a session is active),
   `LocationTrackerPlugin` (`AirosLocation`), `AppUpdatePlugin`
-  (`AirosUpdate` — APK download/install), `MainActivity`.
+  (`AirosUpdate` — APK download/install), `AiroMessagingService` (FCM
+  data-only → shared seen-notification ledger), `MainActivity`.
 - Version source of truth: `app.json` (`expo.version` +
   `expo.android.versionCode`); `scripts/bump-version.mjs` bumps it.
 
@@ -189,3 +205,53 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - Error envelopes: `{detail:{message,code,field?}}` AND `{error:{code,message}}`.
 - Migrations: full linear Alembic chain retained; apply via
   `alembic upgrade head` (compose `migrate` service / Railway preDeploy).
+
+## Additional implementation index (verified 2026-10-28)
+
+- `api/v1/bootstrap.py` + `services/bootstrap.py`: `GET /bootstrap`, gated by
+  `BOOTSTRAP_ENABLED`, consolidates user/company/zones/shift/unread count.
+  Sections have independent error/null responses and a content-hash
+  `ref_version`; company/zones use a 45s Redis scope cache. The current
+  frontend does NOT call this endpoint: AuthContext still restores through
+  `/auth/me`, with asynchronous zone-name enrichment.
+- `dependencies/auth.py` caches the user/company ORM context for
+  `USER_CACHE_TTL_S` (default 30s); shared-DB SA changes have that staleness
+  bound. Location's separate `TrackingPrincipal` cache is 60s. Session-sid
+  checks precede both caches; these are not instantaneous SA invalidation.
+- `core/database.py`: bounded per-process pool (defaults size 2 + overflow 1,
+  timeout 10s), Supabase-pooler prepared-statement handling, timed session
+  execution, and SQLAlchemy commit/rollback hooks. Production notification
+  pushes are queued as snapshots and scheduled after commit, alongside
+  buffered realtime events; these are best-effort tasks, not a durable outbox.
+- `core/metrics.py` + `middleware.py`: request-local DB/Redis/external timing,
+  pool-wait measurement and access logs; diagnostic response headers default
+  on outside production. Performance tooling/docs live under
+  `backend/scripts/perf/` and `docs/perf/`.
+- `api/client.ts` retries GET-only `503 DATABASE_BUSY` responses at most twice
+  with backoff; mutations and auth endpoints do not use this retry path.
+- `api/tasks.ts` merges operational tasks and assigned maintenance into the
+  task-card model. Checklist completion is a client gate; the submit API
+  sends note/photo URLs, while the service validates evidence. List queries
+  omit evidence/history loads; task details fetch the full record.
+- `services/realtime.ts` uses one session WebSocket and the employee's own
+  private channel. Publications are invalidation hints, not authoritative
+  models. Feed nudges and screen refreshes coalesce over 400ms; notification
+  polling reconciles every 45s and on resume/visibility changes.
+- Native `AiroMessagingService.java` (present in the inspected working tree)
+  forwards data-only FCM messages to the shared seen-notification ledger in
+  `LocationTrackingService`; push and native feed polling share tray dedupe.
+- Raw continuous location fixes/history are Redis-only, with daily history
+  ZSET/GEO partitions; PostgreSQL tracks session lifecycle metadata.
+  Task-action location evidence is a separate `services/location.py` path.
+- Verification map: backend `tests/unit/` covers state/allocation/occupancy,
+  attendance/shifts, bootstrap/cache/session behavior, location, notifications,
+  media/releases, and performance helpers; `tests/api/` checks OpenAPI.
+  Frontend tests cover adapters, auth/refresh, notifications, realtime and
+  updates. CI currently runs backend pytest and frontend typecheck/build,
+  but does NOT run the frontend Vitest suite. Native checked-in tests are
+  scaffold examples, not tracking/updater behavioral coverage.
+- Documentation caveats: `backend/docs/ARCHITECTURE.md` still describes local
+  storage and an older migration count; actual storage is S3-only. Compose's
+  legacy `STORAGE_BACKEND=local`/uploads volume does not enable local storage.
+  `updateService.ts` uses a 4h throttle despite older 24h comments. Removed
+  release/Railway workflow references in comments are not active deployment.

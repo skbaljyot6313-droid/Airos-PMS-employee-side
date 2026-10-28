@@ -72,11 +72,28 @@ export const API_ORIGIN = API_BASE.replace(/\/api\/v\d+$/, '');
 export const mediaUrl = (p: string): string =>
   /^https?:\/\//i.test(p) ? p : `${API_ORIGIN}${p.startsWith('/') ? p : `/${p}`}`;
 
-/** Narrow an unknown thrown value to a display message. */
-export const errorMessage = (e: unknown, fallback: string): string =>
-  typeof e === 'object' && e !== null && 'message' in e && typeof (e as { message: unknown }).message === 'string'
-    ? (e as { message: string }).message
-    : fallback;
+/** Raw technical strings that should never reach the UI — thrown by fetch,
+ *  the Capacitor bridge, and other non-API paths. */
+const TECHNICAL_MESSAGE =
+  /failed to fetch|networkerror|network request failed|load failed|the internet connection appears to be offline|err_internet_disconnected|err_connection|abort:?ed|timeout of \d+|econn|socket|dns|ssl|tls|unexpected token|json\.parse|is not valid json|undefined is not|cannot read propert|null is not/i;
+
+/** Narrow an unknown thrown value to a display message. ApiError messages
+ *  (client.ts) are already user-friendly and pass through; raw technical
+ *  noise from non-API paths (fetch, plugins, JSON) maps to the fallback. */
+export const errorMessage = (e: unknown, fallback: string): string => {
+  if (
+    typeof e === 'object' && e !== null &&
+    'message' in e && typeof (e as { message: unknown }).message === 'string'
+  ) {
+    const msg = (e as { message: string }).message;
+    const isApiError = 'status' in e; // apiClient always stamps a status
+    if (!isApiError && (TECHNICAL_MESSAGE.test(msg) || !msg.trim())) {
+      return fallback;
+    }
+    return msg;
+  }
+  return fallback;
+};
 
 const FALLBACK_MESSAGES: Record<number, string> = {
   400: 'The request was invalid.',
@@ -138,6 +155,8 @@ interface RequestOptions extends RequestInit {
   auth?: boolean;
   /** internal — set by the retry pass so we only refresh once per call. */
   _retried?: boolean;
+  _busyRetries?: number;
+  _netRetries?: number;
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
@@ -178,7 +197,7 @@ const singleFlightRefresh = (): Promise<boolean> => {
 };
 
 export async function apiClient<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { timeoutMs = 45000, auth = true, _retried, ...init } = options;
+  const { timeoutMs = 45000, auth = true, _retried, _busyRetries = 0, _netRetries = 0, ...init } = options;
 
   const headers = new Headers(init.headers || {});
   if (!headers.has('Content-Type') && !(init.body instanceof FormData)) {
@@ -222,7 +241,20 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
     } catch {
       data = undefined;
     }
-    if (!res.ok) throw normalizeError(res.status, data);
+    if (!res.ok) {
+      const error = normalizeError(res.status, data);
+      if (
+        res.status === 503 && error.code === 'DATABASE_BUSY' &&
+        (init.method ?? 'GET').toUpperCase() === 'GET' &&
+        !cleanEndpoint.startsWith('/auth/') && !init.signal?.aborted &&
+        _busyRetries < 2
+      ) {
+        clearTimeout(timer);
+        await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** _busyRetries + Math.random() * 250));
+        return apiClient<T>(endpoint, { ...options, _busyRetries: _busyRetries + 1 });
+      }
+      throw error;
+    }
     return data as T;
   } catch (err: unknown) {
     if (typeof err === 'object' && err !== null && 'status' in err) throw err as ApiError;
@@ -236,10 +268,23 @@ export async function apiClient<T>(endpoint: string, options: RequestOptions = {
         message: 'The request timed out. Check your connection and try again.',
       } as ApiError;
     }
+    // fetch() rejections ("Failed to fetch") cover a wide transient range —
+    // radio switches, TCP resets, preflight hiccups — not just real offline.
+    // Give safe reads one short retry before surfacing an error.
+    const method = (init.method ?? 'GET').toUpperCase();
+    const isRead = method === 'GET' || method === 'HEAD';
+    if (isRead && _netRetries < 1 && !init.signal?.aborted) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      return apiClient<T>(endpoint, { ...options, _netRetries: _netRetries + 1 });
+    }
+    const offline =
+      typeof navigator !== 'undefined' && navigator.onLine === false;
     throw {
       status: 0,
-      code: 'NETWORK_ERROR',
-      message: 'Unable to connect to the Airco PMS server. Check your connection and try again.',
+      code: offline ? 'OFFLINE' : 'NETWORK_ERROR',
+      message: offline
+        ? "You're offline. Reconnect to the internet and we'll retry automatically."
+        : 'Unable to connect to the Airco PMS server. Check your connection and try again.',
     } as ApiError;
   } finally {
     clearTimeout(timer);

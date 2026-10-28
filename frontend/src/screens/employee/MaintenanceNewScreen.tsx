@@ -122,6 +122,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   const { user } = useAuth();
   const [locations, setLocations] = useState<EligibleLocation[]>([]);
   const [loadingLocations, setLoadingLocations] = useState<boolean>(!target);
+  const [locationsLoadFailed, setLocationsLoadFailed] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Guided Form state — location step is skipped when a workspace target is locked
@@ -145,21 +146,25 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [submissionResult, setSubmissionResult] = useState<MaintenanceTicket | null>(null);
 
+  const loadLocations = React.useCallback(async () => {
+    try {
+      setLoadingLocations(true);
+      setError(null);
+      setLocationsLoadFailed(false);
+      const data = await fetchEligibleLocationsApi();
+      setLocations(data);
+    } catch (err: unknown) {
+      setLocationsLoadFailed(true);
+      setError(errorMessage(err, 'Unable to load eligible workplace locations.'));
+    } finally {
+      setLoadingLocations(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (target) return;
-    async function loadLocations() {
-      try {
-        setLoadingLocations(true);
-        const data = await fetchEligibleLocationsApi();
-        setLocations(data);
-      } catch (err: unknown) {
-        setError(errorMessage(err, 'Unable to load eligible workplace locations.'));
-      } finally {
-        setLoadingLocations(false);
-      }
-    }
-    loadLocations();
-  }, [target]);
+    void loadLocations();
+  }, [target, loadLocations]);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const inputEl = e.target;
@@ -281,6 +286,20 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
       <div className="flex-1 flex flex-col bg-[#F7F8F6]">
         <ScreenHeader title="Raise Maintenance" onBack={onBack} />
         <LoadingState message="Loading your permitted coverage locations..." />
+      </div>
+    );
+  }
+
+  // Initial coverage-picklist load failed — full retry surface, not just a
+  // banner above an empty picker.
+  if (locationsLoadFailed && !target) {
+    return (
+      <div className="flex-1 flex flex-col bg-[#F7F8F6]">
+        <ScreenHeader title="Raise Maintenance" onBack={onBack} />
+        <ErrorState
+          message={error || 'Unable to load eligible workplace locations.'}
+          onRetry={loadLocations}
+        />
       </div>
     );
   }
