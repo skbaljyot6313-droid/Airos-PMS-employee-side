@@ -15,8 +15,9 @@ Note: the frontend's api client also understands FastAPI's native
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError, TimeoutError as PoolTimeoutError
 
+from app.core import metrics
 from app.core.config import settings
 from app.core.logging import get_logger
 
@@ -109,14 +110,27 @@ def register_exception_handlers(app: FastAPI) -> None:
         # Log the REAL error server-side (type + message, truncated) — a
         # type-only log ("ProgrammingError") is undiagnosable. The client
         # still gets the sanitized 503 — never expose DB internals.
+        root = getattr(exc, "orig", exc)
+        busy = (
+            isinstance(exc, PoolTimeoutError)
+            or getattr(root, "sqlstate", None) == "53300"
+            or "EMAXCONNSESSION" in str(root)
+        )
+        code = "DATABASE_BUSY" if busy else "DATABASE_ERROR"
+        if busy and (request_metrics := metrics.current()) is not None:
+            request_metrics["db_pool_exhaustions"] += 1
         logger.error(
-            "Database error on %s %s: %s",
-            request.method, request.url.path, str(exc)[:500],
+            "Database error on %s %s: code=%s type=%s sqlstate=%s",
+            request.method, request.url.path, code, type(root).__name__,
+            getattr(root, "sqlstate", None),
         )
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            headers={"Retry-After": "1"} if busy else None,
             content=_error_body(
-                "DATABASE_ERROR", "A database error occurred. Please try again."
+                code,
+                "The service is temporarily busy. Please try again shortly."
+                if busy else "A database error occurred. Please try again.",
             ),
         )
 

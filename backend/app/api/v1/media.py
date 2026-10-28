@@ -12,7 +12,9 @@ import re
 from fastapi import APIRouter, Depends, Request, UploadFile, status
 from fastapi import File
 from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
 from app.core.rate_limit import rate_limit
@@ -85,7 +87,9 @@ async def upload_media(
     request: Request,
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
 ):
+    await session.close()
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise InvalidUpload("Only JPEG/PNG/WebP images are allowed.", field="photos")
     data = await _read_bounded(file)

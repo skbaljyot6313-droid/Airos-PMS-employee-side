@@ -139,6 +139,7 @@ async def start_session(
     session.add(row)
     await session.commit()
     await session.refresh(row)
+    await session.commit()
 
     client = await _redis_required()
     try:
@@ -210,6 +211,7 @@ async def stop_session(
     else:
         # Idempotent stop — report the recorded end if there is one.
         stopped_at = row.ended_at or stopped_at
+        await session.commit()
 
     client = await _redis_required()
     try:

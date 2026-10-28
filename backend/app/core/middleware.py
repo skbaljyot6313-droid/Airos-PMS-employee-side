@@ -103,6 +103,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
                     f"x{m['db_count']:.0f}"
                     f" redis={m['redis_ms']:.0f}x{m['redis_ops']:.0f}"
                     f" ext={m['ext_ms']:.0f}"
+                    f" db_busy={m['db_pool_exhaustions']:.0f}"
                 )
                 pw = f" pw={m['pool_wait_ms']:.0f}"
             logger.info(

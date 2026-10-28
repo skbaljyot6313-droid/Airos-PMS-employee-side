@@ -101,7 +101,9 @@ async def download_active_apk(
         # reaches the client for download progress.
         "Content-Encoding": "identity",
     }
-    key = storage_key_from_url(release.download_url)
+    url = release.download_url
+    await session.close()
+    key = storage_key_from_url(url)
     if key:
         try:
             opened = await get_storage().open(key)
@@ -119,7 +121,6 @@ async def download_active_apk(
             stream(), media_type=APK_CONTENT_TYPE, headers=headers
         )
 
-    url = release.download_url
     if not url.lower().startswith("https://"):
         raise StorageUnavailable("Stored release URL is invalid.")
 

@@ -8,7 +8,7 @@ call os.getenv() directly; everything flows through `settings`.
 import re
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL, make_url
 
@@ -38,10 +38,11 @@ class Settings(BaseSettings):
     SUPABASE_DB_USER: str = "postgres"
 
     # Connection pool
-    DB_POOL_SIZE: int = 5
-    DB_MAX_OVERFLOW: int = 5
-    DB_POOL_RECYCLE: int = 1800  # Supabase idles connections; recycle below their timeout
-    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_SIZE: int = Field(default=2, ge=1)
+    DB_MAX_OVERFLOW: int = Field(default=1, ge=0)
+    DB_POOL_RECYCLE: int = Field(default=900, ge=1)  # Supabase idles connections; recycle below their timeout
+    DB_POOL_TIMEOUT: int = Field(default=10, ge=1)
+    DB_POOL_PRE_PING: bool = True
     # OPT-IN: PostgreSQL idle_in_transaction_session_timeout (ms). Session
     # state applied per connection — under a transaction pooler (Supavisor/
     # PgBouncer) it is applied at engine connect time but has NOT been

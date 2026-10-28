@@ -45,6 +45,7 @@ _FIELDS = (
     "redis_ops",
     "ext_ms",
     "pool_wait_ms",
+    "db_pool_exhaustions",
 )
 
 

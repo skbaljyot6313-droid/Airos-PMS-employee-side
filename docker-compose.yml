@@ -75,8 +75,14 @@ services:
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-insecure-secret-change-me}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      STORAGE_BACKEND: local
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
       UPLOAD_DIR: uploads
+      SUPABASE_STORAGE_BUCKET: ${SUPABASE_STORAGE_BUCKET:-}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       RATE_LIMIT_ENABLED: "true"
       # Retained for config compat only — this employee API owns no
       # scheduled jobs (see backend/docs/ENVIRONMENT.md).

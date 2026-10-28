@@ -22,9 +22,19 @@ logger = get_logger("app.main")
 async def lifespan(app: FastAPI):
     for warning in settings.production_warnings():
         logger.warning("Production warning: %s", warning)
-    yield
-    await close_redis()
-    await close_db()
+    logger.info(
+        "Database pool per process: size=%d overflow=%d ceiling=%d timeout_s=%d recycle_s=%d pre_ping=%s",
+        settings.DB_POOL_SIZE, settings.DB_MAX_OVERFLOW,
+        settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW,
+        settings.DB_POOL_TIMEOUT, settings.DB_POOL_RECYCLE, settings.DB_POOL_PRE_PING,
+    )
+    try:
+        yield
+    finally:
+        try:
+            await close_redis()
+        finally:
+            await close_db()
 
 
 app = FastAPI(

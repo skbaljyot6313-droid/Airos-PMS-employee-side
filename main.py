@@ -1,4 +1,4 @@
-             """Airco PMS Staff local launcher.
+"""Airco PMS Staff local launcher.
 
 Default mode runs the whole system in Docker (postgres + redis + migrations
 + api + web) via the root docker-compose.yml:

@@ -87,7 +87,7 @@ engine: AsyncEngine = create_async_engine(
     connect_args=_connect_args(),
     # pool_recycle handles stale connections at checkout — avoids paying an
     # extra DB round trip (~300ms to remote Supabase) on EVERY request.
-    pool_pre_ping=False,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
     pool_recycle=settings.DB_POOL_RECYCLE,
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,

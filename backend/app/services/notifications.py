@@ -85,6 +85,7 @@ async def _dispatch_snapshot(session: AsyncSession, snap: dict) -> None:
         )
     )
     tokens = [t for t in res.scalars() if t]
+    await session.commit()
     if not tokens:
         return
     provider = get_push_provider()
@@ -103,6 +104,7 @@ async def _dispatch_snapshot(session: AsyncSession, snap: dict) -> None:
             .where(DeviceRegistration.push_token.in_(dead))
             .values(is_active=False)
         )
+        await session.commit()
         logger.info(
             "Push: deactivated %d dead registration token(s)", len(dead),
         )
@@ -135,6 +137,7 @@ async def dispatch_queued_pushes(snapshots: list[dict]) -> None:
                     try:
                         await _dispatch_snapshot(session, snap)
                     except Exception as exc:
+                        await session.rollback()
                         logger.warning(
                             "Push dispatch failed for notification %s: %s",
                             snap.get("notification_id"), exc,

@@ -158,13 +158,14 @@ class FCMProvider:
         if not tokens:
             return result
         url = FCM_V1_URL.format(project=self.project_id)
-        # FCM data payloads are string-only maps.
+        # FCM data payloads are string-only maps. Data-only on purpose:
+        # a "notification" block lets Android display the alert itself
+        # when the app is backgrounded, which bypasses the app's dedup
+        # ledger and lets the work-feed poller repost dismissed items.
+        # The app's messaging service posts the tray entry instead.
         str_data = {k: str(v) for k, v in (data or {}).items()}
-        # tag = notification uid — matches the native work-feed poller's
-        # tray tag so push + poll never double-alert the same item.
-        android_block = (
-            {"notification": {"tag": tag}} if tag else {}
-        )
+        str_data["title"] = title
+        str_data["body"] = body
         async with httpx.AsyncClient(timeout=10.0) as client:
             access = await self._access_token(client)
             for token in tokens:
@@ -174,9 +175,10 @@ class FCMProvider:
                     json={
                         "message": {
                             "token": token,
-                            "notification": {"title": title, "body": body},
                             "data": str_data,
-                            "android": android_block,
+                            # HIGH so data messages reach a dozing/killed
+                            # app — the app's service posts the tray entry.
+                            "android": {"priority": "HIGH"},
                         }
                     },
                 )
