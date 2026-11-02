@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { App as CapacitorApp } from '@capacitor/app';
+import { createEdgeSwipe } from './services/navSwipe';
 import { Capacitor } from '@capacitor/core';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import {
@@ -60,6 +61,64 @@ type StackRoute =
 const AppNavigator: React.FC = () => {
   const { isAuthenticated, isLoading, user, connectionError, retrySession, logout } = useAuth();
   const [route, setRoute] = useState<StackRoute>({ type: 'tabs', tab: 'tasks' });
+  // Centralized navigation history — navigate() pushes the current
+  // route, goBack/goForward walk the stack. Tab switches stay root-level
+  // replaces (never pushed), so the stack only holds drill-downs.
+  const past = useRef<StackRoute[]>([]);
+  const future = useRef<StackRoute[]>([]);
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const navigate = (r: StackRoute) => {
+    past.current.push(routeRef.current);
+    future.current = [];
+    setRoute(r);
+  };
+  const goBack = (): boolean => {
+    const prev = past.current.pop();
+    if (!prev) return false;
+    future.current.push(routeRef.current);
+    setRoute(prev);
+    return true;
+  };
+  const goForward = (): boolean => {
+    const next = future.current.pop();
+    if (!next) return false;
+    past.current.push(routeRef.current);
+    setRoute(next);
+    return true;
+  };
+  const goBackOr = (fallback: StackRoute) => {
+    if (!goBack()) { future.current = []; setRoute(fallback); }
+  };
+
+  // Android hardware back — pop the in-app stack before exiting.
+  useEffect(() => {
+    const h = CapacitorApp.addListener('backButton', () => {
+      if (!goBack()) CapacitorApp.exitApp();
+    });
+    return () => { void h.then((l) => l.remove()); };
+  }, []);
+
+  // Edge-swipe navigation — rightward drag from the left edge goes back,
+  // leftward drag from the right edge goes forward. Recognition rules
+  // live in services/navSwipe (unit-tested); this only binds the events.
+  useEffect(() => {
+    const swipe = createEdgeSwipe({ onBack: goBack, onForward: goForward });
+    const down = (e: PointerEvent) =>
+      swipe.down({ x: e.clientX, y: e.clientY, t: e.timeStamp, target: e.target as HTMLElement });
+    const move = (e: PointerEvent) =>
+      swipe.move({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+    const up = (e: PointerEvent) =>
+      swipe.up({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+    window.addEventListener('pointerdown', down, true);
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+    return () => {
+      window.removeEventListener('pointerdown', down, true);
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+    };
+  }, []);
   const [todoCount, setTodoCount] = useState<number>(0);
   const [maintenanceCount, setMaintenanceCount] = useState<number>(0);
   const [popupQueue, setPopupQueue] = useState<StaffNotification[]>([]);
@@ -79,8 +138,8 @@ const AppNavigator: React.FC = () => {
       setPopupQueue((q) => [...q, n])
     );
     const teardownPush = initPushNotifications(({ taskId, ticketId }) => {
-      if (taskId) setRoute({ type: 'task-detail', taskId });
-      else if (ticketId) setRoute({ type: 'maintenance-detail', ticketId });
+      if (taskId) navigate({ type: 'task-detail', taskId });
+      else if (ticketId) navigate({ type: 'maintenance-detail', ticketId });
     });
     return () => {
       stop();
@@ -112,9 +171,9 @@ const AppNavigator: React.FC = () => {
     dismissPopup(n);
     void markNotificationReadApi(n.id).catch(() => undefined);
     if (n.taskId) {
-      setRoute({ type: 'task-detail', taskId: n.taskId });
+      navigate({ type: 'task-detail', taskId: n.taskId });
     } else if (n.ticketId) {
-      setRoute({ type: 'maintenance-detail', ticketId: n.ticketId });
+      navigate({ type: 'maintenance-detail', ticketId: n.ticketId });
     }
   };
 
@@ -179,7 +238,7 @@ const AppNavigator: React.FC = () => {
         {route.type === 'task-detail' ? (
           <TaskDetailScreen
             taskId={route.taskId}
-            onBack={() => setRoute({ type: 'tabs', tab: 'tasks' })}
+            onBack={() => goBackOr({ type: 'tabs', tab: 'tasks' })}
             onTaskUpdated={() => {
               // Task status updated
             }}
@@ -187,9 +246,9 @@ const AppNavigator: React.FC = () => {
         ) : route.type === 'zone-workspace' ? (
           <ZoneWorkspaceScreen
             zoneId={route.zoneId}
-            onBack={() => setRoute({ type: 'tabs', tab: 'maintenance' })}
+            onBack={() => goBackOr({ type: 'tabs', tab: 'maintenance' })}
             onRaiseMaintenance={(resource: ZoneResource) =>
-              setRoute({
+              navigate({
                 type: 'maintenance-new',
                 target: {
                   kind: resource.kind,
@@ -202,28 +261,26 @@ const AppNavigator: React.FC = () => {
               })
             }
             onViewTicket={(ticketId) =>
-              setRoute({ type: 'maintenance-detail', ticketId, zoneId: route.zoneId })
+              navigate({ type: 'maintenance-detail', ticketId, zoneId: route.zoneId })
             }
           />
         ) : route.type === 'maintenance-new' ? (
           <MaintenanceNewScreen
-            onBack={() =>
-              setRoute(
+            onBack={() => goBackOr(
                 route.target
                   ? { type: 'zone-workspace', zoneId: route.target.zone_id }
                   : { type: 'tabs', tab: 'maintenance' }
               )
             }
             onSuccess={(newTicketId) =>
-              setRoute({ type: 'maintenance-detail', ticketId: newTicketId })
+              navigate({ type: 'maintenance-detail', ticketId: newTicketId })
             }
             target={route.target}
           />
         ) : route.type === 'maintenance-detail' ? (
           <MaintenanceDetailScreen
             ticketId={route.ticketId}
-            onBack={() =>
-              setRoute(
+            onBack={() => goBackOr(
                 route.zoneId
                   ? { type: 'zone-workspace', zoneId: route.zoneId }
                   : { type: 'tabs', tab: 'maintenance' }
@@ -238,7 +295,7 @@ const AppNavigator: React.FC = () => {
             {route.tab === 'tasks' && (
               <TasksScreen
                 onSelectTask={({ id, kind }) =>
-                  setRoute(
+                  navigate(
                     kind === 'maintenance'
                       ? { type: 'maintenance-detail', ticketId: id }
                       : { type: 'task-detail', taskId: id }
@@ -250,7 +307,7 @@ const AppNavigator: React.FC = () => {
             {route.tab === 'maintenance' && (
               <MaintenanceScreen
                 onSelectZone={(zone: ZoneSummary) =>
-                  setRoute({ type: 'zone-workspace', zoneId: zone.id })
+                  navigate({ type: 'zone-workspace', zoneId: zone.id })
                 }
                 onMaintenanceCountChange={setMaintenanceCount}
               />

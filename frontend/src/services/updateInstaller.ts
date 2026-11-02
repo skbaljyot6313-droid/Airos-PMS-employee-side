@@ -27,6 +27,8 @@ interface AirosUpdatePlugin {
   downloadApk(options: {
     url: string;
     expectedVersionCode: number;
+    expectedSha256?: string;
+    expectedSizeBytes?: number;
   }): Promise<{ versionCode: number; versionName: string; sizeBytes: number }>;
   getPendingApk(): Promise<PendingApk>;
   installApk(): Promise<void>;

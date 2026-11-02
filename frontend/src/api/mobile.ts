@@ -6,6 +6,10 @@ export interface MobileVersionInfo {
   platform: string;
   latest_version: string;
   latest_version_code: number;
+  sha256?: string | null;
+  file_size_bytes?: number | null;
+  update_available?: boolean | null;
+  mandatory_update?: boolean | null;
   minimum_version: string;
   minimum_version_code: number;
   download_url: string;

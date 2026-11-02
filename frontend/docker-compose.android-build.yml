@@ -1,0 +1,36 @@
+# Reproducible AiROS Employee Android dev build — companion to
+# scripts/build-android-docker.ps1 (which uses plain `docker run`; this
+# compose file is the equivalent declarative form). See
+# ANDROID_DOCKER_BUILD.md.
+#
+#   docker compose -f docker-compose.android-build.yml build
+#   docker compose -f docker-compose.android-build.yml run --rm android-build
+#
+# The Employee dev API URL can be overridden without editing files:
+#   VITE_EMPLOYEE_API_URL=https://<host>/api/v1 docker compose ... run ...
+services:
+  android-build:
+    build:
+      context: .
+      dockerfile: Dockerfile.android-build
+    image: airos-employee-android-build:dev
+    environment:
+      # Points ONLY at the Employee development API (final-airos-os,
+      # asia-south1). /api/v1 suffix required — apiClient appends routes.
+      VITE_API_URL: ${VITE_EMPLOYEE_API_URL:-https://airos-eb-api-dev-94363806721.asia-south1.run.app/api/v1}
+      APK_NAME: ${APK_NAME:-airos-employee-dev}
+    volumes:
+      # Repo root -> /repo so the APK lands in ./dist/android on the host.
+      - ../:/repo
+      # Linux-side node_modules — masks the host's Windows node_modules so
+      # `npm ci` inside the container never corrupts the host install.
+      - frontend_node_modules:/repo/frontend/node_modules
+      # Persistent Gradle cache — subsequent builds skip dependency fetches.
+      - gradle_cache:/root/.gradle
+    working_dir: /repo/frontend
+    # Non-privileged by default (no `privileged`, no extra caps).
+    command: ["bash", "scripts/docker-build-apk.sh"]
+
+volumes:
+  frontend_node_modules:
+  gradle_cache:

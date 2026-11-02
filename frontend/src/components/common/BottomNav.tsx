@@ -46,7 +46,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   return (
     <nav
       aria-label="Bottom Navigation"
-      className="bg-white border-t border-[#E4E8E6] px-4 pt-1.5 pb-3 flex items-center justify-around flex-shrink-0 z-30 select-none shadow-[0_-2px_10px_rgba(0,0,0,0.03)]"
+      className="bg-surface border-t border-line px-2 pt-1 flex items-center justify-around flex-shrink-0 z-30 select-none pb-[max(0.5rem,env(safe-area-inset-bottom))]"
     >
       {tabs.map((tab) => {
         const Icon = tab.icon;
@@ -56,27 +56,33 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           <button
             key={tab.id}
             onClick={() => onChangeTab(tab.id)}
-            className={`flex-1 flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all relative min-h-[48px] ${
-              isActive
-                ? 'text-[#33B059]'
-                : 'text-[#8D999C] hover:text-[#667174] active:scale-95'
+            aria-current={isActive ? 'page' : undefined}
+            className={`flex-1 flex flex-col items-center justify-center pt-1 pb-1.5 px-2 transition-colors relative min-h-[48px] ${
+              isActive ? 'text-ink' : 'text-mute hover:text-sub'
             }`}
           >
+            {/* Lime marker — signature accent for the active destination */}
+            <span
+              aria-hidden
+              className={`absolute top-0 h-[3px] w-5 rounded-full transition-colors ${
+                isActive ? 'bg-lime' : 'bg-transparent'
+              }`}
+            />
             <div className="relative">
               <Icon
-                className={`w-5 h-5 transition-transform ${
-                  isActive ? 'stroke-[2.25] scale-105' : 'stroke-[1.75]'
+                className={`w-[18px] h-[18px] transition-transform ${
+                  isActive ? 'stroke-[2.25]' : 'stroke-[1.75]'
                 }`}
               />
               {tab.badge !== null && (
-                <span className="absolute -top-1.5 -right-2.5 bg-[#33B059] text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full min-w-[16px] text-center leading-tight shadow-sm">
+                <span className="absolute -top-1 -right-2 bg-acc text-white text-[9px] font-semibold px-1 rounded-full min-w-[14px] text-center leading-[14px]">
                   {tab.badge}
                 </span>
               )}
             </div>
             <span
-              className={`text-[11px] mt-1 font-['Space_Grotesk'] tracking-tight ${
-                isActive ? 'font-bold text-[#33B059]' : 'font-medium text-[#667174]'
+              className={`text-[10px] mt-1 tracking-tight ${
+                isActive ? 'font-semibold text-ink' : 'font-medium text-mute'
               }`}
             >
               {tab.label}

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Airco PMS Staff",
+    "name": "Airos Property Pro",
     "slug": "airos-employee",
-    "version": "1.0.13",
+    "version": "1.0.15",
     "android": {
       "package": "com.theairco.airos.employee",
-      "versionCode": 15
+      "versionCode": 17
     },
     "extra": {
       "eas": {

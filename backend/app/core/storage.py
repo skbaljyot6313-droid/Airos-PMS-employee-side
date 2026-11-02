@@ -51,7 +51,8 @@ OpenedObject = tuple[
 
 
 class StorageBackend:
-    async def save(self, data: bytes, key: str, content_type: str) -> str:
+    async def save(self, data: bytes, key: str, content_type: str,
+                   metadata: dict | None = None) -> str:
         """Persist `data` at `key`; return the URL the client should store."""
         raise NotImplementedError
 
@@ -62,6 +63,11 @@ class StorageBackend:
     async def open(self, key: str) -> OpenedObject | None:
         """Open a stored object for streaming — None when absent."""
         raise NotImplementedError
+
+    async def head(self, key: str) -> dict | None:
+        """Object metadata + size without fetching the body — None when
+        absent or unsupported."""
+        return None
 
 
 class S3Storage(StorageBackend):
@@ -86,11 +92,13 @@ class S3Storage(StorageBackend):
             aws_secret_access_key=settings.S3_SECRET_KEY,
         )
 
-    async def save(self, data: bytes, key: str, content_type: str) -> str:
+    async def save(self, data: bytes, key: str, content_type: str,
+                   metadata: dict | None = None) -> str:
+        extra = {"Metadata": {k: str(v) for k, v in metadata.items()}} if metadata else {}
         await asyncio.to_thread(
             self.client.put_object,
             Bucket=self.bucket, Key=key, Body=data,
-            ContentType=content_type,
+            ContentType=content_type, **extra,
         )
         if settings.S3_PUBLIC_BASE_URL:
             return f"{settings.S3_PUBLIC_BASE_URL.rstrip('/')}/{key}"
@@ -141,17 +149,103 @@ class S3Storage(StorageBackend):
         )
 
 
+class GCSStorage(StorageBackend):
+    """Native Google Cloud Storage — Application Default Credentials on
+    the runtime service account; no access keys are held anywhere.
+
+    Stored URLs use the canonical storage.googleapis.com shape —
+    `storage_key_from_url` maps them back to the flat object key and
+    `proxy_media_url` rewrites them to the same-origin proxy path, so
+    devices never fetch from googleapis.com directly."""
+
+    def __init__(self):
+        from google.cloud import storage as gcs  # deferred import
+
+        if not settings.GCS_BUCKET:
+            raise RuntimeError("GCS_BUCKET is required for the GCS backend")
+        self.bucket = settings.GCS_BUCKET
+        self.client = gcs.Client()
+        self._bucket = self.client.bucket(self.bucket)
+
+    async def save(self, data: bytes, key: str, content_type: str,
+                   metadata: dict | None = None) -> str:
+        def _put():
+            blob = self._bucket.blob(key)
+            if metadata:
+                blob.metadata = {k: str(v) for k, v in metadata.items()}
+            blob.upload_from_string(data, content_type=content_type)
+        await asyncio.to_thread(_put)
+        return f"https://storage.googleapis.com/{self.bucket}/{key}"
+
+    async def head(self, key: str) -> dict | None:
+        def _head():
+            from google.api_core.exceptions import NotFound
+            try:
+                blob = self._bucket.get_blob(key)
+            except NotFound:
+                return None
+            if blob is None:
+                return None
+            meta = dict(blob.metadata or {})
+            meta["size"] = blob.size
+            return meta
+        return await asyncio.to_thread(_head)
+
+    async def delete(self, key: str) -> None:
+        if not key:
+            return
+        def _del():
+            blob = self._bucket.blob(key)
+            try:
+                blob.delete()
+            except Exception:
+                pass  # missing object is already gone
+        await asyncio.to_thread(_del)
+
+    async def open(self, key: str) -> OpenedObject | None:
+        def _open():
+            from google.api_core.exceptions import NotFound
+            blob = self._bucket.blob(key)
+            try:
+                f = blob.open("rb")
+                return f, blob.content_type, blob.size
+            except NotFound:
+                return None
+            except Exception:
+                raise
+        res = await asyncio.to_thread(_open)
+        if res is None:
+            return None
+        f, content_type, size = res
+
+        async def stream() -> AsyncIterator[bytes]:
+            try:
+                while True:
+                    chunk = await asyncio.to_thread(f.read, MEDIA_CHUNK)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                f.close()
+
+        return stream, content_type, size
+
+
 _backend: StorageBackend | None = None
 
 
 def get_storage() -> StorageBackend:
-    """The single storage backend — Supabase's S3-compatible object store.
-    Missing credentials are a hard failure: there is no local-disk
-    fallback."""
+    """The single storage backend — GCS when GCS_BUCKET is set (native,
+    ADC-authenticated), else the S3-compatible store. Missing credentials
+    are a hard failure: there is no local-disk fallback."""
     global _backend
     if _backend is None:
-        _backend = S3Storage()
-        logger.info("storage backend: s3 bucket=%s", _backend.bucket)
+        if settings.GCS_BUCKET:
+            _backend = GCSStorage()
+            logger.info("storage backend: gcs bucket=%s", _backend.bucket)
+        else:
+            _backend = S3Storage()
+            logger.info("storage backend: s3 bucket=%s", _backend.bucket)
     return _backend
 
 
@@ -193,6 +287,9 @@ def storage_key_from_url(url: str) -> str | None:
             candidates.append(url.rsplit("/", 1)[-1])
         if parsed.netloc == f"{settings.S3_BUCKET}.s3.{settings.S3_REGION}.amazonaws.com":
             candidates.append(path.lstrip("/"))
+    if settings.GCS_BUCKET and parsed.netloc == "storage.googleapis.com":
+        if path.startswith(f"/{settings.GCS_BUCKET}/"):
+            candidates.append(path.removeprefix(f"/{settings.GCS_BUCKET}/"))
 
     for candidate in candidates:
         candidate = unquote(candidate).strip("/")

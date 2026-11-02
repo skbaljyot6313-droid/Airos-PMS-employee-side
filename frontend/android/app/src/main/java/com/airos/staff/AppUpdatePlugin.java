@@ -45,6 +45,27 @@ public class AppUpdatePlugin extends Plugin {
     private static final String KEY_PATH = "pending_apk_path";
     private static final String KEY_CODE = "pending_apk_version_code";
     private static final String KEY_NAME = "pending_apk_version_name";
+    private static final String KEY_SHA = "pending_apk_sha256";
+    private static final String KEY_SIZE = "pending_apk_size_bytes";
+
+    /** Whole-file SHA-256, lowercase hex — null on read failure. */
+    private static String sha256Of(File f) {
+        try {
+            java.security.MessageDigest md =
+                    java.security.MessageDigest.getInstance("SHA-256");
+            try (java.io.InputStream in = new java.io.FileInputStream(f)) {
+                byte[] buf = new byte[1 << 20];
+                int n;
+                while ((n = in.read(buf)) != -1) md.update(buf, 0, n);
+            }
+            StringBuilder sb = new StringBuilder();
+            for (byte b : md.digest())
+                sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
     private static final int CONNECT_TIMEOUT_MS = 30000;
     private static final int READ_TIMEOUT_MS = 60000;
     private static final int MAX_REDIRECTS = 5;
@@ -254,6 +275,21 @@ public class AppUpdatePlugin extends Plugin {
             deny(call,"SIGNATURE_MISMATCH");
             return;
         }
+        // Server-stamped integrity: when the release carried sha256/size
+        // metadata, verify the downloaded bytes before handing anything
+        // to the installer. Skipped silently when absent.
+        String expectedSha = prefs().getString(KEY_SHA, null);
+        long expectedSize = prefs().getLong(KEY_SIZE, -1);
+        if (expectedSize > 0 && apk.length() != expectedSize) {
+            clearPending();
+            deny(call,"SIZE_MISMATCH");
+            return;
+        }
+        if (expectedSha != null && !expectedSha.equalsIgnoreCase(sha256Of(apk))) {
+            clearPending();
+            deny(call,"CHECKSUM_MISMATCH");
+            return;
+        }
         long installed = installedCode();
         if (installed > 0
                 && PackageInfoCompat.getLongVersionCode(info) <= installed) {
@@ -293,6 +329,11 @@ public class AppUpdatePlugin extends Plugin {
             deny(call,"ALREADY_DOWNLOADING");
             return;
         }
+        // Integrity contract for this download — verified at install.
+        prefs().edit()
+                .putString(KEY_SHA, call.getString("expectedSha256"))
+                .putLong(KEY_SIZE, call.getLong("expectedSizeBytes", -1L))
+                .apply();
         downloading = true;
         executor.execute(() -> {
             cleanStale();

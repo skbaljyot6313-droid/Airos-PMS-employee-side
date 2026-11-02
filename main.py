@@ -116,7 +116,7 @@ def spawn(cmd: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Popen[by
         kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         kwargs["start_new_session"] = True
-    return subprocess.Popen(cmd, **kwargs)
+    return subprocess.Popen(cmd, **kwargs)  
 
 def start_stream(proc: subprocess.Popen[bytes], tag: str) -> threading.Thread:
     def stream() -> None:

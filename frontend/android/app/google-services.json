@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "732720607924",
-    "project_id": "airos-530a5",
-    "storage_bucket": "airos-530a5.firebasestorage.app"
+    "project_number": "94363806721",
+    "project_id": "final-airos-os",
+    "storage_bucket": "final-airos-os.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:732720607924:android:9d910551cf669abdcb1de1",
+        "mobilesdk_app_id": "1:94363806721:android:a2c92d7ac6a4c2ea066400",
         "android_client_info": {
           "package_name": "com.theairco.airos.employee"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBh-PRgZdPb7sxxNbAvHtA9uEjaYMeM0bY"
+          "current_key": "AIzaSyCm8TkLFb-72u7MqnFsqk2xVryPWiszX1s"
         }
       ],
       "services": {

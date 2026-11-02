@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Smartphone, Maximize2, Wifi, BatteryMedium, Signal } from 'lucide-react';
+import { Smartphone, Maximize2 } from 'lucide-react';
 
 interface DeviceFrameProps {
   children: React.ReactNode;
@@ -33,19 +33,8 @@ export const DeviceFrame: React.FC<DeviceFrameProps> = ({ children }) => {
             : 'max-w-2xl h-dvh md:rounded-2xl'
         }`}
       >
-        {/* Mobile Device Status Bar */}
-        <div className="bg-white border-b border-[#E4E8E6] px-5 pt-2 pb-1.5 flex items-center justify-between text-[12px] font-semibold text-[#20292C] select-none flex-shrink-0">
-          <span>9:41</span>
-          <div className="w-20 h-4 bg-black rounded-full mx-auto hidden md:block opacity-90" />
-          <div className="flex items-center gap-1.5 text-[#20292C]">
-            <Signal className="w-3.5 h-3.5 stroke-[2.5]" />
-            <Wifi className="w-3.5 h-3.5 stroke-[2.5]" />
-            <BatteryMedium className="w-4 h-4 stroke-[2.5]" />
-          </div>
-        </div>
-
         {/* Screen Viewport */}
-        <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-[#F7F8F6]">
+        <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-app">
           {children}
         </div>
       </div>

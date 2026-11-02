@@ -461,9 +461,11 @@ public class LocationTrackingService extends Service {
                 if (n == null) continue;
                 String uid = n.optString("notification_uid", "");
                 if (uid.isEmpty() || seen.contains(uid)) continue;
-                postWorkNotification(uid,
+                postWorkNotification(this, uid,
                         n.optString("title", "New assignment"),
-                        n.optString("body", ""));
+                        n.optString("body", ""),
+                        n.optString("task_uid", ""),
+                        n.optString("ticket_uid", ""));
                 seen.add(uid);
                 changed = true;
             }
@@ -484,21 +486,48 @@ public class LocationTrackingService extends Service {
         }
     }
 
-    private void postWorkNotification(String uid, String title, String body) {
+    /** Post a work notification once, ever. Records the uid in the shared
+     *  seen ledger BEFORE posting so that whichever path surfaces it first
+     *  (FCM data message or work-feed poll) owns the tray entry — a swipe
+     *  dismissal can then never be reposted by routine sync. */
+    static void surfaceWorkNotification(Context ctx, String uid, String title,
+            String body, String taskUid, String ticketUid) {
+        if (uid == null || uid.isEmpty()) return;
+        SharedPreferences p = prefs(ctx);
+        java.util.Set<String> seen = new java.util.HashSet<>(
+                p.getStringSet(KEY_SEEN_NOTIFS, new java.util.HashSet<>()));
+        if (seen.contains(uid)) return;
+        seen.add(uid);
+        p.edit().putStringSet(KEY_SEEN_NOTIFS, seen).apply();
+        postWorkNotification(ctx, uid, title, body, taskUid, ticketUid);
+    }
+
+    private static void postWorkNotification(Context ctx, String uid,
+            String title, String body, String taskUid, String ticketUid) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-                && ActivityCompat.checkSelfPermission(this,
+                && ActivityCompat.checkSelfPermission(ctx,
                         Manifest.permission.POST_NOTIFICATIONS)
                         != PackageManager.PERMISSION_GRANTED) {
             return;
         }
-        Intent open = new Intent(this, MainActivity.class);
+        // Tap → MainActivity. The data extras mirror what a system-posted
+        // FCM notification carries, so the Capacitor push plugin's
+        // handleOnNewIntent emits the usual pushNotificationActionPerformed
+        // event and in-app task/ticket navigation keeps working.
+        Intent open = new Intent(ctx, MainActivity.class);
+        open.putExtra("google.message_id", uid);
+        open.putExtra("notification_uid", uid);
+        if (taskUid != null && !taskUid.isEmpty())
+            open.putExtra("task_uid", taskUid);
+        if (ticketUid != null && !ticketUid.isEmpty())
+            open.putExtra("ticket_uid", ticketUid);
         PendingIntent pi = PendingIntent.getActivity(
-                this, uid.hashCode(), open,
+                ctx, uid.hashCode(), open,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        int icon = getApplicationInfo().icon != 0
-                ? getApplicationInfo().icon
+        int icon = ctx.getApplicationInfo().icon != 0
+                ? ctx.getApplicationInfo().icon
                 : android.R.drawable.ic_dialog_info;
-        Notification n = new NotificationCompat.Builder(this, WORK_CHANNEL_ID)
+        Notification n = new NotificationCompat.Builder(ctx, WORK_CHANNEL_ID)
                 .setSmallIcon(icon)
                 .setContentTitle(title)
                 .setContentText(body)
@@ -508,11 +537,11 @@ public class LocationTrackingService extends Service {
                 .setAutoCancel(true)
                 .setContentIntent(pi)
                 .build();
-        NotificationManager nm = getSystemService(NotificationManager.class);
+        NotificationManager nm =
+                (NotificationManager) ctx.getSystemService(NOTIFICATION_SERVICE);
         if (nm != null) {
-            // Tag = notification uid — matches the FCM notification's
-            // android.notification.tag, so a server push and this poll
-            // coalesce into one tray entry instead of double-alerting.
+            // Tag = notification uid — one tray entry per notification,
+            // whichever delivery path posted it first.
             nm.notify(uid,
                     WORK_NOTIF_BASE + Math.floorMod(uid.hashCode(), 4096), n);
         }

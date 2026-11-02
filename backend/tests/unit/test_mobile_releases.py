@@ -83,7 +83,7 @@ async def test_publish_then_public_version(api, service_key):
     assert set(body) == {
         "platform", "latest_version", "latest_version_code",
         "minimum_version", "minimum_version_code", "download_url",
-        "release_notes", "force_update",
+        "release_notes", "force_update", "sha256", "file_size_bytes", "installed_version_code", "update_available", "mandatory_update",
     }
 
 
@@ -191,7 +191,7 @@ class _FakeStorage:
     def __init__(self):
         self.saved: dict[str, bytes] = {}
 
-    async def save(self, data: bytes, key: str, content_type: str) -> str:
+    async def save(self, data: bytes, key: str, content_type: str, metadata: dict | None = None) -> str:
         self.saved[key] = data
         return f"https://storage.test/{key}"
 

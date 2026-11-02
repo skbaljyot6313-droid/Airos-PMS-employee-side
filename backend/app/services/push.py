@@ -82,69 +82,58 @@ class FCMProvider:
     Auth = OAuth2 access token minted from the service account's
     JWT-bearer assertion (RS256 — requires 'cryptography')."""
 
-    def __init__(self, project_id: str, service_account: dict):
+    def __init__(self, project_id: str, credentials):
         self.project_id = project_id
-        self.sa = service_account
-        self._token: tuple[str, float] | None = None  # (access, expiry epoch)
+        self.creds = credentials  # google.auth Credentials (ADC or SA info)
 
     @classmethod
     def from_settings(cls) -> "FCMProvider":
-        if not settings.FCM_PROJECT_ID or not settings.FCM_SERVICE_ACCOUNT_JSON:
+        """Credentials chain — Application Default Credentials first
+        (the Cloud Run runtime service account), with an optional
+        FCM_SERVICE_ACCOUNT_JSON fallback for non-GCP environments.
+        No key files are required on GCP deployments."""
+        if not settings.FCM_PROJECT_ID:
             raise PushUnavailable(
-                "FCM provider selected but FCM_PROJECT_ID / "
-                "FCM_SERVICE_ACCOUNT_JSON are not configured."
+                "FCM provider selected but FCM_PROJECT_ID is not configured."
             )
-        raw = settings.FCM_SERVICE_ACCOUNT_JSON.strip()
         try:
-            if raw.startswith("{"):
-                sa_info = json.loads(raw)
+            if settings.FCM_SERVICE_ACCOUNT_JSON:
+                from google.oauth2 import service_account
+
+                raw = settings.FCM_SERVICE_ACCOUNT_JSON.strip()
+                info = (
+                    json.loads(raw)
+                    if raw.startswith("{")
+                    else json.loads(Path(raw).read_text(encoding="utf-8"))
+                )
+                creds = service_account.Credentials.from_service_account_info(
+                    info, scopes=[FCM_SCOPE]
+                )
             else:
-                sa_info = json.loads(Path(raw).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise PushUnavailable(f"FCM service account JSON unreadable: {exc}")
-        if not sa_info.get("client_email") or not sa_info.get("private_key"):
-            raise PushUnavailable("FCM service account JSON is incomplete.")
-        return cls(settings.FCM_PROJECT_ID, sa_info)
+                import google.auth
+
+                creds, _ = google.auth.default(scopes=[FCM_SCOPE])
+        except Exception as exc:
+            raise PushUnavailable(
+                f"FCM credentials unavailable: {type(exc).__name__}"
+            ) from exc
+        return cls(settings.FCM_PROJECT_ID, creds)
 
     async def _access_token(self, client: httpx.AsyncClient) -> str:
-        if self._token and time.time() < self._token[1] - 60:
-            return self._token[0]
+        creds = self.creds
+        if creds.valid and creds.token:
+            return creds.token
+        import asyncio
+
+        from google.auth.transport.requests import Request
+
         try:
-            import jwt  # PyJWT — RS256 needs the cryptography extra
-            import cryptography  # noqa: F401
-        except ImportError as exc:
+            await asyncio.to_thread(creds.refresh, Request())
+        except Exception as exc:
             raise PushUnavailable(
-                "FCM OAuth signing requires the 'cryptography' package."
+                f"FCM credential refresh failed: {type(exc).__name__}"
             ) from exc
-        now = int(time.time())
-        assertion = jwt.encode(
-            {
-                "iss": self.sa["client_email"],
-                "sub": self.sa["client_email"],
-                "aud": GOOGLE_TOKEN_URL,
-                "scope": FCM_SCOPE,
-                "iat": now,
-                "exp": now + 3600,
-            },
-            self.sa["private_key"],
-            algorithm="RS256",
-        )
-        res = await client.post(
-            GOOGLE_TOKEN_URL,
-            data={
-                "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
-                "assertion": assertion,
-            },
-        )
-        if res.status_code != 200:
-            raise PushUnavailable(
-                f"FCM token exchange failed ({res.status_code})."
-            )
-        payload = res.json()
-        self._token = (
-            payload["access_token"], now + int(payload.get("expires_in", 3600))
-        )
-        return self._token[0]
+        return creds.token
 
     async def send(
         self,

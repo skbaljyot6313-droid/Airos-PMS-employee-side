@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Task, TaskBucket } from '../../types';
 import { fetchTasksApi, taskBucket } from '../../api/tasks';
+import { businessDate } from '../../api/attendance';
 import { errorMessage } from '../../api/client';
 import { subscribeRealtimeEvents } from '../../services/realtime';
 import { perfMarkOnce } from '../../utils/perf';
@@ -26,8 +27,15 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const loadInFlight = useRef(false);
+  const refreshPending = useRef(false);
 
   const loadTasks = useCallback(async (isRefresh = false) => {
+    if (loadInFlight.current) {
+      refreshPending.current ||= isRefresh;
+      return;
+    }
+    loadInFlight.current = true;
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
@@ -45,13 +53,19 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
     } catch (err: unknown) {
       setError(errorMessage(err, 'Unable to load your operational tasks.'));
     } finally {
+      loadInFlight.current = false;
       setLoading(false);
       setRefreshing(false);
+      if (refreshPending.current) {
+        refreshPending.current = false;
+        void loadTasks(true);
+      }
     }
   }, [onTasksCountChange]);
 
   useEffect(() => {
     loadTasks();
+    return () => { refreshPending.current = false; };
   }, [loadTasks]);
 
   // Realtime invalidation — task/maintenance events refresh the list
@@ -64,119 +78,117 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
     [loadTasks],
   );
 
-  // Filter tasks into the active bucket
-  const filteredTasks = tasks.filter((t) => taskBucket(t.status) === activeBucket);
+  // Completed bucket = only items that reached a terminal state today
+  // (business/IST wall-clock date, matching attendance conventions).
+  const today = businessDate();
+  const completedToday = (t: Task): boolean => {
+    if (taskBucket(t.status) !== 'done') return false;
+    if (!t.completed_at) return false;
+    const d = new Date(t.completed_at);
+    return !Number.isNaN(d.getTime()) && businessDate(d) === today;
+  };
 
-  const todoCount = tasks.filter((t) => taskBucket(t.status) === 'to_do').length;
+  // Overdue work is management-visible only — the backend's authoritative
+  // 'overdue' status marks items out of the employee's actionable set.
+  // Valid active assignments and completed history are untouched.
+  const visibleTasks = tasks.filter((t) => t.status !== 'overdue');
+
+  // Filter tasks into the active bucket
+  const filteredTasks =
+    activeBucket === 'done'
+      ? visibleTasks.filter(completedToday)
+      : visibleTasks.filter((t) => taskBucket(t.status) === activeBucket);
+
+  const todoCount = visibleTasks.filter((t) => taskBucket(t.status) === 'to_do').length;
   const inReviewCount = tasks.filter((t) => taskBucket(t.status) === 'in_review').length;
-  const doneCount = tasks.filter((t) => taskBucket(t.status) === 'done').length;
+  const doneCount = tasks.filter(completedToday).length;
 
   // Greeting based on current time
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const firstName = employee?.name ? employee.name.split(' ')[0] : 'Staff';
 
+  const buckets: { id: TaskBucket; label: string; count: number }[] = [
+    { id: 'to_do', label: 'To Do', count: todoCount },
+    { id: 'in_review', label: 'In Review', count: inReviewCount },
+    { id: 'done', label: 'Completed', count: doneCount },
+  ];
+
   return (
-    <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
-      {/* Top Staff Header */}
-      <div className="bg-white border-b border-[#E4E8E6] px-5 pt-4 pb-3 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <div>
-            <span className="text-xs font-semibold text-[#667174] uppercase tracking-wider block">
-              {greeting}, {firstName}
-            </span>
-            <h1 className="text-2xl font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
-              Your Tasks
-            </h1>
+    <div className="flex-1 flex flex-col bg-app overflow-y-auto">
+      {/* Editorial header — greeting, title, refresh, context, underline tabs */}
+      <div className="bg-surface border-b border-line sticky top-0 z-20">
+        <div className="px-4 pt-4 pb-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-[11px] font-normal text-mute block">
+                {greeting}, {firstName}
+              </span>
+              <h1 className="text-[23px] font-semibold tracking-[-0.02em] text-ink font-['Space_Grotesk'] leading-tight">
+                Your tasks
+              </h1>
+            </div>
+
+            <button
+              onClick={() => loadTasks(true)}
+              disabled={refreshing}
+              className="p-2 -mr-1 mt-0.5 rounded-md text-mute hover:text-ink hover:bg-soft active:scale-95 transition-all"
+              aria-label="Refresh tasks"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-acc' : ''}`} />
+            </button>
           </div>
 
-          <button
-            onClick={() => loadTasks(true)}
-            disabled={refreshing}
-            className="p-2.5 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-[#20292C] hover:bg-[#EFEFEF] active:scale-95 transition-all"
-            aria-label="Refresh tasks"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#33B059]' : 'text-[#667174]'}`} />
-          </button>
-        </div>
-
-        {/* Workplace Coverage Chip */}
-        <div className="flex items-center gap-2 text-[11px] text-[#667174] bg-[#F7F8F6] px-3 py-1.5 rounded-lg border border-[#E4E8E6] mb-3">
-          <Building2 className="w-3.5 h-3.5 text-[#8D999C] flex-shrink-0" />
-          <span className="font-medium text-[#20292C] truncate">
-            {company?.brand_name || company?.name || 'Company'}
-          </span>
-          <span className="text-[#8D999C]">·</span>
-          <MapPin className="w-3.5 h-3.5 text-[#8D999C] flex-shrink-0" />
-          <span className="truncate">
-            {employee?.zone_name || 'Zone not assigned'}
-          </span>
-        </div>
-
-        {/* 3 High-Level Buckets */}
-        <div className="flex items-center gap-2 bg-[#F0F2F1] p-1 rounded-xl">
-          <button
-            onClick={() => setActiveBucket('to_do')}
-            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-              activeBucket === 'to_do'
-                ? 'bg-white text-[#20292C] shadow-sm'
-                : 'text-[#667174] hover:text-[#20292C]'
-            }`}
-          >
-            <span>To Do</span>
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                activeBucket === 'to_do'
-                  ? 'bg-[#33B059] text-white'
-                  : 'bg-[#E4E8E6] text-[#667174]'
-              }`}
-            >
-              {todoCount}
+          {/* Property · zone metadata — single quiet context line */}
+          <div className="flex items-center gap-1.5 text-[11px] text-sub mt-1 min-w-0">
+            <Building2 className="w-3 h-3 text-mute flex-shrink-0" />
+            <span className="font-medium text-ink truncate">
+              {company?.brand_name || company?.name || 'Company'}
             </span>
-          </button>
+            <span className="text-mute">·</span>
+            <MapPin className="w-3 h-3 text-mute flex-shrink-0" />
+            <span className="truncate">
+              {employee?.zone_name || 'Zone not assigned'}
+            </span>
+          </div>
+        </div>
 
-          <button
-            onClick={() => setActiveBucket('in_review')}
-            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-              activeBucket === 'in_review'
-                ? 'bg-white text-[#20292C] shadow-sm'
-                : 'text-[#667174] hover:text-[#20292C]'
-            }`}
-          >
-            <span>In Review</span>
-            {inReviewCount > 0 && (
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                  activeBucket === 'in_review'
-                    ? 'bg-[#2B5DD8] text-white'
-                    : 'bg-[#E4E8E6] text-[#667174]'
+        {/* Status tabs — hairline separator, lime underline on active */}
+        <div
+          role="tablist"
+          aria-label="Task status"
+          className="flex items-stretch px-2 mt-2"
+        >
+          {buckets.map((b) => {
+            const active = activeBucket === b.id;
+            return (
+              <button
+                key={b.id}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveBucket(b.id)}
+                className={`relative flex-1 px-2 pb-2.5 pt-1.5 text-xs transition-colors flex items-center justify-center gap-1.5 ${
+                  active ? 'text-ink font-semibold' : 'text-mute font-medium hover:text-sub'
                 }`}
               >
-                {inReviewCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveBucket('done')}
-            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-              activeBucket === 'done'
-                ? 'bg-white text-[#20292C] shadow-sm'
-                : 'text-[#667174] hover:text-[#20292C]'
-            }`}
-          >
-            <span>Completed</span>
-            {doneCount > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-[#E4E8E6] text-[#667174]">
-                {doneCount}
-              </span>
-            )}
-          </button>
+                <span>{b.label}</span>
+                <span className={`text-[10px] tabular-nums font-medium ${active ? 'text-acc' : 'text-mute'}`}>
+                  {b.count}
+                </span>
+                <span
+                  aria-hidden
+                  className={`absolute bottom-[-1px] left-3 right-3 h-[2.5px] rounded-full transition-colors ${
+                    active ? 'bg-lime' : 'bg-transparent'
+                  }`}
+                />
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Task List Content */}
-      <div className="flex-1 p-4">
+      {/* Task List Content — editorial rows separated by hairlines */}
+      <div className="flex-1">
         {loading ? (
           <LoadingState message="Loading your assigned tasks..." />
         ) : error ? (
@@ -189,20 +201,20 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
                 ? 'No tasks right now'
                 : activeBucket === 'in_review'
                 ? 'No tasks in review'
-                : 'No completed tasks'
+                : 'Nothing completed today'
             }
             description={
               activeBucket === 'to_do'
                 ? "You're all caught up with your assigned work for this shift."
                 : activeBucket === 'in_review'
                 ? 'Tasks submitted for supervisor approval will appear here.'
-                : 'Finished and approved tasks will be recorded here.'
+                : 'Work you finish today will appear here.'
             }
             actionLabel="Refresh list"
             onAction={() => loadTasks(true)}
           />
         ) : (
-          <div className="space-y-3 pb-8">
+          <div className="divide-y divide-line pb-8">
             {filteredTasks.map((task) => (
               <TaskCard
                 key={task.id}

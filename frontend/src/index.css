@@ -1,5 +1,35 @@
 @import "tailwindcss";
 
+/* AiROS Staff design tokens — restrained neutral palette, forest-green accent.
+ * Usage: bg-app, bg-surface, text-ink, text-sub, text-mute, border-line,
+ * bg-acc / text-acc / bg-accsoft, text-dng / bg-dngsoft, text-warn /
+ * bg-warnsoft, text-ok, text-info / bg-infosoft, bg-soft. */
+@theme {
+  /* Fortify-inspired: white canvas, near-black ink, lime signature accent */
+  --color-app: #FFFFFF;
+  --color-surface: #FFFFFF;
+  --color-soft: #F7F8F6;
+  --color-ink: #171918;
+  --color-sub: #666D68;
+  --color-mute: #8B918C;
+  --color-line: #E8EBE7;
+  --color-grid: #F0F1EE;
+
+  --color-lime: #C8F169;
+  --color-acc: #278447;
+  --color-accsoft: #EAF4ED;
+
+  --color-dng: #D9363E;
+  --color-dngsoft: #FFF0F0;
+
+  --color-warn: #A86A12;
+  --color-warnsoft: #FBF3E4;
+
+  --color-ok: #278447;
+  --color-info: #2B5DD8;
+  --color-infosoft: #EEF3FF;
+}
+
 html,
 body,
 #root {

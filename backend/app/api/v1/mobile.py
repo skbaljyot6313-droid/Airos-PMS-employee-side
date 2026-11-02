@@ -1,3 +1,4 @@
+import hashlib
 """Mobile release endpoints.
 
 GET /mobile/version is PUBLIC — an app that is too old to log in must
@@ -53,11 +54,34 @@ class StorageUnavailable(AppError):
 @router.get("/version", response_model=MobileVersionResponse)
 async def get_version(
     platform: str = "android",
+    installed_version_code: int | None = None,
     session: AsyncSession = Depends(get_db),
 ):
     release = await release_service.get_active_release(session, platform)
     if release is None:
         raise ReleaseNotFound()
+    # Integrity metadata lives on the stored object (stamped at upload) —
+    # no schema column needed. Externally-hosted releases report None and
+    # the device falls back to its signature/versionCode gates.
+    sha256 = size = None
+    key = storage_key_from_url(release.download_url) if release.download_url else None
+    if key:
+        try:
+            meta = await get_storage().head(key)
+            if meta:
+                sha256 = meta.get("sha256")
+                raw = meta.get("file_size_bytes") or meta.get("size")
+                size = int(raw) if raw else None
+        except Exception:
+            pass  # storage hiccup must never break the version check
+    update_available = mandatory = None
+    if installed_version_code is not None:
+        update_available = release.version_code > installed_version_code
+        mandatory = bool(
+            update_available
+            and (release.force_update
+                 or installed_version_code < release.minimum_version_code)
+        )
     return MobileVersionResponse(
         platform=release.platform,
         latest_version=release.version,
@@ -70,6 +94,11 @@ async def get_version(
         download_url=f"/api/v1/mobile/apk?platform={release.platform}",
         release_notes=release.release_notes,
         force_update=release.force_update,
+        sha256=sha256,
+        file_size_bytes=size,
+        installed_version_code=installed_version_code,
+        update_available=update_available,
+        mandatory_update=mandatory,
     )
 
 
@@ -200,11 +229,15 @@ async def upload_release_apk(
     data = b"".join(chunks)
     if len(data) < 4 or data[:2] != b"PK":
         raise InvalidUpload("Not an APK — ZIP signature missing.")
+    digest = hashlib.sha256(data).hexdigest()
     # Flat key — object stores treat '/' fine but the local backend and
     # key-from-URL recovery both assume flat names.
     key = f"release-{platform}-{version_code}-{uuid.uuid4().hex[:8]}.apk"
     try:
-        url = await get_storage().save(data, key, APK_CONTENT_TYPE)
+        url = await get_storage().save(
+            data, key, APK_CONTENT_TYPE,
+            metadata={"sha256": digest, "file_size_bytes": str(len(data))},
+        )
     except AppError:
         raise
     except Exception as exc:

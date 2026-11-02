@@ -336,6 +336,8 @@ export async function beginUpdate(info: MobileVersionInfo): Promise<void> {
     await NativeUpdate.downloadApk({
       url: mediaUrl(info.download_url),
       expectedVersionCode: info.latest_version_code,
+      expectedSha256: info.sha256 ?? undefined,
+      expectedSizeBytes: info.file_size_bytes ?? undefined,
     });
     emitFlow({ phase: 'ready', progress: 100, error: null });
     await requestInstall();

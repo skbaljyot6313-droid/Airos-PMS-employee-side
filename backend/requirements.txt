@@ -11,6 +11,7 @@ pyjwt>=2.8
 redis>=5.2,<7
 arq>=0.26
 boto3>=1.35
+google-cloud-storage>=2.18
 
 # Tests
 pytest>=8.0

@@ -44,6 +44,20 @@ const locationName = (t: TaskWire): string => {
 /** Map a maintenance ticket onto the same list-card shape so assigned
  *  maintenance work appears alongside operational tasks in "Your Tasks".
  *  Statuses are normalised onto the task lifecycle for bucket sorting. */
+/** Terminal lifecycle events that put an item in the "done" bucket —
+ *  used to date completions when no explicit timestamp field exists. */
+const TERMINAL_EVENTS = new Set(['completed', 'approved', 'closed', 'cancelled', 'abandoned']);
+
+const latestTerminalAt = (history: { event_type: string; timestamp: string }[]): string | null => {
+  let latest: string | null = null;
+  for (const h of history) {
+    if (TERMINAL_EVENTS.has(h.event_type) && (!latest || h.timestamp > latest)) {
+      latest = h.timestamp;
+    }
+  }
+  return latest;
+};
+
 export const mapMaintenanceToTask = (m: import('../types').MaintenanceTicket, zoneNames: Map<string, string>): Task => {
   const statusMap: Record<string, TaskStatus> = {
     reported: 'assigned',
@@ -71,6 +85,9 @@ export const mapMaintenanceToTask = (m: import('../types').MaintenanceTicket, zo
     due_time: null,
     scheduled_for: null,
     expires_at: null,
+    completed_at: m.closed_at ?? latestTerminalAt(
+      (m.history ?? []).map((h) => ({ event_type: h.status, timestamp: h.timestamp })),
+    ),
     instructions: m.description ?? null,
     checklist: [],
     verification_config: {
@@ -163,6 +180,7 @@ export const mapTask = (t: TaskWire, zoneNames: Map<string, string>): Task => {
     due_time: t.due_time ?? null,
     scheduled_for: t.scheduled_for ?? null,
     expires_at: t.expires_at ?? null,
+    completed_at: t.completed_at ?? t.abandoned_at ?? latestTerminalAt(history),
     instructions: t.description ?? null,
     checklist,
     verification_config: {

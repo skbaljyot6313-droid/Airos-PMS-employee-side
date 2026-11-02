@@ -30,9 +30,8 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
     <button
       disabled={disabled || loading}
       className={`relative inline-flex items-center justify-center font-semibold rounded-xl transition-all active:scale-[0.98] select-none
-        bg-[#33B059] text-white hover:bg-[#278B46] active:bg-[#22773c]
+        bg-acc text-white hover:bg-[#227541] active:bg-[#1d6337]
         disabled:opacity-50 disabled:pointer-events-none disabled:active:scale-100
-        shadow-[0_2px_4px_rgba(51,176,89,0.15)]
         ${fullWidth ? 'w-full' : ''}
         ${sizeStyles[size]}
         ${className}
@@ -74,7 +73,7 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
     <button
       disabled={disabled || loading}
       className={`relative inline-flex items-center justify-center font-medium rounded-xl transition-all active:scale-[0.98] select-none
-        bg-white text-[#20292C] border border-[#E4E8E6] hover:bg-[#F7F8F6] active:bg-[#EFEFEF]
+        bg-surface text-ink border border-line hover:bg-soft active:bg-line
         disabled:opacity-50 disabled:pointer-events-none
         ${fullWidth ? 'w-full' : ''}
         ${sizeStyles[size]}
@@ -84,7 +83,7 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
     >
       {loading ? (
         <span className="flex items-center gap-2">
-          <Loader2 className="w-5 h-5 animate-spin text-[#667174]" />
+          <Loader2 className="w-5 h-5 animate-spin text-sub" />
           <span>Loading...</span>
         </span>
       ) : (
@@ -117,7 +116,7 @@ export const DangerButton: React.FC<ButtonProps> = ({
     <button
       disabled={disabled || loading}
       className={`relative inline-flex items-center justify-center font-semibold rounded-xl transition-all active:scale-[0.98] select-none
-        bg-[#D9534F] text-white hover:bg-[#C9433F] active:bg-[#B33531]
+        bg-dng text-white hover:bg-[#B2373E] active:bg-[#9C2F36]
         disabled:opacity-50 disabled:pointer-events-none
         ${fullWidth ? 'w-full' : ''}
         ${sizeStyles[size]}

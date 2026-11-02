@@ -1,0 +1,51 @@
+# AiROS Employee — reproducible Android development-build environment.
+#
+# Builds the complete APK inside Docker; no JDK or Android SDK is required
+# on the host. Driven by scripts/build-android-docker.ps1 (or
+# docker-compose.android-build.yml). See ANDROID_DOCKER_BUILD.md.
+#
+#   JDK      : Eclipse Temurin 21 (capacitor.build.gradle targets Java 21)
+#   SDK      : android-35 + build-tools 35.0.0 (variables.gradle:
+#              compileSdk/targetSdk 35, AGP 8.7.2 — versions match the
+#              app's Gradle configuration, not chosen arbitrarily)
+#   Gradle   : the repo's own wrapper (gradle-8.11.1) — never replaced
+FROM eclipse-temurin:21-jdk
+
+ARG NODE_MAJOR=20
+ARG ANDROID_CMDLINE_TOOLS_VERSION=11076708
+ARG ANDROID_PLATFORM=android-35
+ARG ANDROID_BUILD_TOOLS=35.0.0
+
+ENV ANDROID_HOME=/opt/android-sdk \
+    ANDROID_SDK_ROOT=/opt/android-sdk \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl unzip ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 20 — matches CI (ci.yml / build-android.yml) for npm ci, the
+# Vite bundle build and `cap sync`.
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Android command-line tools + the SDK packages the Gradle config needs.
+# Licenses accepted non-interactively during image setup.
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools \
+    && curl -fsSL -o /tmp/cmdtools.zip \
+       "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS_VERSION}_latest.zip" \
+    && unzip -q /tmp/cmdtools.zip -d /tmp \
+    && mv /tmp/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest \
+    && rm /tmp/cmdtools.zip \
+    && yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager \
+        "platform-tools" \
+        "platforms;${ANDROID_PLATFORM}" \
+        "build-tools;${ANDROID_BUILD_TOOLS}" \
+    && yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses
+
+WORKDIR /work
+
+# Default build steps: npm ci -> vite build -> cap sync -> assembleDebug
+# -> copy the APK to the mounted output dir. Overridable for debugging.
+CMD ["bash", "scripts/docker-build-apk.sh"]

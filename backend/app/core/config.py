@@ -131,11 +131,14 @@ class Settings(BaseSettings):
     # token bucket otherwise (single-process only).
     RATE_LIMIT_ENABLED: bool = True
 
-    # Media storage — always the S3-compatible object store (Supabase
-    # Storage's S3 endpoint). There is no local-disk backend: container
-    # filesystems are ephemeral and have lost uploads in production.
-    # STORAGE_BACKEND is kept only for env-compat; any value resolves to S3.
+    # Media storage — GCS is the preferred backend (native
+    # google-cloud-storage + ADC on the runtime service account). S3 stays
+    # for compat with environments that only have an S3 endpoint. There is
+    # no local-disk backend: container filesystems are ephemeral.
+    # STORAGE_BACKEND is kept only for env-compat; any value resolves to
+    # GCS when GCS_BUCKET is set, else S3.
     STORAGE_BACKEND: str = "s3"
+    GCS_BUCKET: str | None = None
     MAX_TASK_COMPLETION_IMAGES: int = 10
     SUPABASE_STORAGE_BUCKET: str = "uploads"
     S3_ENDPOINT_URL: str | None = None  # leave unset for AWS; set for Supabase/MinIO

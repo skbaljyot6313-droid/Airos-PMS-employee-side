@@ -1,0 +1,126 @@
+name: Dev Android Build & Distribute
+
+# AiROS Employee development builds — manual dispatch only until the flow
+# is validated end-to-end. Builds the dev APK against the development
+# Employee API, uploads it as an artifact, and optionally distributes it
+# to Firebase App Distribution testers when explicitly requested.
+on:
+  workflow_dispatch:
+    inputs:
+      distribute:
+        description: "Upload to Firebase App Distribution (airos-employee-dev testers)"
+        required: true
+        default: false
+        type: boolean
+      release_notes:
+        description: "Release notes for the Firebase distribution"
+        required: false
+        default: "Development build"
+        type: string
+
+# Concurrency: never run two dev builds on the same ref simultaneously.
+concurrency:
+  group: dev-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Development Employee API (final-airos-os / asia-south1). /api/v1 is
+  # required — apiClient appends route paths to API_BASE directly.
+  VITE_API_URL: https://airos-eb-api-dev-94363806721.asia-south1.run.app/api/v1
+  FIREBASE_APP_ID: "1:94363806721:android:a2c92d7ac6a4c2ea066400"
+  # Server-assigned alias of the "AiROS Employee Dev Testers" group
+  # created on final-airos-os.
+  TESTER_GROUP: airos-employee-dev-testers
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web bundle (dev API)
+        run: npm run build
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Assemble debug APK
+        working-directory: frontend/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Validate APK identity
+        working-directory: frontend/android
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | \
+            grep -E "package: name='com.theairco.airos.employee' versionCode='[0-9]+' versionName="
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: airos-employee-dev-${{ github.sha }}.apk
+          path: frontend/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      # Firebase App Distribution — only when explicitly requested.
+      # Requires repo secret FIREBASE_SERVICE_ACCOUNT_EMPLOYEE_DEV
+      # (service account JSON with the Firebase App Distribution Admin
+      # role, scoped to final-airos-os) OR Workload Identity Federation.
+      - name: Authenticate to Google Cloud
+        if: inputs.distribute
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EMPLOYEE_DEV }}
+
+      - name: Distribute via Firebase App Distribution
+        if: inputs.distribute
+        run: |
+          set -euo pipefail
+          NOTES="${{ inputs.release_notes }}\nVersion: $(node -p "require('./app.json').expo.version") | commit ${{ github.sha }} | built ${{ github.run_id }} | API: $VITE_API_URL"
+          TOKEN=$(gcloud auth application-default print-access-token)
+          # Upload the APK — media upload endpoint returns the release name.
+          UPLOAD=$(curl -sS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "X-Goog-Upload-File-Name: app-debug.apk" \
+            -H "X-Goog-Upload-Protocol: raw" \
+            --data-binary @android/app/build/outputs/apk/debug/app-debug.apk \
+            "https://firebaseappdistribution.googleapis.com/upload/v1/projects/94363806721/apps/$FIREBASE_APP_ID/releases:upload")
+          RELEASE=$(echo "$UPLOAD" | jq -r .name)
+          echo "Uploaded release: $RELEASE"
+          # Attach release notes (releaseNotes is a field on the Release
+          # resource — PATCH it with an update mask; there is no dedicated
+          # notes endpoint in FAD v1).
+          curl -sS -X PATCH \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"releaseNotes\":{\"text\":\"$NOTES\"}}" \
+            "https://firebaseappdistribution.googleapis.com/v1/$RELEASE?updateMask=release_notes" > /dev/null
+          # Distribute to the dev tester group (plain alias, not a
+          # resource name).
+          curl -sS -X POST \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"groupAliases\":[\"$TESTER_GROUP\"]}" \
+            "https://firebaseappdistribution.googleapis.com/v1/$RELEASE:distribute"

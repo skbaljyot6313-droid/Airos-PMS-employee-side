@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bell, X, ChevronRight } from 'lucide-react';
 import { StaffNotification } from '../../types';
 
@@ -26,6 +26,34 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
     return () => clearTimeout(t);
   }, [notification, onDismiss]);
 
+  // Swipe-to-dismiss — a horizontal drag past the threshold dismisses in
+  // the swipe direction; shorter drags snap back. Vertical movement and
+  // taps are untouched, so scrolling and the open/close buttons still work.
+  const [dragX, setDragX] = useState(0);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const swiped = useRef(false);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    start.current = { x: e.clientX, y: e.clientY };
+    swiped.current = false;
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!start.current) return;
+    const dx = e.clientX - start.current.x;
+    const dy = e.clientY - start.current.y;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) {
+      swiped.current = true;
+      setDragX(dx);
+    }
+  };
+  const onPointerUp = () => {
+    if (swiped.current && Math.abs(dragX) > 60) {
+      onDismiss(notification);
+    }
+    start.current = null;
+    setDragX(0);
+  };
+
   const hasTarget = notification.taskId !== null || notification.ticketId !== null;
 
   return (
@@ -35,8 +63,20 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
       aria-live="polite"
     >
       <div
-        className="pointer-events-auto w-full max-w-sm mx-auto bg-white rounded-2xl shadow-xl border border-[#E4E8E6] flex items-start gap-3 p-4 cursor-pointer active:scale-[0.98] transition-transform"
-        onClick={() => onOpen(notification)}
+        className="pointer-events-auto w-full max-w-sm mx-auto bg-white rounded-2xl shadow-xl border border-[#E4E8E6] flex items-start gap-3 p-4 cursor-pointer touch-pan-y select-none"
+        style={{
+          transform: `translateX(${dragX}px)`,
+          opacity: 1 - Math.min(Math.abs(dragX) / 160, 0.6),
+          transition: dragX === 0 ? 'transform 150ms ease-out, opacity 150ms ease-out' : undefined,
+        }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onClick={() => {
+          if (swiped.current) return;
+          onOpen(notification);
+        }}
       >
         <div className="w-9 h-9 rounded-xl bg-[#E8F7ED] text-[#33B059] flex items-center justify-center flex-shrink-0">
           <Bell className="w-4.5 h-4.5" />

@@ -155,6 +155,8 @@ export interface Task {
   due_time: string | null;
   scheduled_for?: string | null;
   expires_at?: string | null;
+  /** ISO timestamp when the task reached a terminal (done-bucket) state. */
+  completed_at?: string | null;
   instructions: string | null;
   checklist: ChecklistItem[];
   verification_config: VerificationConfig;

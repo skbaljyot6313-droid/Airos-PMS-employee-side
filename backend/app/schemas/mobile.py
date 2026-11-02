@@ -20,6 +20,14 @@ class MobileVersionResponse(BaseModel):
     download_url: str
     release_notes: str | None = None
     force_update: bool
+    # Integrity metadata of the stored binary (GCS object metadata,
+    # stamped at upload). None for externally-hosted releases.
+    sha256: str | None = None
+    file_size_bytes: int | None = None
+    # Server-computed comparison when the device supplies its build.
+    installed_version_code: int | None = None
+    update_available: bool | None = None
+    mandatory_update: bool | None = None
 
 
 class MobileReleaseCreate(BaseModel):
