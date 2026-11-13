@@ -172,6 +172,14 @@ export const hi: Messages = {
     photoCaptureFailed: 'फ़ोटो नहीं ली जा सकी।',
     evidenceAlt: 'कार्य साक्ष्य',
     priorEvidenceAlt: 'पहले जमा किया गया साक्ष्य',
+    resources: {
+      bed: '{{count}} बेड असाइन किए गए',
+      fixture: '{{count}} फ़िक्स्चर असाइन किए गए',
+      room: '{{count}} कमरे असाइन किए गए',
+      other: '{{count}} संसाधन असाइन किए गए',
+      more: 'और',
+      less: 'कम दिखाएँ',
+    },
   },
   maintenance: {
     eyebrow: 'प्रॉपर्टी रखरखाव',
@@ -451,6 +459,7 @@ export const hi: Messages = {
     listen: 'कार्य सुनें',
     stopSpeaking: 'सुनाना रोकें',
     speaking: 'कार्य सुनाया जा रहा है...',
+    completed: 'सुनाना पूरा हुआ',
     unavailable:
       'इस डिवाइस पर {{language}} वॉइस इंस्टॉल नहीं है। Android Text-to-Speech सेटिंग्स में इंस्टॉल करें, या दूसरी ऑडियो भाषा चुनें।',
     initFailed: 'इस डिवाइस पर ऑडियो उपलब्ध नहीं है।',

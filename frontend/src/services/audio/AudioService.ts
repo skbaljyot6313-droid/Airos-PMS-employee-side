@@ -17,7 +17,9 @@ import { capacitorTTSProvider, localeForLanguage, VoiceUnavailableError, type TT
 
 export type SpeechStatus =
   | { kind: 'idle' }
+  | { kind: 'preparing'; taskId: string }
   | { kind: 'speaking'; taskId: string }
+  | { kind: 'completed'; taskId: string }
   | { kind: 'error'; taskId: string | null; reason: 'voice_missing' | 'failed' };
 
 type Listener = (s: SpeechStatus) => void;
@@ -47,7 +49,7 @@ export class AudioService {
 
   isSpeaking(taskId?: string): boolean {
     return (
-      this.status.kind === 'speaking' &&
+      (this.status.kind === 'speaking' || this.status.kind === 'preparing') &&
       (taskId === undefined || this.status.taskId === taskId)
     );
   }
@@ -78,10 +80,18 @@ export class AudioService {
     const text = resolveSpeechText(task, this.language);
 
     try {
+      this.emit({ kind: 'preparing', taskId: task.id });
       await this.provider.stop(); // belt-and-braces alongside queueStrategy flush
       this.emit({ kind: 'speaking', taskId: task.id });
       await this.provider.speak(text, locale);
-      if (this.generation === gen) this.emit({ kind: 'idle' });
+      if (this.generation === gen) {
+        // Brief "completed" beat so the button can show a subtle done
+        // flash before settling back to idle.
+        this.emit({ kind: 'completed', taskId: task.id });
+        setTimeout(() => {
+          if (this.generation === gen) this.emit({ kind: 'idle' });
+        }, 1200);
+      }
       return true;
     } catch (err) {
       if (this.generation === gen) {

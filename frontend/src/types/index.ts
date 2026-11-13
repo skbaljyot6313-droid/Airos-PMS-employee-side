@@ -138,13 +138,32 @@ export interface TaskSubmission {
   photos: EvidenceItem[];
 }
 
+/** A single physical resource covered by a (possibly grouped) task —
+ *  bed today; shaped to carry rooms/fixtures/equipment later. */
+export interface TaskResource {
+  id: string; // resource uid (bed_uid …); '' when only a label exists
+  label: string; // human identifier — "P2-01", "Bed 03", fixture label
+  kind: 'bed' | 'fixture' | 'room' | 'other';
+  status?: string | null;
+}
+
 export interface Task {
   id: string; // task_uid or ticket_uid when kind === 'maintenance'
   kind?: 'task' | 'maintenance'; // defaults to 'task'
   ticket_number: string | null;
   title: string;
   category: string; // task_type / work_type for display
+  /** Raw backend work_type (cleaning|inspection|…) — localization key. */
+  work_type?: string | null;
   location_name: string;
+  /** Structured location fields — let localization/speech rebuild the
+   *  place description instead of parsing `location_name`. */
+  room_number?: string | null;
+  dorm_name?: string | null;
+  washroom_name?: string | null;
+  washroom_fixture_label?: string | null;
+  /** Individual resources covered by this task (dorm beds, fixtures…). */
+  resources?: TaskResource[];
   zone_uid: string | null;
   zone_name: string | null;
   priority: TaskPriority;

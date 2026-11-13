@@ -13,6 +13,7 @@ import { PrimaryButton, SecondaryButton } from '../../components/common/Buttons'
 import { LoadingState, ErrorState } from '../../components/common/FeedbackStates';
 import { useTranslation } from 'react-i18next';
 import { SpeakButton } from '../../components/common/SpeakButton';
+import { ResourceChips } from '../../components/tasks/ResourceChips';
 import { resolveTaskText } from '../../i18n/taskText';
 import { currentUiLanguage } from '../../i18n';
 import {
@@ -340,6 +341,11 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
           <h2 className="text-[17px] font-bold text-[#20292C] font-['Space_Grotesk'] leading-tight">
             {resolvedText.title}
           </h2>
+
+          {/* Every physical resource covered — beds, fixtures, … */}
+          {task.resources && task.resources.length > 0 && (
+            <ResourceChips resources={task.resources} maxVisible={10} />
+          )}
 
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#F0F2F1] text-xs">
             <div>

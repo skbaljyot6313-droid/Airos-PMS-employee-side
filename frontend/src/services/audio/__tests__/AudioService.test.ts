@@ -50,7 +50,27 @@ describe('AudioService', () => {
     expect(provider.spoken).toEqual([
       { text: 'Task. Do the thing.', locale: 'en-IN' },
     ]);
-    expect(svc.state.kind).toBe('idle'); // speak() resolved → back to idle
+    // speak() resolved → brief "completed" beat, then idle after ~1.2s.
+    expect(svc.state).toEqual({ kind: 'completed', taskId: 'a' });
+  });
+
+  it('settles back to idle after the completed beat', async () => {
+    vi.useFakeTimers();
+    try {
+      await svc.speakTask(mkTask('a'));
+      expect(svc.state).toEqual({ kind: 'completed', taskId: 'a' });
+      await vi.advanceTimersByTimeAsync(1300);
+      expect(svc.state.kind).toBe('idle');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('passes through preparing → speaking → completed', async () => {
+    const seen: string[] = [];
+    svc.subscribe((s) => seen.push(s.kind));
+    await svc.speakTask(mkTask('a'));
+    expect(seen).toEqual(['preparing', 'speaking', 'completed']);
   });
 
   it('maps hi/mr to the correct TTS locales', async () => {
@@ -90,7 +110,8 @@ describe('AudioService', () => {
     const t2 = mkTask('b');
     await Promise.all([svc.speakTask(t1), svc.speakTask(t2)]);
     // Both resolve; each speak flushes the queue — one utterance at a time.
-    expect(svc.state.kind).toBe('idle');
+    // The last generation wins: 'completed' (idle follows after the beat).
+    expect(['completed', 'idle']).toContain(svc.state.kind);
   });
 
   it('emits voice_missing when the selected voice is unavailable', async () => {
@@ -140,9 +161,10 @@ describe('AudioService', () => {
     void svc.speakTask(mkTask('a'));
     await Promise.resolve();
     await svc.speakTask(mkTask('b'));
-    expect(svc.state.kind).toBe('idle');
+    expect(svc.state).toEqual({ kind: 'completed', taskId: 'b' });
     release1();
     await new Promise((r) => setTimeout(r, 0));
-    expect(svc.state.kind).toBe('idle');
+    // gen-1 resolved late — its completion must not clobber gen-2's state.
+    expect(svc.state).toEqual({ kind: 'completed', taskId: 'b' });
   });
 });

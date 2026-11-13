@@ -179,6 +179,14 @@ export const en = {
     photoCaptureFailed: 'Failed to capture photo.',
     evidenceAlt: 'Task evidence',
     priorEvidenceAlt: 'Previously submitted evidence',
+    resources: {
+      bed: '{{count}} beds assigned',
+      fixture: '{{count}} fixtures assigned',
+      room: '{{count}} rooms assigned',
+      other: '{{count}} resources assigned',
+      more: 'more',
+      less: 'Show less',
+    },
   },
   maintenance: {
     eyebrow: 'Property Maintenance',
@@ -476,6 +484,7 @@ export const en = {
     listen: 'Listen to task',
     stopSpeaking: 'Stop reading',
     speaking: 'Reading task aloud...',
+    completed: 'Finished reading',
     unavailable:
       'The {{language}} voice is not installed on this device. Install it in Android Text-to-Speech settings, or choose another audio language.',
     initFailed: 'Audio is not available on this device.',

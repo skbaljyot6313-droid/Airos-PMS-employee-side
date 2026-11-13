@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Task } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { SpeakButton } from '../common/SpeakButton';
+import { ResourceChips } from './ResourceChips';
+import { getLocalizedTask, taskTextLanguage } from '../../i18n/taskText';
 import { MapPin, Clock, ArrowUp, AlertOctagon } from 'lucide-react';
 
 interface TaskCardProps {
@@ -44,7 +46,13 @@ const PriorityMark: React.FC<{ priority: Task['priority'] }> = ({ priority }) =>
 const QUIET_STATUSES = new Set(['assigned', 'pending', 'scheduled', 'overdue', 'in_progress']);
 
 export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // Re-resolves when the employee switches Text Language — the memo is
+  // keyed on the i18n language, not a snapshot.
+  const localized = useMemo(
+    () => getLocalizedTask(task, taskTextLanguage(i18n.language)),
+    [task, i18n.language],
+  );
   // Overdue: backend status or a clock-time due in the past, still actionable
   const dueTime = task.due_at ? new Date(task.due_at).getTime() : null;
   const isOverdue =
@@ -87,10 +95,15 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
         </div>
       </div>
 
-      {/* Level 2 — task title */}
+      {/* Level 2 — task title (localized) */}
       <h3 className="text-[15px] font-semibold text-ink leading-snug mb-1.5 font-['Space_Grotesk'] line-clamp-2">
-        {task.title}
+        {localized.title}
       </h3>
+
+      {/* Level 2.5 — every physical resource this task covers */}
+      {task.resources && task.resources.length > 0 && (
+        <ResourceChips resources={task.resources} />
+      )}
 
       {/* Level 3 — location · zone, then deadline + status */}
       <div className="flex items-center gap-1.5 text-xs text-sub min-w-0 mb-1.5">

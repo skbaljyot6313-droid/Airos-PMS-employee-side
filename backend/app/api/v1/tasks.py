@@ -14,6 +14,7 @@ from app.repositories.workspace import WorkspaceRepository
 from app.schemas.location import GeoCapture
 from app.schemas.v1.tasks.task import TaskSubmitRequest, task_out
 from app.services.task import TaskService
+from app.services.task_resources import attach_task_resources
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -34,20 +35,27 @@ async def list_tasks(limit: int = Query(default=20, ge=1, le=500), user: User = 
         zone = zones.get(task.zone_id)
         unit = rooms.get(task.room_id) or dorms.get(task.dorm_id) or washrooms.get(task.washroom_id)
         task._resolved_area_id = zone.area_id if zone and zone.area_id else (unit.area_id if unit else None)
+    await attach_task_resources(session, tasks)
     res["items"] = [task_out(task) for task in tasks]
     return res
 
 
 @router.get("/{task_id}")
 async def get_task(task_id: uuid.UUID, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db)):
-    return task_out(await TaskService(session).get_task(user, task_id))
+    task = await TaskService(session).get_task(user, task_id)
+    await attach_task_resources(session, [task])
+    return task_out(task)
 
 
 @router.post("/{task_id}/start")
 async def start_task(task_id: uuid.UUID, payload: GeoCapture | None = None, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db)):
-    return task_out(await TaskService(session).start_task(user, task_id, geo=payload))
+    task = await TaskService(session).start_task(user, task_id, geo=payload)
+    await attach_task_resources(session, [task])
+    return task_out(task)
 
 
 @router.post("/{task_id}/submit")
 async def submit_task(task_id: uuid.UUID, payload: TaskSubmitRequest, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db)):
-    return task_out(await TaskService(session).submit_task(user, task_id, payload))
+    task = await TaskService(session).submit_task(user, task_id, payload)
+    await attach_task_resources(session, [task])
+    return task_out(task)

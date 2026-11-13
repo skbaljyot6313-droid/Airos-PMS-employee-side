@@ -8,6 +8,7 @@
 import { TextToSpeech } from '@capacitor-community/text-to-speech';
 import type { LanguageCode } from '../../i18n/languages';
 import { ttsLocale } from '../../i18n/languages';
+import { TTS_CONFIG } from './ttsConfig';
 
 export class VoiceUnavailableError extends Error {
   constructor(public readonly locale: string) {
@@ -40,6 +41,40 @@ const localeMatches = (voiceLang: string, locale: string): boolean => {
 
 class CapacitorTTSProvider implements TTSProvider {
   private supportedCache = new Map<string, boolean>();
+  private voiceIndexCache = new Map<string, number | null>();
+
+  /**
+   * Best installed voice index for `locale` within the voices array —
+   * preferring local (offline) engines and Google Speech Services voices
+   * per TTS_CONFIG. null → let the engine choose its own default.
+   */
+  private async resolveVoiceIndex(locale: string): Promise<number | null> {
+    if (this.voiceIndexCache.has(locale)) return this.voiceIndexCache.get(locale)!;
+    try {
+      const { voices } = await TextToSpeech.getSupportedVoices();
+      const ranked = voices
+        .map((v, i) => ({ v, i }))
+        .filter(({ v }) => localeMatches(v.lang, locale));
+      const hintScore = (voiceURI: string, name: string): number => {
+        const hay = `${voiceURI} ${name}`.toLowerCase();
+        const idx = TTS_CONFIG.preferredVoiceHints.findIndex((h) =>
+          hay.includes(h),
+        );
+        return idx === -1 ? TTS_CONFIG.preferredVoiceHints.length : idx;
+      };
+      ranked.sort(
+        (a, b) =>
+          hintScore(a.v.voiceURI, a.v.name) - hintScore(b.v.voiceURI, b.v.name) ||
+          Number(b.v.localService ?? false) - Number(a.v.localService ?? false),
+      );
+      const index = ranked.length ? ranked[0].i : null;
+      this.voiceIndexCache.set(locale, index);
+      return index;
+    } catch {
+      this.voiceIndexCache.set(locale, null);
+      return null;
+    }
+  }
 
   async isLanguageSupported(locale: string): Promise<boolean> {
     const hit = this.supportedCache.get(locale);
@@ -66,16 +101,18 @@ class CapacitorTTSProvider implements TTSProvider {
     if (!(await this.isLanguageSupported(locale))) {
       throw new VoiceUnavailableError(locale);
     }
+    const voice = await this.resolveVoiceIndex(locale);
     await TextToSpeech.speak({
       text,
       lang: locale,
-      rate: 1.0,
-      pitch: 1.0,
-      volume: 1.0,
-      category: 'ambient',
+      rate: TTS_CONFIG.rate,
+      pitch: TTS_CONFIG.pitch,
+      volume: TTS_CONFIG.volume,
+      category: TTS_CONFIG.category,
       // Flush: a new utterance replaces anything still queued/playing —
       // overlapping task speech is impossible by construction.
-      queueStrategy: 0,
+      queueStrategy: TTS_CONFIG.queueStrategy,
+      ...(voice !== null ? { voice } : {}),
     });
   }
 

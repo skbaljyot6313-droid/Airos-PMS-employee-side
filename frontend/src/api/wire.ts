@@ -147,6 +147,9 @@ export interface TaskWire {
   dorm_uid: string | null;
   dorm_name: string | null;
   bed_uids: string[] | null;
+  /** Resolved bed identities — [{bed_uid, bed_number, status}]; present
+   *  when the API resolved bed_uids. `bed_uids` stays for compat. */
+  beds?: { bed_uid: string; bed_number: string; status: string }[] | null;
   washroom_uid: string | null;
   washroom_name: string | null;
   washroom_fixture_uid: string | null;

@@ -411,6 +411,9 @@ def task_out(t: Task) -> dict:
         "dorm_uid": str(t.dorm_id) if t.dorm_id else None,
         "dorm_name": t.dorm_name,
         "bed_uids": list(t.bed_ids) if t.bed_ids else None,
+        # Resolved [{bed_uid, bed_number, status}] — attached by the tasks
+        # API via attach_task_resources; None when not resolved or no beds.
+        "beds": getattr(t, "_bed_infos", None),
         "washroom_uid": str(t.washroom_id) if t.washroom_id else None,
         "washroom_name": t.washroom_name,
         "washroom_fixture_uid": (

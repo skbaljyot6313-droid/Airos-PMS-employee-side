@@ -264,6 +264,51 @@ describe('mapTask', () => {
     expect(t.prior_submissions).toEqual([]);
     expect(t.evidence.map((p) => p.url)).toEqual(['/uploads/a.jpg']);
   });
+
+  it('maps resolved beds into resources with verbatim labels', () => {
+    const t = mapTask(
+      baseWire({
+        room_number: null,
+        dorm_uid: 'dorm-1',
+        dorm_name: 'Dorm P2',
+        bed_uids: ['b1', 'b2', 'b3'],
+        beds: [
+          { bed_uid: 'b1', bed_number: 'P2-01', status: 'cleaning' },
+          { bed_uid: 'b2', bed_number: 'P2-03', status: 'cleaning' },
+          { bed_uid: 'b3', bed_number: 'P2-05', status: 'cleaning' },
+        ],
+      }),
+      zones
+    );
+    expect(t.resources).toEqual([
+      { id: 'b1', label: 'P2-01', kind: 'bed', status: 'cleaning' },
+      { id: 'b2', label: 'P2-03', kind: 'bed', status: 'cleaning' },
+      { id: 'b3', label: 'P2-05', kind: 'bed', status: 'cleaning' },
+    ]);
+    expect(t.dorm_name).toBe('Dorm P2');
+    expect(t.work_type).toBe('cleaning');
+  });
+
+  it('maps a washroom fixture into a fixture resource', () => {
+    const t = mapTask(
+      baseWire({
+        room_number: null,
+        washroom_uid: 'w-1',
+        washroom_name: 'W-01',
+        washroom_fixture_uid: 'f-1',
+        washroom_fixture_label: 'sink 2',
+      }),
+      zones
+    );
+    expect(t.resources).toEqual([
+      { id: 'f-1', label: 'sink 2', kind: 'fixture', status: null },
+    ]);
+  });
+
+  it('leaves resources undefined when the task covers no sub-resources', () => {
+    const t = mapTask(baseWire(), zones);
+    expect(t.resources).toBeUndefined();
+  });
 });
 
 describe('taskBucket', () => {

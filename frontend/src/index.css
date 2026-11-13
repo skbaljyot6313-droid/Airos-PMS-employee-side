@@ -37,3 +37,8 @@ body,
   overflow: hidden;
   overscroll-behavior: none;
 }
+
+@keyframes speakbar {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}

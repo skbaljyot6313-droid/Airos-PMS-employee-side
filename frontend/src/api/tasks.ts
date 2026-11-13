@@ -165,12 +165,35 @@ export const mapTask = (t: TaskWire, zoneNames: Map<string, string>): Task => {
     ? latestSubmission.photos
     : (t.completion_images ?? []).map((i, idx) => toEvidence(i, `ev-${idx}`));
 
+  const resources: Task['resources'] = [
+    ...(t.beds ?? []).map((b) => ({
+      id: b.bed_uid,
+      label: b.bed_number,
+      kind: 'bed' as const,
+      status: b.status,
+    })),
+    ...(t.washroom_fixture_label
+      ? [{
+          id: t.washroom_fixture_uid ?? '',
+          label: t.washroom_fixture_label,
+          kind: 'fixture' as const,
+          status: null,
+        }]
+      : []),
+  ];
+
   return {
     id: t.task_uid,
     ticket_number: t.ticket_number ?? null,
     title: t.title,
     category: titleCase(t.work_type || t.task_type || 'task'),
+    work_type: t.work_type ?? null,
     location_name: locationName(t),
+    room_number: t.room_number ?? null,
+    dorm_name: t.dorm_name ?? null,
+    washroom_name: t.washroom_name ?? null,
+    washroom_fixture_label: t.washroom_fixture_label ?? null,
+    resources: resources.length ? resources : undefined,
     zone_uid: t.zone_uid ?? null,
     zone_name: t.zone_uid ? zoneNames.get(t.zone_uid) ?? null : null,
     priority: t.priority as Task['priority'],
