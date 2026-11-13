@@ -3,7 +3,7 @@
   Build the AiROS Employee development APK entirely inside Docker.
 
 .DESCRIPTION
-  No JDK or Android SDK is required on the host — the image carries
+  No JDK or Android SDK is required on the host -- the image carries
   Temurin JDK 21 + Android SDK (platform android-35, build-tools 35.0.0).
   Produces dist/android/airos-employee-dev.apk under the repo root.
 
@@ -36,15 +36,15 @@ $OutDir   = Join-Path $RepoRoot "dist\android"
 $OutApk   = Join-Path $OutDir "$ApkName.apk"
 
 if ($ApiUrl -notmatch '/api/v\d+$') {
-  Write-Warning "ApiUrl '$ApiUrl' does not end in /api/vN — apiClient appends route paths to it directly."
+  Write-Warning "ApiUrl '$ApiUrl' does not end in /api/vN -- apiClient appends route paths to it directly."
 }
 
 function Require-Docker {
   if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    throw "docker not found on PATH — install Docker Desktop."
+    throw "docker not found on PATH -- install Docker Desktop."
   }
   docker info *> $null
-  if ($LASTEXITCODE -ne 0) { throw "Docker daemon is not running — start Docker Desktop first." }
+  if ($LASTEXITCODE -ne 0) { throw "Docker daemon is not running -- start Docker Desktop first." }
 }
 
 Require-Docker
