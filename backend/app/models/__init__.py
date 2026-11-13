@@ -61,3 +61,4 @@ from app.models.shift import (  # noqa: E402, F401
     EmployeeShiftAssignment,
     Shift,
 )
+from app.models.employee_preference import EmployeePreference  # noqa: E402, F401

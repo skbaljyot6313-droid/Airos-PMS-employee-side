@@ -6,26 +6,26 @@
  * bg-warnsoft, text-ok, text-info / bg-infosoft, bg-soft. */
 @theme {
   /* Fortify-inspired: white canvas, near-black ink, lime signature accent */
-  --color-app: #FFFFFF;
+  --color-app: #F4F5F3;
   --color-surface: #FFFFFF;
   --color-soft: #F7F8F6;
-  --color-ink: #171918;
-  --color-sub: #666D68;
+  --color-ink: #202522;
+  --color-sub: #858B88;
   --color-mute: #8B918C;
-  --color-line: #E8EBE7;
+  --color-line: #E7EAE7;
   --color-grid: #F0F1EE;
 
-  --color-lime: #C8F169;
+  --color-lime: #B8E957;
   --color-acc: #278447;
   --color-accsoft: #EAF4ED;
 
-  --color-dng: #D9363E;
+  --color-dng: #D94B55;
   --color-dngsoft: #FFF0F0;
 
   --color-warn: #A86A12;
   --color-warnsoft: #FBF3E4;
 
-  --color-ok: #278447;
+  --color-ok: #32865B;
   --color-info: #2B5DD8;
   --color-infosoft: #EEF3FF;
 }

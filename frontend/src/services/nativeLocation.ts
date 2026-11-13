@@ -36,6 +36,13 @@ interface AirosLocationPlugin {
     accessToken: string;
     refreshToken?: string;
   }): Promise<void>;
+  /** Persist API config + credentials for the tracking-independent
+   *  work-feed poll — no GPS tracking is started. */
+  configure(options: {
+    apiBase: string;
+    accessToken: string;
+    refreshToken?: string;
+  }): Promise<{ configured: boolean }>;
   getState(): Promise<NativeTrackerState>;
   openBatteryOptimizationSettings(): Promise<void>;
 }

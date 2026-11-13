@@ -109,7 +109,7 @@ public class LocationTrackingService extends Service {
     private LocationCallback fusedCallback;
     private LocationManager manager;
     private android.location.LocationListener managerListener;
-    private volatile long lastRefreshAttempt = 0;
+    private static volatile long lastRefreshAttempt = 0;
 
     public static Intent startIntent(Context ctx) {
         return new Intent(ctx, LocationTrackingService.class);
@@ -122,7 +122,7 @@ public class LocationTrackingService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        createChannel();
+        ensureChannels(this);
     }
 
     @Override
@@ -146,7 +146,7 @@ public class LocationTrackingService extends Service {
         notifPoller.scheduleWithFixedDelay(
                 () -> {
                     try {
-                        pollNotificationsSync();
+                        pollOnce(this);
                     } catch (Throwable ignored) {
                     }
                 }, 15, NOTIF_POLL_MS / 1000,
@@ -193,7 +193,11 @@ public class LocationTrackingService extends Service {
     // Notification + foreground
     // ------------------------------------------------------------------
 
-    private void createChannel() {
+    /** Idempotent channel setup — static and callable from ANY context
+     *  (FCM service, poll receiver, plugin) so posting to airos_work
+     *  never depends on this tracking service having run. Posting to an
+     *  uncreated channel is silently dropped on Android 8+. */
+    static void ensureChannels(Context ctx) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel ch = new NotificationChannel(
                     CHANNEL_ID, "Location tracking",
@@ -203,7 +207,9 @@ public class LocationTrackingService extends Service {
                     WORK_CHANNEL_ID, "Work assignments",
                     NotificationManager.IMPORTANCE_HIGH);
             work.setDescription("New tasks, reassignments and tickets.");
-            NotificationManager nm = getSystemService(NotificationManager.class);
+            NotificationManager nm =
+                    (NotificationManager) ctx.getSystemService(
+                            NOTIFICATION_SERVICE);
             if (nm != null) {
                 nm.createNotificationChannel(ch);
                 nm.createNotificationChannel(work);
@@ -256,7 +262,7 @@ public class LocationTrackingService extends Service {
                 Manifest.permission.ACCESS_COARSE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED;
         if (!fine && !coarse) {
-            recordError("NO_PERMISSION");
+            recordError(this, "NO_PERMISSION");
             stopSelf();
             return;
         }
@@ -298,7 +304,7 @@ public class LocationTrackingService extends Service {
                     provider, intervalMs, 0f, managerListener,
                     Looper.getMainLooper());
         } catch (Exception e) {
-            recordError("NO_PROVIDER");
+            recordError(this, "NO_PROVIDER");
             stopSelf();
         }
     }
@@ -361,7 +367,7 @@ public class LocationTrackingService extends Service {
                 w.write(line);
                 w.newLine();
             } catch (IOException e) {
-                recordError("QUEUE_WRITE");
+                recordError(this, "QUEUE_WRITE");
             }
         }
     }
@@ -436,14 +442,14 @@ public class LocationTrackingService extends Service {
     // can be fully closed while the workday (and this service) runs.
     // ------------------------------------------------------------------
 
-    private void pollNotificationsSync() {
-        SharedPreferences p = prefs(this);
+    static void pollOnce(Context ctx) {
+        SharedPreferences p = prefs(ctx);
         String base = p.getString(KEY_API_BASE, null);
         String token = p.getString(KEY_ACCESS, null);
         if (base == null || token == null) return;
         String url = base + "/notifications?unread_only=true&limit=5";
         HttpResult res = apiGet(url, token);
-        if (res.status == 401 && tryRefresh(p)) {
+        if (res.status == 401 && tryRefresh(ctx, p)) {
             res = apiGet(url, p.getString(KEY_ACCESS, null));
         }
         if (!res.ok()) return;
@@ -461,7 +467,7 @@ public class LocationTrackingService extends Service {
                 if (n == null) continue;
                 String uid = n.optString("notification_uid", "");
                 if (uid.isEmpty() || seen.contains(uid)) continue;
-                postWorkNotification(this, uid,
+                postWorkNotification(ctx, uid,
                         n.optString("title", "New assignment"),
                         n.optString("body", ""),
                         n.optString("task_uid", ""),
@@ -510,6 +516,9 @@ public class LocationTrackingService extends Service {
                         != PackageManager.PERMISSION_GRANTED) {
             return;
         }
+        // Channel must exist even when this tracking service never ran
+        // (FCM-only installs) — Android 8+ drops posts to unknown ids.
+        ensureChannels(ctx);
         // Tap → MainActivity. The data extras mirror what a system-posted
         // FCM notification carries, so the Capacitor push plugin's
         // handleOnNewIntent emits the usual pushNotificationActionPerformed
@@ -557,11 +566,11 @@ public class LocationTrackingService extends Service {
         String base = p.getString(KEY_API_BASE, null);
         String token = p.getString(KEY_ACCESS, null);
         if (base == null || token == null) {
-            recordError("NO_CONFIG");
+            recordError(this, "NO_CONFIG");
             return false;
         }
         HttpResult res = apiPost(base + "/location/current", line, token);
-        if (res.status == 401 && tryRefresh(p)) {
+        if (res.status == 401 && tryRefresh(this, p)) {
             res = apiPost(base + "/location/current", line,
                     p.getString(KEY_ACCESS, null));
         }
@@ -594,11 +603,11 @@ public class LocationTrackingService extends Service {
         // rather than wedge the queue behind them forever.
         if (res.status >= 400 && res.status < 500
                 && res.status != 401 && res.status != 429) {
-            recordError("HTTP_" + res.status
+            recordError(this, "HTTP_" + res.status
                     + (res.code != null ? ":" + res.code : ""));
             return true; // consumed — skip it
         }
-        recordError(res.status > 0 ? "HTTP_" + res.status : "NETWORK");
+        recordError(this, res.status > 0 ? "HTTP_" + res.status : "NETWORK");
         return false;
     }
 
@@ -608,7 +617,7 @@ public class LocationTrackingService extends Service {
         String token = p.getString(KEY_ACCESS, null);
         if (base == null || token == null) return false;
         HttpResult res = apiPost(base + "/location/start", "{}", token);
-        if (res.status == 401 && tryRefresh(p)) {
+        if (res.status == 401 && tryRefresh(this, p)) {
             res = apiPost(base + "/location/start", "{}",
                     p.getString(KEY_ACCESS, null));
         }
@@ -636,7 +645,7 @@ public class LocationTrackingService extends Service {
 
     /** Refresh the access token via /auth/refresh. Throttled — a dead
      *  refresh token must not spin a request per fix. */
-    private boolean tryRefresh(SharedPreferences p) {
+    private static boolean tryRefresh(Context ctx, SharedPreferences p) {
         long now = System.currentTimeMillis();
         if (now - lastRefreshAttempt < REFRESH_BACKOFF_MS) return false;
         lastRefreshAttempt = now;
@@ -655,7 +664,7 @@ public class LocationTrackingService extends Service {
             if (res.status == 401 || res.status == 403) {
                 // Refresh is dead — uploads will keep failing until the
                 // WebView pushes fresh credentials via updateAuth.
-                recordError("AUTH_EXPIRED");
+                recordError(ctx, "AUTH_EXPIRED");
             }
             return false;
         }
@@ -765,8 +774,8 @@ public class LocationTrackingService extends Service {
         }
     }
 
-    private void recordError(String err) {
-        prefs(this).edit().putString(KEY_LAST_ERROR, err).apply();
+    private static void recordError(Context ctx, String err) {
+        prefs(ctx).edit().putString(KEY_LAST_ERROR, err).apply();
     }
 
     private static String iso8601(long epochMs) {

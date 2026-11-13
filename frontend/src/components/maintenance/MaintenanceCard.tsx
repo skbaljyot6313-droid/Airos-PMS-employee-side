@@ -3,6 +3,9 @@ import { MaintenanceTicket } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { PriorityBadge } from '../common/PriorityBadge';
 import { MapPin, User, Calendar, Image as ImageIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { SpeakButton } from '../common/SpeakButton';
+import { ticketToSpeakable } from '../../i18n/taskText';
 
 interface MaintenanceCardProps {
   ticket: MaintenanceTicket;
@@ -15,6 +18,7 @@ export const MaintenanceCard: React.FC<MaintenanceCardProps> = ({
   currentEmployeeId,
   onClick,
 }) => {
+  const { t } = useTranslation();
   const isAssignedToMe = ticket.assigned_to_employee_id === currentEmployeeId;
   const isReportedByMe = ticket.is_reported_by_me;
 
@@ -29,7 +33,7 @@ export const MaintenanceCard: React.FC<MaintenanceCardProps> = ({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onClick()}
-      className="bg-white rounded-2xl p-4 border border-[#E4E8E6] hover:border-[#D2D8D6] transition-all active:scale-[0.99] cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.03)]"
+      className="bg-white rounded-2xl p-3 border border-[#E4E8E6] hover:border-[#D2D8D6] transition-all active:scale-[0.99] cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.03)]"
     >
       {/* Top Header: ID & Badges */}
       <div className="flex items-center justify-between gap-2 mb-2">
@@ -41,7 +45,10 @@ export const MaintenanceCard: React.FC<MaintenanceCardProps> = ({
             {ticket.category}
           </span>
         </div>
-        <PriorityBadge priority={ticket.priority} />
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <PriorityBadge priority={ticket.priority} />
+          <SpeakButton task={ticketToSpeakable(ticket)} />
+        </div>
       </div>
 
       {/* Issue title */}
@@ -58,19 +65,19 @@ export const MaintenanceCard: React.FC<MaintenanceCardProps> = ({
       </div>
 
       {/* Assignment pill & photos */}
-      <div className="flex items-center justify-between text-xs py-2 border-t border-[#F0F2F1] mb-2.5">
+      <div className="flex items-center justify-between text-xs py-1.5 border-t border-[#F0F2F1] mb-2">
         <div className="flex items-center gap-1.5">
           <User className="w-3.5 h-3.5 text-[#8D999C]" />
           <span className="text-[#667174]">
             {isAssignedToMe
-              ? 'Assigned to you'
+              ? t('maintenance.assignedToYou')
               : ticket.assigned_to_name
-              ? `Tech: ${ticket.assigned_to_name}`
-              : 'Unassigned'}
+              ? t('maintenance.techPrefix', { name: ticket.assigned_to_name })
+              : t('maintenance.unassigned')}
           </span>
           {isReportedByMe && (
             <span className="ml-1 text-[10px] font-medium bg-[#E8F7ED] text-[#278B46] px-1.5 py-0.5 rounded">
-              Reported by you
+              {t('maintenance.reportedByYou')}
             </span>
           )}
         </div>

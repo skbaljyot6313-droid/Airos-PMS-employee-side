@@ -181,7 +181,7 @@ async def test_shutdown_disposes_database_if_redis_cleanup_fails(monkeypatch):
 
 async def test_push_releases_connection_before_external_send(session, seed, monkeypatch):
     from types import SimpleNamespace
-    from app.models.notifications import DeviceRegistration
+    from app.models.notifications import DeviceRegistration, Notification
     from app.services import notifications
 
     employee_id = seed["employee"].id
@@ -189,16 +189,24 @@ async def test_push_releases_connection_before_external_send(session, seed, monk
         employee_id=employee_id, device_id="pool-test", push_token="token",
         platform="android", is_active=True,
     ))
+    n = Notification(
+        property_id=seed["prop"].id, employee_id=employee_id,
+        type="task_assigned", title="t", body="b",
+    )
+    session.add(n)
     await session.commit()
 
     async def send(*args, **kwargs):
         assert not session.in_transaction()
-        return SimpleNamespace(invalid_tokens=["token"])
+        return SimpleNamespace(
+            invalid_tokens=["token"], delivered=[], accepted_ids=[],
+            retryable_error=None, permanent_error=None, noop=False,
+        )
 
     monkeypatch.setattr(notifications, "get_push_provider", lambda: SimpleNamespace(send=send))
     await notifications._dispatch_snapshot(session, {
-        "employee_id": employee_id, "notification_id": "test", "title": "test",
-        "body": "test", "data": {},
+        "employee_id": employee_id, "notification_id": str(n.id),
+        "title": "test", "body": "test", "data": {},
     })
     assert not session.in_transaction()
     assert (await session.execute(text("SELECT is_active FROM device_registrations WHERE device_id='pool-test'"))).scalar_one() == 0

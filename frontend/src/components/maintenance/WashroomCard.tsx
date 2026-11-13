@@ -3,6 +3,7 @@ import { ZoneResource } from '../../types';
 import { UnitTile, RESOURCE_TYPE_ICONS } from './UnitTile';
 import { ResourceStateBadge } from './UnitTile';
 import { ChevronDown, Wrench } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface WashroomCardProps {
   washroom: ZoneResource;
@@ -16,6 +17,7 @@ interface WashroomCardProps {
  */
 export const WashroomCard: React.FC<WashroomCardProps> = ({ washroom, fixtures, onUnitPress }) => {
   const [expanded, setExpanded] = useState<boolean>(false);
+  const { t } = useTranslation();
 
   return (
     <div className="bg-white rounded-xl border border-[#E4E8E6] shadow-[0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
@@ -35,8 +37,8 @@ export const WashroomCard: React.FC<WashroomCardProps> = ({ washroom, fixtures, 
             </span>
             <span className="text-[10px] text-[#8D999C]">
               {fixtures.length > 0
-                ? `${fixtures.length} fixture${fixtures.length === 1 ? '' : 's'}`
-                : 'No fixtures'}
+                ? `${fixtures.length} ${t('maintenance.fixtures')}`
+                : t('maintenance.noFixtures')}
             </span>
           </div>
         </div>
@@ -57,7 +59,7 @@ export const WashroomCard: React.FC<WashroomCardProps> = ({ washroom, fixtures, 
             className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-[#D2D8D6] text-[11px] font-semibold text-[#20292C] hover:bg-[#F7F8F6] transition-colors"
           >
             <Wrench className="w-3.5 h-3.5 text-[#8D999C]" />
-            Washroom-level issue
+            {t('maintenance.washroomLevelIssue')}
           </button>
 
           {fixtures.length > 0 && (

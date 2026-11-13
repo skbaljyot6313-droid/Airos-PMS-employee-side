@@ -41,6 +41,27 @@ NOTIFICATION_TYPES = (
 
 DEVICE_PLATFORMS = ("android", "ios", "web")
 
+# Push delivery lifecycle — persisted per notification so a restart can
+# never lose a pending send (the row is the transactional outbox).
+#   queued        — written with the row; awaiting post-commit dispatch
+#   dispatching   — claimed by a dispatcher (crash-safe via stale reclaim)
+#   retry_pending — transient provider failure, push_next_attempt_at set
+#   accepted      — the provider accepted the send (FCM returned a
+#                   message name). Acceptance is NOT device delivery.
+#   failed        — permanent failure or retry budget exhausted
+#   delivered     — RESERVED: only ever set on independently confirmed
+#                   device delivery (FCM HTTP v1 provides none — unused)
+#   opened        — the employee interacted with the notification
+PUSH_STATUSES = (
+    "queued",
+    "dispatching",
+    "retry_pending",
+    "accepted",
+    "failed",
+    "delivered",
+    "opened",
+)
+
 LOCATION_SOURCES = (
     "attendance_start",
     "attendance_end",
@@ -80,6 +101,29 @@ class Notification(Base):
     read_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Push delivery state — the durable outbox fields. push_status never
+    # claims DELIVERED: FCM acceptance is recorded as 'accepted' only.
+    push_status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="queued",
+        server_default="queued",
+    )
+    push_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0",
+    )
+    push_next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Last provider error code — a short reason string, never a payload.
+    push_last_error: Mapped[str | None] = mapped_column(
+        String(120), nullable=True
+    )
+    # Provider-side reference on acceptance (FCM message name).
+    push_provider_ref: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    push_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -91,10 +135,20 @@ class Notification(Base):
             + ")",
             name="ck_notifications_type",
         ),
+        CheckConstraint(
+            "push_status IN ("
+            + ", ".join(f"'{s}'" for s in PUSH_STATUSES)
+            + ")",
+            name="ck_notifications_push_status",
+        ),
         # Badge count + list ordering — the two hot read paths.
         Index("ix_notif_employee_read", "employee_id", "is_read"),
         Index("ix_notif_employee_created", "employee_id", "created_at"),
         Index("ix_notif_property_created", "property_id", "created_at"),
+        # Push outbox sweep — due rows across all statuses.
+        Index(
+            "ix_notif_push_due", "push_status", "push_next_attempt_at"
+        ),
     )
 
 

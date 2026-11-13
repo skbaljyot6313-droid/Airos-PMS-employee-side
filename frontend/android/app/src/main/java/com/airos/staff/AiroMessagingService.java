@@ -21,6 +21,14 @@ import java.util.Map;
 public class AiroMessagingService extends MessagingService {
 
     @Override
+    public void onCreate() {
+        super.onCreate();
+        // The tracking service may never have run — the work channel
+        // must exist before any FCM-surfaced tray entry is posted.
+        LocationTrackingService.ensureChannels(getApplicationContext());
+    }
+
+    @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
         // Plugin behaviour first — JS pushNotificationReceived listeners and
         // foreground handling keep working exactly as before.

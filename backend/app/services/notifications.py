@@ -17,11 +17,12 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, exists, func, select, update
+from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import metrics
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.models.audit import AuditEvent
 from app.models.maintenance import MaintenanceTicket
@@ -74,27 +75,201 @@ def _push_snapshot(n: Notification) -> dict:
     }
 
 
+def _retry_delay_s(attempts: int) -> float:
+    """Exponential backoff with bounded ceiling — attempt N waits
+    base * 2**(N-1), capped at 30 minutes."""
+    delay = settings.PUSH_RETRY_BASE_SECONDS * (2 ** max(0, attempts - 1))
+    return float(min(delay, 1800))
+
+
+async def _claim_for_dispatch(
+    session: AsyncSession, notification_id: uuid.UUID
+) -> bool:
+    """Atomic claim — transitions queued/retry_pending → dispatching.
+
+    Returns False when another dispatcher already owns the row (the
+    after-commit drain and the sweep can race across processes — the
+    losing claim's rowcount=0 makes duplicate sends impossible).
+    Stale 'dispatching' rows (a process died mid-send) are reclaimable
+    after PUSH_DISPATCH_STALE_SECONDS."""
+    now = datetime.now(timezone.utc)
+    stale_before = now - timedelta(
+        seconds=settings.PUSH_DISPATCH_STALE_SECONDS
+    )
+    res = await session.execute(
+        update(Notification)
+        .where(
+            Notification.id == notification_id,
+            or_(
+                and_(
+                    Notification.push_status.in_(
+                        ("queued", "retry_pending")
+                    ),
+                    or_(
+                        Notification.push_next_attempt_at.is_(None),
+                        Notification.push_next_attempt_at <= now,
+                    ),
+                ),
+                and_(
+                    Notification.push_status == "dispatching",
+                    Notification.push_updated_at <= stale_before,
+                ),
+            ),
+        )
+        .values(
+            push_status="dispatching",
+            push_attempts=Notification.push_attempts + 1,
+            push_updated_at=now,
+        )
+    )
+    await session.commit()
+    return (res.rowcount or 0) > 0
+
+
+async def _record_push_outcome(
+    session: AsyncSession,
+    notification_id: uuid.UUID,
+    *,
+    status: str,
+    error: str | None = None,
+    provider_ref: str | None = None,
+    next_attempt_at: datetime | None = None,
+) -> None:
+    await session.execute(
+        update(Notification)
+        .where(Notification.id == notification_id)
+        .values(
+            push_status=status,
+            push_last_error=(error or "")[:120] or None,
+            push_provider_ref=provider_ref,
+            push_next_attempt_at=next_attempt_at,
+            push_updated_at=datetime.now(timezone.utc),
+        )
+    )
+    await session.commit()
+
+
+async def _fail_or_retry(
+    session: AsyncSession, notification_id: uuid.UUID, error: str
+) -> None:
+    """Retryable failure — reschedule while attempts remain, else fail."""
+    attempts = await session.scalar(
+        select(Notification.push_attempts).where(
+            Notification.id == notification_id
+        )
+    ) or 0
+    if attempts >= settings.PUSH_MAX_ATTEMPTS:
+        await _record_push_outcome(
+            session, notification_id, status="failed",
+            error=f"{error}:EXHAUSTED",
+        )
+        return
+    await _record_push_outcome(
+        session, notification_id, status="retry_pending",
+        error=error,
+        next_attempt_at=datetime.now(timezone.utc)
+        + timedelta(seconds=_retry_delay_s(attempts)),
+    )
+
+
 async def _dispatch_snapshot(session: AsyncSession, snap: dict) -> None:
-    """One queued push: token lookup → provider.send → dead-token cleanup.
+    """One queued push: claim → token lookup → provider.send → status.
     Runs on the drain's own session — failures are per-notification and
     never propagate (push must never break committed work)."""
+    notif_id = uuid.UUID(snap["notification_id"])
+    # Atomic claim — the sweep can race the drain; rowcount decides.
+    if not await _claim_for_dispatch(session, notif_id):
+        return
+    n = await session.get(Notification, notif_id)
+    if n is None:  # pragma: no cover — row deleted between commit+drain
+        return
+    await _dispatch_claimed(session, n)
+
+
+_PUSH_SWEEP_BATCH = 50
+
+
+async def dispatch_pending_pushes() -> int:
+    """Outbox sweep — pick up due notifications and dispatch them.
+
+    Covers the cases the after-commit fast path cannot: a process that
+    died between commit and drain (queued rows), transient provider
+    failures (retry_pending rows past push_next_attempt_at), and crashed
+    mid-send claims (stale 'dispatching'). Returns rows attempted; never
+    raises — the caller is a background loop."""
+    try:
+        from app.core.database import AsyncSessionLocal
+    except Exception as exc:  # engine unconfigured (unit-test context)
+        logger.warning("push sweep unavailable: %s", exc)
+        return 0
+    attempted = 0
+    try:
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(
+                select(Notification.id)
+                .where(
+                    Notification.push_status.in_(
+                        ("queued", "retry_pending", "dispatching")
+                    )
+                )
+                .order_by(Notification.created_at)
+                .limit(_PUSH_SWEEP_BATCH)
+            )
+            ids = list(res.scalars())
+            for nid in ids:
+                try:
+                    if await _claim_for_dispatch(session, nid):
+                        # Claim won — dispatch using the row's own data.
+                        n = await session.get(Notification, nid)
+                        if n is not None:
+                            await _dispatch_claimed(session, n)
+                        attempted += 1
+                except Exception as exc:
+                    await session.rollback()
+                    logger.warning(
+                        "push sweep dispatch failed for %s: %s", nid, exc,
+                    )
+    except Exception as exc:
+        logger.warning("push sweep failed: %s", exc)
+    return attempted
+
+
+async def _dispatch_claimed(
+    session: AsyncSession, n: Notification
+) -> None:
+    """Dispatch a row the caller already claimed — rebuilds the same
+    snapshot shape the after-commit drain uses."""
+    snap = _push_snapshot(n)
     res = await session.execute(
         select(DeviceRegistration.push_token).where(
-            DeviceRegistration.employee_id == snap["employee_id"],
+            DeviceRegistration.employee_id == n.employee_id,
             DeviceRegistration.is_active.is_(True),
         )
     )
     tokens = [t for t in res.scalars() if t]
     await session.commit()
     if not tokens:
+        await _record_push_outcome(
+            session, n.id, status="failed", error="NO_ACTIVE_DEVICES",
+        )
         return
-    provider = get_push_provider()
+    try:
+        provider = get_push_provider()
+    except Exception as exc:
+        await _record_push_outcome(
+            session, n.id, status="failed",
+            error=f"PROVIDER_UNAVAILABLE:{type(exc).__name__}",
+        )
+        return
     t0 = time.monotonic()
     try:
         result = await provider.send(
             tokens, snap["title"], snap["body"], snap["data"],
             tag=snap["notification_id"],
         )
+    except Exception as exc:
+        await _fail_or_retry(session, n.id, type(exc).__name__)
+        return
     finally:
         metrics.record_ext((time.monotonic() - t0) * 1000)
     dead = getattr(result, "invalid_tokens", None) or []
@@ -105,8 +280,23 @@ async def _dispatch_snapshot(session: AsyncSession, snap: dict) -> None:
             .values(is_active=False)
         )
         await session.commit()
-        logger.info(
-            "Push: deactivated %d dead registration token(s)", len(dead),
+    if getattr(result, "noop", False):
+        await _record_push_outcome(
+            session, n.id, status="failed",
+            error=result.permanent_error or "LOG_PROVIDER_STUB",
+        )
+    elif result.delivered:
+        ref = next((r for r in result.accepted_ids if r), None)
+        await _record_push_outcome(
+            session, n.id, status="accepted",
+            provider_ref=(ref or "")[:255] or None,
+        )
+    elif result.retryable_error:
+        await _fail_or_retry(session, n.id, result.retryable_error)
+    else:
+        await _record_push_outcome(
+            session, n.id, status="failed",
+            error=result.permanent_error or "SEND_FAILED",
         )
 
 
@@ -519,6 +709,11 @@ class NotificationService:
             return notification
         notification.is_read = True
         notification.read_at = datetime.now(timezone.utc)
+        # OPENED = the employee interacted. Only upgrades a completed
+        # send — a pending/failed row keeps its dispatch state.
+        if notification.push_status in ("accepted", "delivered"):
+            notification.push_status = "opened"
+            notification.push_updated_at = notification.read_at
         _audit(
             self.session, user=user, action="notification_read",
             entity_id=notification.id,

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bell, X, ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { StaffNotification } from '../../types';
 
 interface NotificationToastProps {
@@ -21,6 +22,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
   onOpen,
   onDismiss,
 }) => {
+  const { t } = useTranslation();
   useEffect(() => {
     const t = setTimeout(() => onDismiss(notification), AUTO_DISMISS_MS);
     return () => clearTimeout(t);
@@ -90,12 +92,12 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
           </p>
           {hasTarget && (
             <p className="text-[11px] font-semibold text-[#33B059] mt-1 flex items-center gap-0.5">
-              Tap to view <ChevronRight className="w-3 h-3" />
+              {t('notifications.tapToView')} <ChevronRight className="w-3 h-3" />
             </p>
           )}
         </div>
         <button
-          aria-label="Dismiss"
+          aria-label={t('common.dismiss')}
           className="text-[#8D999C] hover:text-[#667174] p-1 -m-1 flex-shrink-0"
           onClick={(e) => {
             e.stopPropagation();

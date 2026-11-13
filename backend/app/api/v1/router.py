@@ -12,6 +12,7 @@ from app.api.v1 import (
     media,
     mobile,
     notifications,
+    preferences,
     realtime,
     resources,
     tasks,
@@ -30,3 +31,4 @@ api_router.include_router(notifications.router)
 api_router.include_router(location.router)
 api_router.include_router(realtime.router)
 api_router.include_router(mobile.router)
+api_router.include_router(preferences.router)

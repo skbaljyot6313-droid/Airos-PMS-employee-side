@@ -57,7 +57,7 @@ services:
   seed:
     build: ./backend
     profiles: ["seed"]
-    command: ["python", "scripts/seed_demo.py"]
+    command: ["python", "-m", "scripts.seed_demo"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-mgmt}:${POSTGRES_PASSWORD:-mgmt-dev-password}@postgres:5432/${POSTGRES_DB:-mgmt}}
     depends_on:
@@ -88,6 +88,11 @@ services:
       # scheduled jobs (see backend/docs/ENVIRONMENT.md).
       RUN_EMBEDDED_SCHEDULER: "false"
       LOCATION_SERVICE_API_KEY: ${LOCATION_SERVICE_API_KEY:-}
+      # Push — 'log' stub for local dev; 'fcm' + FCM_PROJECT_ID on
+      # deployed environments (ADC on Cloud Run; SA-JSON secret else).
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-log}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      FCM_SERVICE_ACCOUNT_JSON: ${FCM_SERVICE_ACCOUNT_JSON:-}
     volumes:
       - uploads:/app/uploads
     depends_on:

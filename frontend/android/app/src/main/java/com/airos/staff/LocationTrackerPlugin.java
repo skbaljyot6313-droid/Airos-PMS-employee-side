@@ -83,6 +83,36 @@ public class LocationTrackerPlugin extends Plugin {
         call.resolve();
     }
 
+    /** Persist API config + credentials WITHOUT starting GPS tracking —
+     *  arms the tracking-independent work-feed poll so non-tracking
+     *  employees still get OS notifications (FCM is primary; the poll is
+     *  the fallback). Called by the WebView after login and on every
+     *  token refresh. */
+    @PluginMethod
+    public void configure(PluginCall call) {
+        String apiBase = call.getString("apiBase");
+        String accessToken = call.getString("accessToken");
+        if (apiBase == null || accessToken == null
+                || !apiBase.startsWith("https://")
+                && !apiBase.startsWith("http://")) {
+            call.reject("INVALID_CONFIG");
+            return;
+        }
+        SharedPreferences.Editor e =
+                LocationTrackingService.prefs(getContext()).edit()
+                        .putString(LocationTrackingService.KEY_API_BASE,
+                                apiBase)
+                        .putString(LocationTrackingService.KEY_ACCESS,
+                                accessToken);
+        String refresh = call.getString("refreshToken");
+        if (refresh != null) {
+            e.putString(LocationTrackingService.KEY_REFRESH, refresh);
+        }
+        e.apply();
+        WorkFeedPollScheduler.schedule(getContext());
+        call.resolve(new JSObject().put("configured", true));
+    }
+
     @PluginMethod
     public void updateAuth(PluginCall call) {
         String access = call.getString("accessToken");

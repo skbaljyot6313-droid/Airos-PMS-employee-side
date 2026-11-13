@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Download, ShieldAlert, Loader2, Settings2 } from 'lucide-react';
 import { PrimaryButton, SecondaryButton } from './Buttons';
 import {
@@ -22,6 +23,7 @@ interface UpdateDialogProps {
  * no WebView navigation, no repeated downloads (the pending file is reused).
  */
 export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater }) => {
+  const { t } = useTranslation();
   if (state.kind === 'none' || !state.info) return null;
   const required = state.kind === 'required';
   const { info } = state;
@@ -31,34 +33,34 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
     switch (flow.phase) {
       case 'downloading':
         return {
-          title: 'Downloading update',
-          text: 'Please keep Airco PMS open while the update downloads.',
+          title: t('update.downloadingTitle'),
+          text: t('update.downloadingText'),
         };
       case 'needs_permission':
         return {
-          title: 'Allow installation',
-          text: 'Android requires permission to install this update. Enable "Install unknown apps" for Airco PMS Employee, then return here to continue.',
+          title: t('update.permissionTitle'),
+          text: t('update.permissionText'),
         };
       case 'error':
         return {
-          title: 'Update unavailable',
-          text: 'The update could not be downloaded. Please try again.',
+          title: t('update.errorTitle'),
+          text: t('update.errorText'),
         };
       case 'installing':
       case 'ready':
         return {
-          title: 'Opening installer',
-          text: 'Confirm the installation when Android asks.',
+          title: t('update.installingTitle'),
+          text: t('update.installingText'),
         };
       default:
         return required
           ? {
-              title: 'Update required',
-              text: 'Your version of Airco PMS Employee is no longer supported. Please update to continue.',
+              title: t('update.requiredTitle'),
+              text: t('update.requiredText'),
             }
           : {
-              title: 'Update available',
-              text: 'A new version of Airco PMS Employee is available.',
+              title: t('update.availableTitle'),
+              text: t('update.availableText'),
             };
     }
   })();
@@ -97,7 +99,7 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
           </h2>
           <p className="mt-1 text-sm text-[#667174]">{body.text}</p>
           <p className="mt-3 text-xs font-medium text-[#8D999C]">
-            Version {info.latest_version}
+            {t('update.version', { version: info.latest_version })}
           </p>
           {flow.phase === 'error' && flow.error && (
             <p className="mt-1 text-[11px] font-mono text-[#B3BABC]">
@@ -134,7 +136,7 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
               onClick={() => void beginUpdate(info)}
               icon={<Download className="w-4 h-4" />}
             >
-              Update now
+              {t('update.updateNow')}
             </PrimaryButton>
           )}
           {flow.phase === 'needs_permission' && (
@@ -142,16 +144,16 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
               onClick={() => void openInstallPermissionSettings()}
               icon={<Settings2 className="w-4 h-4" />}
             >
-              Open settings
+              {t('update.openSettings')}
             </PrimaryButton>
           )}
           {flow.phase === 'error' && (
             <PrimaryButton onClick={retryUpdate} icon={<Download className="w-4 h-4" />}>
-              Try again
+              {t('common.tryAgain')}
             </PrimaryButton>
           )}
           {(flow.phase === 'idle' || flow.phase === 'error') && !required && (
-            <SecondaryButton onClick={onLater}>Later</SecondaryButton>
+            <SecondaryButton onClick={onLater}>{t('update.later')}</SecondaryButton>
           )}
         </div>
       </div>

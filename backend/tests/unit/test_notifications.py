@@ -820,3 +820,279 @@ async def test_event_uses_employee_name_for_push(session, seed):
     )
     # No device registrations → no call, but no error either.
     assert push.calls == []
+
+
+# ---------------------------------------------------------------------------
+# Push delivery state — truthful statuses + durable outbox
+# ---------------------------------------------------------------------------
+
+def _snapshot(session, n: Notification) -> dict:
+    from app.services import notifications as notif_mod
+    return session.info[notif_mod.PUSH_QUEUE][-1]
+
+
+async def _queued_notification(session, seed):
+    svc = NotificationService(session)
+    n = await svc.notify(
+        employee_id=seed["employee"].id, property_id=seed["prop"].id,
+        type="task_assigned", title="t", body="b",
+    )
+    return n
+
+
+async def test_new_notification_is_queued(session, seed):
+    n = await _queued_notification(session, seed)
+    assert n.push_status == "queued" and n.push_attempts == 0
+
+
+async def test_dispatch_success_marks_accepted_not_delivered(
+    session, seed, monkeypatch,
+):
+    """FCM acceptance → 'accepted' + provider ref. NEVER 'delivered' —
+    HTTP v1 cannot confirm device delivery."""
+    from app.services import notifications as notif_mod
+
+    reg = DeviceRegistry(session)
+    await reg.register(seed["emp_user"], device_id="d1",
+                       push_token="tok", platform="android")
+
+    class _OkPush:
+        async def send(self, tokens, title, body, data, tag=None):
+            return PushResult(
+                delivered=list(tokens),
+                accepted_ids=["projects/p/messages/m1"],
+            )
+
+    monkeypatch.setattr(notif_mod, "get_push_provider", lambda: _OkPush())
+    n = await _queued_notification(session, seed)
+    await notif_mod._dispatch_snapshot(session, _snapshot(session, n))
+    await session.refresh(n)
+    assert n.push_status == "accepted"
+    assert n.push_provider_ref == "projects/p/messages/m1"
+    assert n.push_attempts == 1
+
+
+async def test_log_provider_never_reports_success(
+    session, seed, monkeypatch,
+):
+    """The stub must not fake delivery — the row records an honest
+    terminal failure with the stub error code."""
+    from app.services import notifications as notif_mod
+    from app.services.push import LogPushProvider
+
+    reg = DeviceRegistry(session)
+    await reg.register(seed["emp_user"], device_id="d1",
+                       push_token="tok", platform="android")
+    monkeypatch.setattr(
+        notif_mod, "get_push_provider", lambda: LogPushProvider())
+    n = await _queued_notification(session, seed)
+    await notif_mod._dispatch_snapshot(session, _snapshot(session, n))
+    await session.refresh(n)
+    assert n.push_status == "failed"
+    assert n.push_last_error == "LOG_PROVIDER_STUB"
+
+
+async def test_retryable_error_schedules_retry(
+    session, seed, monkeypatch,
+):
+    from app.services import notifications as notif_mod
+
+    reg = DeviceRegistry(session)
+    await reg.register(seed["emp_user"], device_id="d1",
+                       push_token="tok", platform="android")
+
+    class _FlakyPush:
+        async def send(self, tokens, title, body, data, tag=None):
+            return PushResult(retryable_error="HTTP_500:INTERNAL")
+
+    monkeypatch.setattr(notif_mod, "get_push_provider", lambda: _FlakyPush())
+    n = await _queued_notification(session, seed)
+    await notif_mod._dispatch_snapshot(session, _snapshot(session, n))
+    await session.refresh(n)
+    assert n.push_status == "retry_pending"
+    assert n.push_next_attempt_at is not None
+    # SQLite returns naive datetimes — normalize for the comparison.
+    nxt = n.push_next_attempt_at
+    if nxt.tzinfo is None:
+        nxt = nxt.replace(tzinfo=timezone.utc)
+    assert nxt > datetime.now(timezone.utc)
+
+
+async def test_retry_budget_exhaustion_fails(
+    session, seed, monkeypatch,
+):
+    from app.services import notifications as notif_mod
+    from app.core.config import settings
+
+    reg = DeviceRegistry(session)
+    await reg.register(seed["emp_user"], device_id="d1",
+                       push_token="tok", platform="android")
+
+    class _FlakyPush:
+        async def send(self, tokens, title, body, data, tag=None):
+            return PushResult(retryable_error="HTTP_429:QUOTA")
+
+    monkeypatch.setattr(notif_mod, "get_push_provider", lambda: _FlakyPush())
+    n = await _queued_notification(session, seed)
+    snap = _snapshot(session, n)  # grab BEFORE commit drains the queue
+    n.push_attempts = settings.PUSH_MAX_ATTEMPTS - 1
+    await session.commit()
+    await notif_mod._dispatch_snapshot(session, snap)
+    await session.refresh(n)
+    assert n.push_status == "failed"
+    assert "EXHAUSTED" in (n.push_last_error or "")
+
+
+async def test_no_active_devices_is_terminal(session, seed):
+    from app.services import notifications as notif_mod
+
+    n = await _queued_notification(session, seed)
+    await notif_mod._dispatch_snapshot(session, _snapshot(session, n))
+    await session.refresh(n)
+    assert n.push_status == "failed"
+    assert n.push_last_error == "NO_ACTIVE_DEVICES"
+
+
+async def test_claim_is_atomic_no_double_dispatch(
+    session, seed, monkeypatch,
+):
+    """Second claim attempt loses — the sweep and the after-commit drain
+    can race but only one dispatcher owns the row."""
+    from app.services import notifications as notif_mod
+
+    sent = []
+
+    class _OkPush:
+        async def send(self, tokens, title, body, data, tag=None):
+            sent.append(tag)
+            return PushResult(delivered=list(tokens))
+
+    monkeypatch.setattr(notif_mod, "get_push_provider", lambda: _OkPush())
+    reg = DeviceRegistry(session)
+    await reg.register(seed["emp_user"], device_id="d1",
+                       push_token="tok", platform="android")
+    n = await _queued_notification(session, seed)
+    snap = _snapshot(session, n)
+    await notif_mod._dispatch_snapshot(session, snap)
+    await notif_mod._dispatch_snapshot(session, snap)
+    assert len(sent) == 1
+
+
+async def test_stale_dispatching_row_is_reclaimed(
+    session, seed, monkeypatch,
+):
+    """A process that died mid-send leaves 'dispatching' — the sweep's
+    staleness window makes it claimable again."""
+    from datetime import timedelta
+    from app.services import notifications as notif_mod
+    from app.core.config import settings
+
+    n = await _queued_notification(session, seed)
+    n.push_status = "dispatching"
+    n.push_updated_at = (
+        datetime.now(timezone.utc)
+        - timedelta(seconds=settings.PUSH_DISPATCH_STALE_SECONDS + 60)
+    )
+    await session.commit()
+    assert await notif_mod._claim_for_dispatch(session, n.id) is True
+    await session.refresh(n)
+    assert n.push_status == "dispatching"
+    assert n.push_attempts == 1
+
+
+async def test_mark_read_opens_accepted_notification(session, seed):
+    svc = NotificationService(session)
+    n = await svc.notify(
+        employee_id=seed["employee"].id, property_id=seed["prop"].id,
+        type="task_assigned", title="t", body="b",
+    )
+    n.push_status = "accepted"
+    await session.commit()
+    await svc.mark_read(seed["emp_user"], n.id)
+    assert n.push_status == "opened"
+
+
+async def test_mark_read_preserves_pending_push(session, seed):
+    svc = NotificationService(session)
+    n = await svc.notify(
+        employee_id=seed["employee"].id, property_id=seed["prop"].id,
+        type="task_assigned", title="t", body="b",
+    )
+    await session.commit()
+    await svc.mark_read(seed["emp_user"], n.id)
+    assert n.push_status == "queued"  # dispatch must still run
+
+
+async def test_sweep_dispatches_due_rows(session, seed, monkeypatch):
+    """The outbox sweep picks up a notification whose send never ran
+    (restart between commit and drain) — using a patched factory
+    bound to this test's in-memory engine."""
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from app.services import notifications as notif_mod
+
+    factory = async_sessionmaker(
+        bind=session.bind, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(
+        "app.core.database.AsyncSessionLocal", factory)
+
+    sent = []
+
+    class _OkPush:
+        async def send(self, tokens, title, body, data, tag=None):
+            sent.append(tag)
+            return PushResult(delivered=list(tokens))
+
+    monkeypatch.setattr(notif_mod, "get_push_provider", lambda: _OkPush())
+    reg = DeviceRegistry(session)
+    await reg.register(seed["emp_user"], device_id="d1",
+                       push_token="tok", platform="android")
+    n = await _queued_notification(session, seed)
+    # Row is 'queued' but no snapshot drain ran — the sweep recovers it.
+    session.info.pop(notif_mod.PUSH_QUEUE, None)
+    attempted = await notif_mod.dispatch_pending_pushes()
+    assert attempted == 1 and len(sent) == 1
+    await session.refresh(n)
+    assert n.push_status == "accepted"
+
+
+async def test_fcm_send_collects_message_names(monkeypatch):
+    """Mocked FCM HTTP v1 — 200 yields an accepted id, dead tokens are
+    flagged, 5xx is retryable, nothing is marked 'delivered'."""
+    import httpx
+    from app.services.push import FCMProvider
+
+    responses = {
+        "tok-good": httpx.Response(
+            200, json={"name": "projects/p/messages/abc"}),
+        "tok-dead": httpx.Response(
+            404, json={"error": {"details": [
+                {"errorCode": "UNREGISTERED"}]}}),
+        "tok-err": httpx.Response(500, json={"error": {}}),
+    }
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, url, headers=None, json=None):
+            return responses[json["message"]["token"]]
+
+    monkeypatch.setattr(
+        "app.services.push.httpx.AsyncClient",
+        lambda timeout: _Client())
+    provider = FCMProvider("p", None)
+
+    async def _token(_client):
+        return "access-token"
+
+    provider._access_token = _token
+    result = await provider.send(
+        ["tok-good", "tok-dead", "tok-err"], "t", "b", {})
+    assert result.delivered == ["tok-good"]
+    assert result.accepted_ids == ["projects/p/messages/abc"]
+    assert result.invalid_tokens == ["tok-dead"]
+    assert result.retryable_error is not None
+    assert result.permanent_error is None

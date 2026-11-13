@@ -16,10 +16,10 @@ import { PrimaryButton, SecondaryButton } from '../../components/common/Buttons'
 import { ErrorState, LoadingState } from '../../components/common/FeedbackStates';
 import { errorMessage } from '../../api/client';
 import { subscribeRealtimeEvents } from '../../services/realtime';
+import { useTranslation } from 'react-i18next';
 import {
   AttendanceMonth,
   LEAVE_TYPE_LABELS,
-  REQUEST_STATUS_LABELS,
   WorkdayAction,
   businessDate,
   createDayOffRequestApi,
@@ -31,7 +31,6 @@ import {
   monthKey,
   nextWorkdayState,
   requestCoversDate,
-  requestTypeLabel,
   resumeApi,
   startBreakApi,
   startDayApi,
@@ -49,49 +48,18 @@ import {
 // Display metadata
 // ---------------------------------------------------------------------------
 
-const STATE_CHIP: Record<WorkdayState, { label: string; cls: string }> = {
-  not_started: {
-    label: 'Not Started',
-    cls: 'bg-[#F0F2F1] text-[#667174] border-[#E4E8E6]',
-  },
-  working: {
-    label: 'Working',
-    cls: 'bg-[#E8F7ED] text-[#278B46] border-[#BBECCC]',
-  },
-  on_break: {
-    label: 'On Break',
-    cls: 'bg-[#F5DEAB]/40 text-[#B87C10] border-[#F5DEAB]',
-  },
-  completed: {
-    label: 'Day Completed',
-    cls: 'bg-[#E8F7ED] text-[#278B46] border-[#BBECCC]',
-  },
+const STATE_CHIP: Record<WorkdayState, string> = {
+  not_started: 'bg-[#F0F2F1] text-[#667174] border-[#E4E8E6]',
+  working: 'bg-[#E8F7ED] text-[#278B46] border-[#BBECCC]',
+  on_break: 'bg-[#F5DEAB]/40 text-[#B87C10] border-[#F5DEAB]',
+  completed: 'bg-[#E8F7ED] text-[#278B46] border-[#BBECCC]',
 };
 
-const DAY_STATUS_META: Record<
-  AttendanceDayStatus,
-  { label: string; dot: string; cell: string }
-> = {
-  present: {
-    label: 'Present',
-    dot: 'bg-[#33B059]',
-    cell: 'bg-[#E8F7ED] text-[#278B46]',
-  },
-  week_off: {
-    label: 'Week Off',
-    dot: 'bg-[#8D999C]',
-    cell: 'bg-[#F0F2F1] text-[#667174]',
-  },
-  leave: {
-    label: 'Leave',
-    dot: 'bg-[#2B5DD8]',
-    cell: 'bg-[#EEF3FF] text-[#2B5DD8]',
-  },
-  absent: {
-    label: 'Absent',
-    dot: 'bg-[#D9534F]',
-    cell: 'bg-[#FCEBEA] text-[#D9534F]',
-  },
+const DAY_STATUS_META: Record<AttendanceDayStatus, { dot: string; cell: string }> = {
+  present: { dot: 'bg-[#33B059]', cell: 'bg-[#E8F7ED] text-[#278B46]' },
+  week_off: { dot: 'bg-[#8D999C]', cell: 'bg-[#F0F2F1] text-[#667174]' },
+  leave: { dot: 'bg-[#2B5DD8]', cell: 'bg-[#EEF3FF] text-[#2B5DD8]' },
+  absent: { dot: 'bg-[#D9534F]', cell: 'bg-[#FCEBEA] text-[#D9534F]' },
 };
 
 const LEAVE_TYPES = Object.keys(LEAVE_TYPE_LABELS) as LeaveType[];
@@ -105,22 +73,28 @@ const REQUEST_STATUS_CHIP: Record<RequestStatus, string> = {
   cancelled: 'bg-[#F5F5F5] text-[#8D999C] border-[#E4E8E6]',
 };
 
-const WEEKDAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const MONTH_KEYS = [
+  'jan', 'feb', 'mar', 'apr', 'may', 'jun',
+  'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+] as const;
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+const WEEKDAY_NAME_KEYS = [
+  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+] as const;
+
+type TFn = (key: string) => string;
 
 /** "12 October 2026" — day-first regardless of device locale. */
-const formatDateLong = (dateStr: string): string => {
+const formatDateLong = (dateStr: string, t: TFn): string => {
   const [y, m, d] = dateStr.split('-').map(Number);
-  return `${d} ${MONTH_NAMES[m - 1]} ${y}`;
+  return `${d} ${t(`attendance.months.${MONTH_KEYS[m - 1]}`)} ${y}`;
 };
 
-const weekdayName = (dateStr: string): string => {
+const weekdayName = (dateStr: string, t: TFn): string => {
   const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString([], { weekday: 'long' });
+  const day = new Date(y, m - 1, d).getDay();
+  return t(`attendance.weekdayNames.${WEEKDAY_NAME_KEYS[day]}`);
 };
 
 /** "20/10/2026" — DD/MM/YYYY regardless of device locale. */
@@ -134,8 +108,9 @@ const formatDateShort = (dateStr: string): string => {
 const DateField: React.FC<{
   value: string;
   min?: string;
+  ariaLabel: string;
   onChange: (v: string) => void;
-}> = ({ value, min, onChange }) => (
+}> = ({ value, min, ariaLabel, onChange }) => (
   <div className="relative">
     <input
       type="date"
@@ -143,13 +118,21 @@ const DateField: React.FC<{
       min={min}
       onChange={(e) => e.target.value && onChange(e.target.value)}
       className="absolute inset-0 w-full opacity-0"
-      aria-label="Select date"
+      aria-label={ariaLabel}
     />
     <div className="w-full p-2.5 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-xs text-[#20292C] pointer-events-none">
       {value ? formatDateShort(value) : 'DD/MM/YYYY'}
     </div>
   </div>
 );
+
+const requestTypeLabelT = (
+  r: Pick<import('../../types').DayOffRequest, 'request_type' | 'leave_type'>,
+  t: TFn
+): string =>
+  r.request_type === 'week_off'
+    ? t('attendance.weekOff')
+    : t(`attendance.leaveTypeLabels.${r.leave_type ?? 'other'}`);
 
 const formatTime = (ts: string): string =>
   new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -159,6 +142,7 @@ const formatTime = (ts: string): string =>
 // ---------------------------------------------------------------------------
 
 export const AttendanceScreen: React.FC = () => {
+  const { t } = useTranslation();
   // Workday card state
   const [workday, setWorkday] = useState<Workday | null>(null);
   const [synced, setSynced] = useState<boolean>(true);
@@ -204,7 +188,7 @@ export const AttendanceScreen: React.FC = () => {
         setWorkday(emptyWorkday(businessDate()));
         setSynced(false);
       } else {
-        setError(errorMessage(err, 'Unable to load your attendance.'));
+        setError(errorMessage(err, t('attendance.loadError')));
       }
     } finally {
       setLoading(false);
@@ -235,7 +219,7 @@ export const AttendanceScreen: React.FC = () => {
         setMonthData(empty);
       } else {
         setMonthData({ days: [], requests: [] });
-        setMonthError(errorMessage(err, 'Unable to load this month.'));
+        setMonthError(errorMessage(err, t('attendance.monthLoadError')));
       }
     } finally {
       setMonthLoading(false);
@@ -293,7 +277,7 @@ export const AttendanceScreen: React.FC = () => {
         setSynced(false);
       } else {
         setActionError(
-          errorMessage(err, 'Unable to update your work day. Please try again.')
+          errorMessage(err, t('attendance.actionError'))
         );
       }
     } finally {
@@ -324,7 +308,7 @@ export const AttendanceScreen: React.FC = () => {
     [monthData.days]
   );
 
-  const monthLabel = `${MONTH_NAMES[cursor.getMonth()]} ${cursor.getFullYear()}`;
+  const monthLabel = `${t(`attendance.months.${MONTH_KEYS[cursor.getMonth()]}`)} ${cursor.getFullYear()}`;
 
   const shiftMonth = (delta: number) =>
     setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
@@ -361,12 +345,12 @@ export const AttendanceScreen: React.FC = () => {
     if (!selectedDate || reqSubmitting) return;
     const toDate = reqToDate || selectedDate;
     if (toDate < selectedDate) {
-      setReqError('The To date cannot be before the From date.');
+      setReqError(t('attendance.toBeforeFromError'));
       return;
     }
     const reason = reqReason.trim();
     if (reqType === 'leave' && !reason) {
-      setReqError('A reason is required for leave requests.');
+      setReqError(t('attendance.reasonRequiredError'));
       return;
     }
     setReqSubmitting(true);
@@ -399,9 +383,9 @@ export const AttendanceScreen: React.FC = () => {
       setSelectedDate(null);
     } catch (err: unknown) {
       if (isNotImplemented(err)) {
-        setReqError("Requests aren't enabled yet");
+        setReqError(t('attendance.notEnabled'));
       } else {
-        setReqError(errorMessage(err, 'Unable to submit the request.'));
+        setReqError(errorMessage(err, t('attendance.submitRequestError')));
       }
     } finally {
       setReqSubmitting(false);
@@ -412,14 +396,14 @@ export const AttendanceScreen: React.FC = () => {
   // Render
   // -------------------------------------------------------------------------
 
-  const chip = workday ? STATE_CHIP[workday.state] : STATE_CHIP.not_started;
+  const chipCls = workday ? STATE_CHIP[workday.state] : STATE_CHIP.not_started;
 
   const timeRows: { label: string; at: string }[] = workday
     ? (
         [
-          { label: 'Started', at: workday.started_at },
-          { label: 'Break', at: workday.break_started_at },
-          { label: 'Ended', at: workday.ended_at },
+          { label: t('attendance.started'), at: workday.started_at },
+          { label: t('attendance.breakLabel'), at: workday.break_started_at },
+          { label: t('attendance.ended'), at: workday.ended_at },
         ] as { label: string; at: string | null }[]
       ).filter((r): r is { label: string; at: string } => r.at !== null)
     : [];
@@ -427,17 +411,17 @@ export const AttendanceScreen: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
       {/* Sticky Top Header */}
-      <div className="bg-white border-b border-[#E4E8E6] px-5 pt-4 pb-3.5 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+      <div className="bg-white border-b border-[#E4E8E6] px-4 pt-3 pb-2.5 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <span className="text-xs font-semibold text-[#667174] uppercase tracking-wider block">
-              Property Operations
+            <span className="text-[10px] font-semibold text-[#667174] uppercase tracking-wider block">
+              {t('attendance.eyebrow')}
             </span>
-            <h1 className="text-2xl font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
-              Attendance
+            <h1 className="text-[21px] font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
+              {t('attendance.title')}
             </h1>
             <p className="text-xs text-[#8D999C] mt-0.5">
-              Track your work day and attendance
+              {t('attendance.subtitle')}
             </p>
           </div>
 
@@ -445,7 +429,7 @@ export const AttendanceScreen: React.FC = () => {
             onClick={handleRefresh}
             disabled={refreshing}
             className="p-2 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-[#20292C] hover:bg-[#EFEFEF] transition-all"
-            aria-label="Refresh attendance"
+            aria-label={t('attendance.refresh')}
           >
             <RefreshCw
               className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#33B059]' : 'text-[#667174]'}`}
@@ -456,7 +440,7 @@ export const AttendanceScreen: React.FC = () => {
 
       <div className="flex-1 p-4">
         {loading ? (
-          <LoadingState message="Loading your attendance..." />
+          <LoadingState message={t('attendance.loading')} />
         ) : error ? (
           <ErrorState message={error} onRetry={() => loadWorkday(false)} />
         ) : workday ? (
@@ -467,18 +451,18 @@ export const AttendanceScreen: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-[#33B059]" />
                   <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
-                    Today's Work Day
+                    {t('attendance.todayWorkday')}
                   </h3>
                 </div>
                 <span
-                  className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${chip.cls}`}
+                  className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${chipCls}`}
                 >
-                  {chip.label}
+                  {t(`attendance.state.${workday?.state ?? 'not_started'}`)}
                 </span>
               </div>
 
               <p className="text-xs text-[#667174]">
-                {weekdayName(workday.date)} · {formatDateLong(workday.date)}
+                {weekdayName(workday.date, t)} · {formatDateLong(workday.date, t)}
               </p>
 
               {timeRows.length > 0 && (
@@ -507,8 +491,7 @@ export const AttendanceScreen: React.FC = () => {
                 <div className="flex items-start gap-1.5 text-[11px] text-[#8D999C] leading-snug">
                   <Info className="w-3.5 h-3.5 mt-px flex-shrink-0" />
                   <span>
-                    Attendance service isn't connected yet — changes are kept on
-                    this device only.
+                    {t('attendance.offlineNote')}
                   </span>
                 </div>
               )}
@@ -517,7 +500,7 @@ export const AttendanceScreen: React.FC = () => {
                 <div className="text-center py-1">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#278B46] bg-[#E8F7ED] px-4 py-2 rounded-full border border-[#BBECCC]">
                     <CheckCircle2 className="w-4 h-4" />
-                    Day completed — see you tomorrow
+                    {t('attendance.dayCompletedMsg')}
                   </span>
                 </div>
               )}
@@ -528,7 +511,7 @@ export const AttendanceScreen: React.FC = () => {
                   loading={actionLoading === 'start'}
                   icon={<Play className="w-4 h-4" />}
                 >
-                  Start Day
+                  {t('attendance.startDay')}
                 </PrimaryButton>
               ) : (
                 <div className="flex gap-2">
@@ -548,7 +531,7 @@ export const AttendanceScreen: React.FC = () => {
                       )
                     }
                   >
-                    {workday.state === 'on_break' ? 'Resume' : 'Break'}
+                    {workday.state === 'on_break' ? t('attendance.resume') : t('attendance.break')}
                   </SecondaryButton>
                   <PrimaryButton
                     onClick={() => runAction('end')}
@@ -556,7 +539,7 @@ export const AttendanceScreen: React.FC = () => {
                     loading={actionLoading === 'end'}
                     icon={<Square className="w-4 h-4" />}
                   >
-                    End Day
+                    {t('attendance.endDay')}
                   </PrimaryButton>
                 </div>
               )}
@@ -568,13 +551,13 @@ export const AttendanceScreen: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <CalendarCheck className="w-4 h-4 text-[#33B059]" />
                   <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
-                    Your Attendance
+                    {t('attendance.yourAttendance')}
                   </h3>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => shiftMonth(-1)}
-                    aria-label="Previous month"
+                    aria-label={t('attendance.prevMonth')}
                     className="p-1.5 rounded-lg border border-[#E4E8E6] text-[#667174] hover:bg-[#F7F8F6] active:bg-[#EFEFEF] transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -584,7 +567,7 @@ export const AttendanceScreen: React.FC = () => {
                   </span>
                   <button
                     onClick={() => shiftMonth(1)}
-                    aria-label="Next month"
+                    aria-label={t('attendance.nextMonth')}
                     className="p-1.5 rounded-lg border border-[#E4E8E6] text-[#667174] hover:bg-[#F7F8F6] active:bg-[#EFEFEF] transition-colors"
                   >
                     <ChevronRight className="w-4 h-4" />
@@ -593,12 +576,12 @@ export const AttendanceScreen: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-7 gap-1 mb-1">
-                {WEEKDAY_HEADERS.map((d) => (
+                {WEEKDAY_KEYS.map((d) => (
                   <span
                     key={d}
                     className="text-center text-[10px] font-bold text-[#8D999C] uppercase tracking-wider"
                   >
-                    {d}
+                    {t(`attendance.weekdays.${d}`)}
                   </span>
                 ))}
               </div>
@@ -622,7 +605,7 @@ export const AttendanceScreen: React.FC = () => {
                       type="button"
                       disabled={isPast}
                       onClick={() => openDay(date)}
-                      aria-label={`${formatDateLong(date)}${meta ? ` — ${meta.label}` : ''}`}
+                      aria-label={`${formatDateLong(date, t)}${meta ? ` — ${status ? t(`attendance.dayStatus.${status}`) : ''}` : ''}`}
                       className={`aspect-square rounded-xl flex flex-col items-center justify-center text-xs relative select-none transition-all ${
                         isToday
                           ? 'bg-[#33B059] text-white font-bold shadow-sm'
@@ -654,7 +637,7 @@ export const AttendanceScreen: React.FC = () => {
 
               {!monthError && !monthLoading && monthData.days.length === 0 && (
                 <p className="text-[11px] text-[#8D999C] mt-3 text-center">
-                  No attendance records yet.
+                  {t('attendance.noRecords')}
                 </p>
               )}
 
@@ -671,7 +654,7 @@ export const AttendanceScreen: React.FC = () => {
                     <span
                       className={`w-1.5 h-1.5 rounded-full ${DAY_STATUS_META[s].dot}`}
                     />
-                    {DAY_STATUS_META[s].label}
+                    {t(`attendance.dayStatus.${s}`)}
                   </span>
                 ))}
               </div>
@@ -683,25 +666,25 @@ export const AttendanceScreen: React.FC = () => {
               <div className="flex items-center gap-2 mb-3">
                 <ClipboardList className="w-4 h-4 text-[#33B059]" />
                 <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
-                  Requests
+                  {t('attendance.requests')}
                 </h3>
               </div>
 
               {monthData.requests.length === 0 ? (
                 <p className="text-[11px] text-[#8D999C] text-center py-2">
-                  No requests this month.
+                  {t('attendance.noRequests')}
                 </p>
               ) : (
                 <div className="overflow-x-auto -mx-1 px-1">
                   <table className="w-full text-[11px] leading-snug">
                     <thead>
                       <tr className="text-left text-[10px] font-bold text-[#8D999C] uppercase tracking-wider border-b border-[#F0F2F1]">
-                        <th className="py-1.5 pr-2 font-bold">From</th>
-                        <th className="py-1.5 pr-2 font-bold">To</th>
-                        <th className="py-1.5 pr-2 font-bold">Type</th>
-                        <th className="py-1.5 pr-2 font-bold text-center">Days</th>
-                        <th className="py-1.5 pr-2 font-bold">Reason</th>
-                        <th className="py-1.5 font-bold text-right">Status</th>
+                        <th className="py-1.5 pr-2 font-bold">{t('attendance.from')}</th>
+                        <th className="py-1.5 pr-2 font-bold">{t('attendance.to')}</th>
+                        <th className="py-1.5 pr-2 font-bold">{t('attendance.type')}</th>
+                        <th className="py-1.5 pr-2 font-bold text-center">{t('attendance.days')}</th>
+                        <th className="py-1.5 pr-2 font-bold">{t('attendance.reason')}</th>
+                        <th className="py-1.5 font-bold text-right">{t('attendance.status')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#F0F2F1]">
@@ -714,7 +697,7 @@ export const AttendanceScreen: React.FC = () => {
                             {formatDateShort(r.to_date)}
                           </td>
                           <td className="py-2 pr-2 whitespace-nowrap">
-                            {requestTypeLabel(r)}
+                            {requestTypeLabelT(r, t)}
                           </td>
                           <td className="py-2 pr-2 text-center font-semibold">
                             {r.requested_days}
@@ -729,7 +712,7 @@ export const AttendanceScreen: React.FC = () => {
                             <span
                               className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${REQUEST_STATUS_CHIP[r.status]}`}
                             >
-                              {REQUEST_STATUS_LABELS[r.status]}
+                              {t(`attendance.requestStatus.${r.status}`)}
                             </span>
                           </td>
                         </tr>
@@ -755,30 +738,30 @@ export const AttendanceScreen: React.FC = () => {
           >
             <div className="w-10 h-1 bg-[#E4E8E6] rounded-full mx-auto mb-1" />
             <h4 className="text-sm font-bold text-[#20292C] font-['Space_Grotesk']">
-              {formatDateLong(selectedDate)}
+              {formatDateLong(selectedDate, t)}
             </h4>
             <p className="text-[11px] text-[#8D999C] -mt-1">
-              Request leave or a week off starting this date
+              {t('attendance.sheetSub')}
             </p>
 
             {existingRequest ? (
               <div className="rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] p-3.5 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold text-[#20292C]">
-                    {requestTypeLabel(existingRequest)} request
+                    {requestTypeLabelT(existingRequest, t)} {t('attendance.requestSuffix')}
                   </span>
                   <span
                     className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${REQUEST_STATUS_CHIP[existingRequest.status]}`}
                   >
-                    {REQUEST_STATUS_LABELS[existingRequest.status]}
+                    {t(`attendance.requestStatus.${existingRequest.status}`)}
                   </span>
                 </div>
                 <p className="text-[11px] text-[#667174] leading-snug">
-                  {formatDateLong(existingRequest.from_date)}
+                  {formatDateLong(existingRequest.from_date, t)}
                   {existingRequest.to_date !== existingRequest.from_date &&
-                    ` — ${formatDateLong(existingRequest.to_date)}`}{' '}
+                    ` — ${formatDateLong(existingRequest.to_date, t)}`}{' '}
                   · {existingRequest.requested_days}{' '}
-                  {existingRequest.requested_days === 1 ? 'day' : 'days'}
+                  {t(existingRequest.requested_days === 1 ? 'common.day' : 'common.days')}
                 </p>
                 {existingRequest.reason && (
                   <p className="text-[11px] text-[#667174] leading-snug">
@@ -789,26 +772,26 @@ export const AttendanceScreen: React.FC = () => {
                   size="sm"
                   onClick={() => setSelectedDate(null)}
                 >
-                  Close
+                  {t('common.close')}
                 </SecondaryButton>
               </div>
             ) : (
               <>
                 {rejectedRequest && (
                   <div className="p-3 bg-[#FCEBEA]/60 text-[11px] text-[#D9534F] rounded-xl">
-                    A previous request covering this date was rejected — you
-                    can submit a new one.
+                    {t('attendance.rejectedNote')}
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10px] font-bold text-[#8D999C] uppercase tracking-wider mb-1">
-                      From
+                      {t('attendance.from')}
                     </label>
                     <DateField
                       value={selectedDate}
                       min={todayStr}
+                      ariaLabel={t('common.selectDate')}
                       onChange={(v) => {
                         setSelectedDate(v);
                         if (reqToDate < v) setReqToDate(v);
@@ -817,32 +800,33 @@ export const AttendanceScreen: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-[#8D999C] uppercase tracking-wider mb-1">
-                      To
+                      {t('attendance.to')}
                     </label>
                     <DateField
                       value={reqToDate || selectedDate}
                       min={selectedDate}
+                      ariaLabel={t('common.selectDate')}
                       onChange={setReqToDate}
                     />
                   </div>
                 </div>
 
                 <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
-                  Type
+                  {t('attendance.type')}
                 </label>
                 <div className="grid grid-cols-2 gap-2">
-                  {(['leave', 'week_off'] as const).map((t) => (
+                  {(['leave', 'week_off'] as const).map((rt) => (
                     <button
-                      key={t}
+                      key={rt}
                       type="button"
-                      onClick={() => setReqType(t)}
+                      onClick={() => setReqType(rt)}
                       className={`p-3 rounded-xl border text-xs font-semibold transition-all ${
-                        reqType === t
+                        reqType === rt
                           ? 'border-[#33B059] bg-[#E8F7ED] text-[#278B46]'
                           : 'border-[#E4E8E6] text-[#667174] hover:bg-[#F7F8F6]'
                       }`}
                     >
-                      {t === 'leave' ? 'Leave' : 'Week Off'}
+                      {rt === 'leave' ? t('attendance.leave') : t('attendance.weekOff')}
                     </button>
                   ))}
                 </div>
@@ -850,21 +834,21 @@ export const AttendanceScreen: React.FC = () => {
                 {reqType === 'leave' && (
                   <div>
                     <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider mb-1.5 font-['Space_Grotesk']">
-                      Leave Type
+                      {t('attendance.leaveType')}
                     </label>
                     <div className="flex flex-wrap gap-1.5">
-                      {LEAVE_TYPES.map((t) => (
+                      {LEAVE_TYPES.map((lt) => (
                         <button
-                          key={t}
+                          key={lt}
                           type="button"
-                          onClick={() => setReqLeaveType(t)}
+                          onClick={() => setReqLeaveType(lt)}
                           className={`px-3 py-2 rounded-xl border text-[11px] font-semibold transition-all ${
-                            reqLeaveType === t
+                            reqLeaveType === lt
                               ? 'border-[#33B059] bg-[#E8F7ED] text-[#278B46]'
                               : 'border-[#E4E8E6] text-[#667174] hover:bg-[#F7F8F6]'
                           }`}
                         >
-                          {LEAVE_TYPE_LABELS[t]}
+                          {t(`attendance.leaveTypeLabels.${lt}`)}
                         </button>
                       ))}
                     </div>
@@ -874,13 +858,13 @@ export const AttendanceScreen: React.FC = () => {
                 <div>
                   <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider mb-1.5 font-['Space_Grotesk']">
                     {reqType === 'leave'
-                      ? 'Reason (Required)'
-                      : 'Reason (Optional)'}
+                      ? t('attendance.reasonRequired')
+                      : t('attendance.reasonOptional')}
                   </label>
                   <textarea
                     value={reqReason}
                     onChange={(e) => setReqReason(e.target.value)}
-                    placeholder="Add a note for your supervisor..."
+                    placeholder={t('attendance.reasonPlaceholder')}
                     rows={2}
                     className="w-full p-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-xs text-[#20292C] placeholder-[#8D999C] focus:bg-white focus:outline-none focus:border-[#33B059]"
                   />
@@ -894,13 +878,13 @@ export const AttendanceScreen: React.FC = () => {
 
                 <div className="flex gap-2.5 pt-1">
                   <SecondaryButton onClick={() => setSelectedDate(null)}>
-                    Cancel
+                    {t('common.cancel')}
                   </SecondaryButton>
                   <PrimaryButton
                     onClick={submitRequest}
                     loading={reqSubmitting}
                   >
-                    Submit Request
+                    {t('attendance.submitRequest')}
                   </PrimaryButton>
                 </div>
               </>

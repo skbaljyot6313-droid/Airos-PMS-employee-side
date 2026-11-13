@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ZoneResource } from '../../types';
 import { UnitTile, RESOURCE_TYPE_ICONS } from './UnitTile';
 import { ChevronDown, BedSingle, Droplets } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface DormCardProps {
   dorm: ZoneResource;
@@ -11,9 +12,12 @@ interface DormCardProps {
 
 export const DormCard: React.FC<DormCardProps> = ({ dorm, beds, onUnitPress }) => {
   const [expanded, setExpanded] = useState<boolean>(false);
+  const { t } = useTranslation();
   const openIssues = dorm.active_ticket_id ? 1 : 0;
   const bedsLabel =
-    dorm.bed_count != null ? `${dorm.bed_count} Bed${dorm.bed_count === 1 ? '' : 's'}` : 'Dorm';
+    dorm.bed_count != null
+      ? t('maintenance.bedsInDorm', { count: dorm.bed_count })
+      : t('maintenance.dorm');
 
   return (
     <div className="bg-white rounded-2xl border border-[#E4E8E6] shadow-[0_1px_3px_rgba(0,0,0,0.03)] overflow-hidden">
@@ -35,7 +39,7 @@ export const DormCard: React.FC<DormCardProps> = ({ dorm, beds, onUnitPress }) =
               {bedsLabel}
               {openIssues > 0 && (
                 <span className="text-[#C2410C] font-semibold">
-                  {' '}· {openIssues} open issue{openIssues === 1 ? '' : 's'}
+                  {' '}· {t('maintenance.openIssues', { count: openIssues })}
                 </span>
               )}
             </span>
@@ -55,13 +59,13 @@ export const DormCard: React.FC<DormCardProps> = ({ dorm, beds, onUnitPress }) =
             className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-[#D2D8D6] text-[11px] font-semibold text-[#20292C] hover:bg-[#F7F8F6] transition-colors"
           >
             <Droplets className="w-3.5 h-3.5 text-[#8D999C]" />
-            Dorm-level issue
+            {t('maintenance.dormLevelIssue')}
           </button>
 
           <div>
             <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#8D999C] uppercase tracking-wider mb-2 mt-2">
               <BedSingle className="w-3.5 h-3.5" />
-              <span>Beds</span>
+              <span>{t('maintenance.beds')}</span>
             </div>
             {beds.length > 0 ? (
               <div className="grid grid-cols-2 gap-2">
@@ -70,7 +74,7 @@ export const DormCard: React.FC<DormCardProps> = ({ dorm, beds, onUnitPress }) =
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-[#8D999C]">No beds assigned to this dorm.</p>
+              <p className="text-xs text-[#8D999C]">{t('maintenance.noBeds')}</p>
             )}
           </div>
         </div>

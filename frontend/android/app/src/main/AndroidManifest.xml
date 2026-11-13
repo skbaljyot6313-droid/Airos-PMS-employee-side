@@ -57,6 +57,20 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- Tracking-independent work-feed poll — the OS-notification
+             fallback for employees without a GPS tracking session. FCM
+             remains primary; this catches pushes that never arrived. -->
+        <receiver
+            android:name=".WorkFeedPollReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions -->
@@ -70,6 +84,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- Android 13+ — the persistent tracking notification needs this. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Re-arm the work-feed poll after reboot (see BootReceiver). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- In-app APK updates — hands the downloaded package to Android's
          package installer; user still confirms the install. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />

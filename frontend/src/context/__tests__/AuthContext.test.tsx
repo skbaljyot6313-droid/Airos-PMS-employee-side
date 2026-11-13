@@ -49,6 +49,7 @@ vi.mock('../../utils/perf', () => ({
 }));
 
 // Imports AFTER mocks — vitest hoists vi.mock but ordering keeps intent.
+await import('../../i18n');
 const { AuthProvider, useAuth } = await import('../AuthContext');
 const { secureStorage } = await import('../../api/client');
 const { ConnectionErrorScreen } = await import('../../components/auth/ConnectionErrorScreen');

@@ -75,7 +75,7 @@ public class AppUpdatePlugin extends Plugin {
      *  versionCode checks below remain the real install gates. */
     private static final Set<String> TRUSTED_HOSTS = new HashSet<>(Arrays.asList(
             "expo.dev", "eascdn.net", "storage.googleapis.com",
-            "supabase.co", "up.railway.app"));
+            "supabase.co", "up.railway.app", "run.app"));
 
     /** Every rejection is logged to logcat — the JS layer only ever sees
      *  the code, so without this a failed download is undiagnosable. */

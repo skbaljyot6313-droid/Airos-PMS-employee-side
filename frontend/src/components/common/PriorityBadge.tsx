@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { TaskPriority, MaintenancePriority } from '../../types';
 import { AlertCircle, AlertOctagon, ArrowUp, ArrowDown } from 'lucide-react';
 
@@ -8,6 +9,7 @@ interface PriorityBadgeProps {
 }
 
 export const PriorityBadge: React.FC<PriorityBadgeProps> = ({ priority, size = 'sm' }) => {
+  const { t } = useTranslation();
   const isSm = size === 'sm';
 
   const config: Record<
@@ -15,25 +17,25 @@ export const PriorityBadge: React.FC<PriorityBadgeProps> = ({ priority, size = '
     { label: string; bg: string; text: string; icon: React.ReactNode }
   > = {
     critical: {
-      label: 'Critical',
+      label: t('priority.critical'),
       bg: 'bg-dngsoft',
       text: 'text-dng',
       icon: <AlertOctagon className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     high: {
-      label: 'High',
+      label: t('priority.high'),
       bg: 'bg-warnsoft',
       text: 'text-warn',
       icon: <ArrowUp className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     medium: {
-      label: 'Medium',
+      label: t('priority.medium'),
       bg: 'bg-soft',
       text: 'text-sub',
       icon: <AlertCircle className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     low: {
-      label: 'Low',
+      label: t('priority.low'),
       bg: 'bg-soft',
       text: 'text-mute',
       icon: <ArrowDown className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children: React.ReactNode;
@@ -20,10 +21,11 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
   className = '',
   ...props
 }) => {
+  const { t } = useTranslation();
   const sizeStyles = {
-    sm: 'h-10 px-3 text-xs',
-    md: 'h-12 px-4 text-sm',
-    lg: 'h-14 px-5 text-base',
+    sm: 'h-9 px-3 text-xs',
+    md: 'h-10 px-4 text-sm',
+    lg: 'h-11 px-5 text-base',
   };
 
   return (
@@ -41,7 +43,7 @@ export const PrimaryButton: React.FC<ButtonProps> = ({
       {loading ? (
         <span className="flex items-center gap-2">
           <Loader2 className="w-5 h-5 animate-spin" />
-          <span>Processing...</span>
+          <span>{t('common.processing')}</span>
         </span>
       ) : (
         <span className="flex items-center justify-center gap-2">
@@ -63,10 +65,11 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
   className = '',
   ...props
 }) => {
+  const { t } = useTranslation();
   const sizeStyles = {
-    sm: 'h-10 px-3 text-xs',
-    md: 'h-12 px-4 text-sm',
-    lg: 'h-14 px-5 text-base',
+    sm: 'h-9 px-3 text-xs',
+    md: 'h-10 px-4 text-sm',
+    lg: 'h-11 px-5 text-base',
   };
 
   return (
@@ -84,7 +87,7 @@ export const SecondaryButton: React.FC<ButtonProps> = ({
       {loading ? (
         <span className="flex items-center gap-2">
           <Loader2 className="w-5 h-5 animate-spin text-sub" />
-          <span>Loading...</span>
+          <span>{t('common.loading')}</span>
         </span>
       ) : (
         <span className="flex items-center justify-center gap-2">
@@ -106,10 +109,11 @@ export const DangerButton: React.FC<ButtonProps> = ({
   className = '',
   ...props
 }) => {
+  const { t } = useTranslation();
   const sizeStyles = {
-    sm: 'h-10 px-3 text-xs',
-    md: 'h-12 px-4 text-sm',
-    lg: 'h-14 px-5 text-base',
+    sm: 'h-9 px-3 text-xs',
+    md: 'h-10 px-4 text-sm',
+    lg: 'h-11 px-5 text-base',
   };
 
   return (
@@ -127,7 +131,7 @@ export const DangerButton: React.FC<ButtonProps> = ({
       {loading ? (
         <span className="flex items-center gap-2">
           <Loader2 className="w-5 h-5 animate-spin" />
-          <span>Processing...</span>
+          <span>{t('common.processing')}</span>
         </span>
       ) : (
         <span className="flex items-center justify-center gap-2">

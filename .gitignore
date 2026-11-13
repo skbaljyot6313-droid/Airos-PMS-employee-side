@@ -39,3 +39,6 @@ Thumbs.db
 # IDE
 .idea/
 .vscode/
+
+# Local dev SQLite (python main.py --local)
+backend/dev.db

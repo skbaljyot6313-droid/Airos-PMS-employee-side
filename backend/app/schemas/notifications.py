@@ -31,6 +31,9 @@ def notification_out(n: Notification) -> dict:
         "ticket_uid": str(n.ticket_id) if n.ticket_id else None,
         "is_read": n.is_read,
         "read_at": n.read_at,
+        # Truthful push state — 'accepted' means FCM took the message,
+        # never confirmed device delivery.
+        "push_status": n.push_status,
         "created_at": n.created_at,
     }
 

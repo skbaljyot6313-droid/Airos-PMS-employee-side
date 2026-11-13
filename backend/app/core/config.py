@@ -167,12 +167,20 @@ class Settings(BaseSettings):
     LOCATION_PUBLISH_MIN_INTERVAL_SECONDS: int = 8
 
     # Push notifications — "log" (default, STUB) or "fcm". FCM HTTP v1
-    # additionally requires FCM_PROJECT_ID and FCM_SERVICE_ACCOUNT_JSON
-    # (inline service-account JSON, or a path to the JSON file) plus the
-    # 'cryptography' package for RS256 token signing.
+    # requires FCM_PROJECT_ID; credentials come from Application Default
+    # Credentials (Cloud Run runtime service account) or
+    # FCM_SERVICE_ACCOUNT_JSON (inline service-account JSON, or a path to
+    # the JSON file) for non-GCP environments. Startup validates the
+    # provider when APP_ENV=production — there is no silent log fallback.
     PUSH_PROVIDER: str = "log"
     FCM_PROJECT_ID: str | None = None
     FCM_SERVICE_ACCOUNT_JSON: str | None = None
+    # Push outbox — bounded exponential backoff per notification.
+    PUSH_MAX_ATTEMPTS: int = Field(default=6, ge=1)
+    PUSH_RETRY_BASE_SECONDS: int = Field(default=30, ge=1)
+    # Outbox sweep cadence + stale 'dispatching' reclaim window.
+    PUSH_SWEEP_INTERVAL_SECONDS: int = Field(default=15, ge=5)
+    PUSH_DISPATCH_STALE_SECONDS: int = Field(default=300, ge=60)
 
     @property
     def is_production(self) -> bool:
@@ -195,6 +203,17 @@ class Settings(BaseSettings):
                 warnings.append("no database configured (DATABASE_URL or SUPABASE_DB_PASSWORD)")
             if self.DEBUG:
                 warnings.append("DEBUG=true in production")
+            if self.PUSH_PROVIDER.strip().lower() != "fcm":
+                warnings.append(
+                    "PUSH_PROVIDER is not 'fcm' — work-allocation push "
+                    "notifications are disabled (log stub only)"
+                )
+            if not self.LOCATION_SERVICE_API_KEY:
+                warnings.append(
+                    "LOCATION_SERVICE_API_KEY is unset — /admin/* "
+                    "service-to-service endpoints (notify-allocation, "
+                    "live locations) fail closed with 503"
+                )
             if not (
                 self.S3_BUCKET and self.S3_ACCESS_KEY and self.S3_SECRET_KEY
             ):
@@ -213,6 +232,8 @@ class Settings(BaseSettings):
         "SUPABASE_DB_USER",
         "LOCATION_SERVICE_API_KEY",
         "RELEASE_MANAGEMENT_API_KEY",
+        "PUSH_PROVIDER",
+        "FCM_PROJECT_ID",
         mode="before",
     )
     @classmethod

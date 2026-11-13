@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useTranslation } from 'react-i18next';
+import { AccountSettingsCard } from '../../components/profile/AccountSettingsCard';
 import { PrimaryButton, SecondaryButton, DangerButton } from '../../components/common/Buttons';
 import { errorMessage } from '../../api/client';
 import {
@@ -21,7 +23,6 @@ import {
   formatShiftTime,
   formatOpDate,
   workingDaysLabel,
-  MY_SHIFT_STATUS_LABELS,
 } from '../../api/shift';
 import { MyShift } from '../../types';
 import {
@@ -42,6 +43,7 @@ import {
 
 export const ProfileScreen: React.FC = () => {
   const { user, company, employee, logout, updateProfile } = useAuth();
+  const { t } = useTranslation();
 
   // Edit personal info modal state
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -67,7 +69,7 @@ export const ProfileScreen: React.FC = () => {
       setMyShift(await getMyShiftApi());
     } catch (err: unknown) {
       setMyShift(null);
-      setShiftError(errorMessage(err, 'Could not load your shift.'));
+      setShiftError(errorMessage(err, t('profile.shiftLoadError')));
     } finally {
       setShiftLoading(false);
     }
@@ -107,7 +109,7 @@ export const ProfileScreen: React.FC = () => {
         setIsEditing(false);
       }, 1000);
     } catch (err: unknown) {
-      setEditError(errorMessage(err, 'Failed to update contact information.'));
+      setEditError(errorMessage(err, t('profile.updateContactError')));
     } finally {
       setIsSaving(false);
     }
@@ -123,24 +125,24 @@ export const ProfileScreen: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
       {/* Screen Header */}
-      <div className="bg-white border-b border-[#E4E8E6] px-5 pt-4 pb-3 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-        <h1 className="text-2xl font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
-          Profile
+      <div className="bg-white border-b border-[#E4E8E6] px-4 pt-3 pb-2.5 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+        <h1 className="text-[21px] font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
+          {t('profile.title')}
         </h1>
-        <p className="text-xs text-[#667174]">Employee Identity & Workplace Assignment</p>
+        <p className="text-xs text-[#667174]">{t('profile.subtitle')}</p>
       </div>
 
       <div className="p-4 space-y-4 pb-12">
         {/* Profile Identity Card */}
-        <div className="bg-white rounded-3xl p-6 border border-[#E4E8E6] shadow-sm flex flex-col items-center text-center">
+        <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm flex flex-col items-center text-center">
           <div className="relative mb-3">
-            <div className="w-20 h-20 rounded-full bg-[#20292C] text-white flex items-center justify-center font-bold text-2xl tracking-wider font-['Space_Grotesk'] shadow-md border-2 border-white ring-4 ring-[#E8F7ED]">
+            <div className="w-16 h-16 rounded-full bg-[#20292C] text-white flex items-center justify-center font-bold text-lg tracking-wider font-['Space_Grotesk'] shadow-md border-2 border-white ring-2 ring-[#E8F7ED]">
               {getInitials(user?.name)}
             </div>
-            <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-[#33B059] border-2 border-white" />
+            <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-[#33B059] border-2 border-white" />
           </div>
 
-          <h2 className="text-xl font-bold text-[#20292C] font-['Space_Grotesk']">
+          <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
             {user?.name}
           </h2>
           <span className="text-xs font-semibold text-[#667174] mt-0.5">
@@ -149,7 +151,7 @@ export const ProfileScreen: React.FC = () => {
 
           <div className="flex items-center gap-2 mt-3 flex-wrap justify-center">
             <span className="text-[11px] font-bold uppercase tracking-wider bg-[#E8F7ED] text-[#278B46] px-2.5 py-0.5 rounded-full border border-[#BBECCC]">
-              {user?.job_title || 'Operations Employee'}
+              {user?.job_title || t('profile.defaultJobTitle')}
             </span>
             {company?.name && (
               <span className="text-[11px] font-medium bg-[#F0F2F1] text-[#20292C] px-2 py-0.5 rounded-full">
@@ -165,31 +167,31 @@ export const ProfileScreen: React.FC = () => {
             <div className="flex items-center gap-2">
               <Building2 className="w-4 h-4 text-[#33B059]" />
               <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
-                Workplace Assignment (System Locked)
+                {t('profile.workplaceAssignment')} ({t('profile.systemLocked')})
               </h3>
             </div>
             <span className="text-[10px] font-bold text-[#8D999C] uppercase tracking-wider bg-[#F7F8F6] px-1.5 py-0.5 rounded border border-[#E4E8E6]">
-              Read-Only
+              {t('profile.readOnly')}
             </span>
           </div>
 
           <div className="divide-y divide-[#F0F2F1] text-xs">
             <div className="py-2 flex items-center justify-between">
-              <span className="text-[#8D999C]">Company</span>
+              <span className="text-[#8D999C]">{t('profile.company')}</span>
               <span className="font-semibold text-[#20292C] text-right">
                 {company?.brand_name || company?.name || '—'}
               </span>
             </div>
 
             <div className="py-2 flex items-center justify-between">
-              <span className="text-[#8D999C]">Assigned Coverage</span>
+              <span className="text-[#8D999C]">{t('profile.assignedCoverage')}</span>
               <span className="font-semibold text-[#20292C] text-right">
                 {employee?.zone_name || '—'}
               </span>
             </div>
 
             <div className="py-2 flex items-center justify-between">
-              <span className="text-[#8D999C]">Department</span>
+              <span className="text-[#8D999C]">{t('profile.department')}</span>
               <span className="font-semibold text-[#20292C] text-right">
                 {employee?.job_title || '—'}
               </span>
@@ -203,7 +205,7 @@ export const ProfileScreen: React.FC = () => {
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-[#33B059]" />
               <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
-                My Shift
+                {t('profile.myShift')}
               </h3>
             </div>
             {!shiftLoading && !shiftError && (
@@ -214,7 +216,7 @@ export const ProfileScreen: React.FC = () => {
                     : 'bg-[#F7F8F6] text-[#8D999C] border-[#E4E8E6]'
                 }`}
               >
-                {MY_SHIFT_STATUS_LABELS[myShift?.status ?? 'not_assigned']}
+                {t(`profile.shiftStatus.${myShift?.status ?? 'not_assigned'}`)}
               </span>
             )}
           </div>
@@ -235,54 +237,54 @@ export const ProfileScreen: React.FC = () => {
                 }}
                 className="text-xs font-semibold text-[#33B059] hover:underline"
               >
-                Retry
+                {t('common.retry')}
               </button>
             </div>
           ) : myShift?.shift ? (
             <div className="divide-y divide-[#F0F2F1] text-xs">
               <div className="py-2 flex items-center justify-between">
-                <span className="text-[#8D999C]">Timing</span>
+                <span className="text-[#8D999C]">{t('profile.timing')}</span>
                 <span className="font-semibold text-[#20292C] text-right">
                   {formatShiftTime(myShift.shift.start_time)} –{' '}
                   {formatShiftTime(myShift.shift.end_time)}
                   {myShift.shift.overnight && (
-                    <span className="text-[#8D999C] font-medium"> (+1 day)</span>
+                    <span className="text-[#8D999C] font-medium"> {t('profile.plusOneDay')}</span>
                   )}
                 </span>
               </div>
               <div className="py-2 flex items-center justify-between">
-                <span className="text-[#8D999C]">Working days</span>
+                <span className="text-[#8D999C]">{t('profile.workingDays')}</span>
                 <span className="font-semibold text-[#20292C] text-right">
                   {workingDaysLabel(myShift.shift.working_days)}
                 </span>
               </div>
               <div className="py-2 flex items-center justify-between">
-                <span className="text-[#8D999C]">Shift</span>
+                <span className="text-[#8D999C]">{t('profile.shift')}</span>
                 <span className="font-semibold text-[#20292C] text-right">
                   {myShift.shift.shift_name}
                 </span>
               </div>
               <div className="py-2 flex items-center justify-between">
-                <span className="text-[#8D999C]">Effective</span>
+                <span className="text-[#8D999C]">{t('profile.effective')}</span>
                 <span className="font-semibold text-[#20292C] text-right">
                   {formatOpDate(myShift.shift.effective_from)}
                   {myShift.shift.effective_until
                     ? ` – ${formatOpDate(myShift.shift.effective_until)}`
-                    : ' onwards'}
+                    : t('profile.onwards')}
                 </span>
               </div>
               {!myShift.shift.is_working_today && (
                 <div className="py-2 flex items-center justify-between">
-                  <span className="text-[#8D999C]">Today</span>
+                  <span className="text-[#8D999C]">{t('profile.today')}</span>
                   <span className="font-medium text-[#667174] text-right">
-                    Scheduled day off
+                    {t('profile.scheduledDayOff')}
                   </span>
                 </div>
               )}
             </div>
           ) : (
             <p className="text-xs text-[#8D999C]">
-              No shift assigned — your manager hasn't scheduled you yet.
+              {t('profile.noShift')}
             </p>
           )}
         </div>
@@ -293,7 +295,7 @@ export const ProfileScreen: React.FC = () => {
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-[#33B059]" />
               <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
-                Personal Contact
+                {t('profile.personalContact')}
               </h3>
             </div>
             <button
@@ -306,34 +308,37 @@ export const ProfileScreen: React.FC = () => {
               className="text-xs font-semibold text-[#33B059] flex items-center gap-1 hover:underline"
             >
               <Edit3 className="w-3.5 h-3.5" />
-              <span>Edit Details</span>
+              <span>{t('profile.editDetails')}</span>
             </button>
           </div>
 
           <div className="divide-y divide-[#F0F2F1] text-xs">
             <div className="py-2 flex items-center justify-between">
-              <span className="text-[#8D999C]">Full Name</span>
+              <span className="text-[#8D999C]">{t('profile.fullName')}</span>
               <span className="font-medium text-[#20292C]">{user?.name}</span>
             </div>
             <div className="py-2 flex items-center justify-between">
-              <span className="text-[#8D999C]">Phone</span>
+              <span className="text-[#8D999C]">{t('profile.phone')}</span>
               <span className="font-medium text-[#20292C]">{user?.phone || '—'}</span>
             </div>
             <div className="py-2 flex items-center justify-between">
-              <span className="text-[#8D999C]">Email</span>
+              <span className="text-[#8D999C]">{t('profile.email')}</span>
               <span className="font-medium text-[#20292C]">{user?.email || '—'}</span>
             </div>
           </div>
         </div>
 
+        {/* Account Settings — language & accessibility preferences */}
+        <AccountSettingsCard />
+
         {/* Security & System Info */}
         <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm space-y-2 text-xs text-[#667174]">
           <div className="flex items-center gap-2 text-[#20292C] font-semibold font-['Space_Grotesk']">
             <Shield className="w-4 h-4 text-[#33B059]" />
-            <span>Authorization Scoping</span>
+            <span>{t('profile.authScoping')}</span>
           </div>
           <p className="text-[11px] leading-relaxed">
-            Your permissions are enforced server-side according to your property and zone allocation. Task submissions require supervisor verification before completion.
+            {t('profile.authScopingDesc')}
           </p>
         </div>
 
@@ -343,21 +348,21 @@ export const ProfileScreen: React.FC = () => {
             onClick={() => setShowLogoutConfirm(true)}
             icon={<LogOut className="w-4 h-4 text-[#D9534F]" />}
           >
-            <span className="text-[#D9534F] font-semibold">Sign Out</span>
+            <span className="text-[#D9534F] font-semibold">{t('profile.signOut')}</span>
           </SecondaryButton>
         </div>
 
         {/* Release-verification marker — harmless build identifier for the
             1.0.2 over-the-air update test. */}
         <p className="text-center text-[11px] text-[#8D999C] pt-2">
-          Update Test 1.0.2
+          {t('profile.updateTestMarker')}
         </p>
 
         {/* Update diagnostics — VITE_UPDATE_DEBUG builds only. */}
         {UPDATE_DEBUG && (
           <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm space-y-2 text-xs">
             <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
-              App Information (Debug)
+              {t('profile.appInfo')}
             </h3>
             <div className="divide-y divide-[#F0F2F1]">
               <div className="py-2 flex justify-between">
@@ -458,7 +463,7 @@ export const ProfileScreen: React.FC = () => {
                 setDiagTick((t) => t + 1);
               }}
             >
-              Check for updates
+              {t('profile.checkForUpdates')}
             </SecondaryButton>
           </div>
         )}
@@ -470,7 +475,7 @@ export const ProfileScreen: React.FC = () => {
           <div className="bg-white w-full max-w-md rounded-t-3xl md:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
             <div className="flex items-center justify-between border-b border-[#F0F2F1] pb-3">
               <h3 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
-                Edit Contact Details
+                {t('profile.editContactTitle')}
               </h3>
               <button
                 onClick={() => setIsEditing(false)}
@@ -489,7 +494,7 @@ export const ProfileScreen: React.FC = () => {
             <form onSubmit={handleSaveProfile} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-[#20292C] mb-1 uppercase tracking-wider">
-                  Full Name
+                  {t('profile.fullName')}
                 </label>
                 <input
                   type="text"
@@ -502,7 +507,7 @@ export const ProfileScreen: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-[#20292C] mb-1 uppercase tracking-wider">
-                  Phone Number
+                  {t('profile.phoneNumber')}
                 </label>
                 <input
                   type="tel"
@@ -514,7 +519,7 @@ export const ProfileScreen: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-[#20292C] mb-1 uppercase tracking-wider">
-                  Email Address
+                  {t('profile.emailAddress')}
                 </label>
                 <input
                   type="email"
@@ -526,14 +531,14 @@ export const ProfileScreen: React.FC = () => {
 
               <div className="pt-2 flex gap-3">
                 <SecondaryButton type="button" onClick={() => setIsEditing(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </SecondaryButton>
                 <PrimaryButton
                   type="submit"
                   loading={isSaving}
                   icon={editSuccess ? <Check className="w-4 h-4 stroke-[3]" /> : undefined}
                 >
-                  {editSuccess ? 'Saved' : 'Save Changes'}
+                  {editSuccess ? t('common.saved') : t('profile.saveChanges')}
                 </PrimaryButton>
               </div>
             </form>
@@ -544,16 +549,16 @@ export const ProfileScreen: React.FC = () => {
       {/* Logout Confirmation Dialog */}
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 text-center space-y-4 animate-in zoom-in-95 duration-150 shadow-xl">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-5 text-center space-y-3 animate-in zoom-in-95 duration-150 shadow-xl">
             <div className="w-12 h-12 rounded-2xl bg-[#FCEBEA] text-[#D9534F] flex items-center justify-center mx-auto">
               <LogOut className="w-6 h-6" />
             </div>
             <div>
               <h3 className="text-lg font-bold text-[#20292C] font-['Space_Grotesk']">
-                Sign Out of Airco PMS Staff?
+                {t('profile.signOutTitle')}
               </h3>
               <p className="text-xs text-[#667174] mt-1 leading-relaxed">
-                You will need your staff credentials to sign back in and access active operational shifts.
+                {t('profile.signOutDesc')}
               </p>
             </div>
             <div className="flex gap-2.5 pt-2">
@@ -566,7 +571,7 @@ export const ProfileScreen: React.FC = () => {
                   logout();
                 }}
               >
-                Sign Out
+                {t('profile.signOut')}
               </DangerButton>
             </div>
           </div>

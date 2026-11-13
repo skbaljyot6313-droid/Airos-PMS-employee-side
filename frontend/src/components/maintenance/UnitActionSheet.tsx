@@ -2,6 +2,7 @@ import React from 'react';
 import { ZoneResource, ZoneWorkspace } from '../../types';
 import { ResourceStateBadge, RESOURCE_TYPE_ICONS } from './UnitTile';
 import { Wrench, Ticket, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 type ActiveTicket = ZoneWorkspace['active_tickets'][number];
 
@@ -20,6 +21,7 @@ export const UnitActionSheet: React.FC<UnitActionSheetProps> = ({
   onViewTicket,
   onClose,
 }) => {
+  const { t } = useTranslation();
   return (
     <div
       className="fixed md:absolute inset-0 z-40 flex items-end justify-center bg-black/40"
@@ -48,7 +50,7 @@ export const UnitActionSheet: React.FC<UnitActionSheetProps> = ({
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-[#8D999C] hover:bg-[#F0F2F1] transition-colors flex-shrink-0"
-            aria-label="Close"
+            aria-label={t('common.close')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -62,7 +64,7 @@ export const UnitActionSheet: React.FC<UnitActionSheetProps> = ({
           <div className="space-y-3">
             <div className="rounded-xl border border-[#F8C8C6] bg-[#FCEBEA]/50 p-3.5">
               <span className="text-[10px] font-bold text-[#D9534F] uppercase tracking-wider block mb-1">
-                Active Maintenance
+                {t('maintenance.activeMaintenance')}
               </span>
               <span className="font-mono text-xs font-bold text-[#20292C] bg-white px-2 py-0.5 rounded inline-block mb-1">
                 {activeTicket.ticket_number || activeTicket.id}
@@ -75,7 +77,7 @@ export const UnitActionSheet: React.FC<UnitActionSheetProps> = ({
               className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#20292C] text-white text-sm font-semibold hover:bg-[#11181A] active:scale-[0.99] transition-all"
             >
               <Ticket className="w-4 h-4" />
-              View Ticket
+              {t('common.viewTicket')}
             </button>
           </div>
         ) : resource.state === 'maintenance' || resource.state === 'inactive' ? (
@@ -84,8 +86,8 @@ export const UnitActionSheet: React.FC<UnitActionSheetProps> = ({
           <div className="rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] p-3.5">
             <p className="text-xs text-[#667174] leading-relaxed">
               {resource.state === 'maintenance'
-                ? 'This unit is under maintenance. A ticket is already active against it.'
-                : 'This unit is inactive and not currently in service.'}
+                ? t('maintenance.underMaintenance')
+                : t('maintenance.unitInactive')}
             </p>
           </div>
         ) : (
@@ -95,7 +97,7 @@ export const UnitActionSheet: React.FC<UnitActionSheetProps> = ({
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-[#33B059] text-white text-sm font-semibold hover:bg-[#278B46] active:scale-[0.99] transition-all shadow-sm"
           >
             <Wrench className="w-4 h-4" />
-            Raise Maintenance
+            {t('maintenance.raiseMaintenance')}
           </button>
         )}
       </div>

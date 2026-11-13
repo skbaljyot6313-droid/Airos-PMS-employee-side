@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft } from 'lucide-react';
 
 interface ScreenHeaderProps {
@@ -14,14 +15,15 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
   onBack,
   rightElement,
 }) => {
+  const { t } = useTranslation();
   return (
-    <div className="bg-surface border-b border-line px-4 pt-3 pb-3 sticky top-0 z-20">
+    <div className="bg-surface border-b border-line px-4 pt-2.5 pb-2.5 sticky top-0 z-20">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           {onBack && (
             <button
               onClick={onBack}
-              aria-label="Go back"
+              aria-label={t('common.goBack')}
               className="p-2 -ml-2 rounded-lg text-ink hover:bg-soft transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />

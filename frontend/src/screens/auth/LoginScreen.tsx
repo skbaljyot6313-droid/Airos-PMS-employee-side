@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Eye, EyeOff, Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../../components/common/Buttons';
 
 export const LoginScreen: React.FC = () => {
   const { login, isLoading, authError, clearError } = useAuth();
+  const { t } = useTranslation();
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
@@ -29,19 +31,19 @@ export const LoginScreen: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xl font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
-                  Airco PMS
+                  {t('auth.brand')}
                 </span>
                 <span className="text-[11px] font-bold uppercase tracking-wider bg-[#E8F7ED] text-[#278B46] px-2 py-0.5 rounded-full border border-[#BBECCC]">
-                  Staff
+                  {t('auth.staffBadge')}
                 </span>
               </div>
             </div>
           </div>
           <h2 className="text-2xl font-bold text-[#20292C] font-['Space_Grotesk'] tracking-tight">
-            Sign in to continue
+            {t('auth.title')}
           </h2>
           <p className="text-xs text-[#667174] mt-1">
-            Access your assigned field tasks, property checklists, and maintenance operations.
+            {t('auth.subtitle')}
           </p>
         </div>
 
@@ -50,7 +52,7 @@ export const LoginScreen: React.FC = () => {
           <div className="mb-5 p-3.5 bg-[#FCEBEA] border border-[#F8C8C6] rounded-xl flex items-start gap-2.5 text-xs text-[#D9534F] leading-relaxed">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <span className="font-semibold block mb-0.5">Authentication Error</span>
+              <span className="font-semibold block mb-0.5">{t('auth.errorTitle')}</span>
               <span>{authError}</span>
             </div>
           </div>
@@ -60,7 +62,7 @@ export const LoginScreen: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-[#20292C] mb-1.5 uppercase tracking-wider">
-              Username or Email
+              {t('auth.identifier')}
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#8D999C]">
@@ -73,7 +75,7 @@ export const LoginScreen: React.FC = () => {
                   clearError();
                   setUsername(e.target.value);
                 }}
-                placeholder="Enter your employee ID or email"
+                placeholder={t('auth.identifierPlaceholder')}
                 autoCapitalize="none"
                 required
                 className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-sm text-[#20292C] placeholder-[#8D999C] focus:bg-white focus:outline-none focus:border-[#33B059] focus:ring-2 focus:ring-[#33B059]/15 transition-all"
@@ -83,7 +85,7 @@ export const LoginScreen: React.FC = () => {
 
           <div>
             <label className="block text-xs font-semibold text-[#20292C] mb-1.5 uppercase tracking-wider">
-              Password
+              {t('auth.password')}
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#8D999C]">
@@ -96,7 +98,7 @@ export const LoginScreen: React.FC = () => {
                   clearError();
                   setPassword(e.target.value);
                 }}
-                placeholder="Enter password"
+                placeholder={t('auth.passwordPlaceholder')}
                 required
                 className="w-full pl-10 pr-11 py-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-sm text-[#20292C] placeholder-[#8D999C] focus:bg-white focus:outline-none focus:border-[#33B059] focus:ring-2 focus:ring-[#33B059]/15 transition-all"
               />
@@ -104,7 +106,7 @@ export const LoginScreen: React.FC = () => {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#8D999C] hover:text-[#20292C] transition-colors"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -118,7 +120,7 @@ export const LoginScreen: React.FC = () => {
               size="lg"
               icon={<ArrowRight className="w-4 h-4" />}
             >
-              Sign In
+              {t('auth.signIn')}
             </PrimaryButton>
           </div>
         </form>
@@ -126,7 +128,7 @@ export const LoginScreen: React.FC = () => {
       </div>
 
       <div className="text-center text-[11px] text-[#8D999C] py-2">
-        Airco PMS Staff Mobile OS · Authorized Field Personnel Only
+        {t('auth.footer')}
       </div>
     </div>
   );

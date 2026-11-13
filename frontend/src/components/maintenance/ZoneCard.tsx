@@ -1,6 +1,7 @@
 import React from 'react';
 import { ZoneSummary } from '../../types';
 import { ArrowRight, AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ZoneCardProps {
   zone: ZoneSummary;
@@ -8,12 +9,15 @@ interface ZoneCardProps {
 }
 
 export const ZoneCard: React.FC<ZoneCardProps> = ({ zone, onClick }) => {
+  const { t } = useTranslation();
   const stats: { label: string; value: number | string }[] = [
-    { label: 'Rooms', value: zone.counts.rooms },
-    { label: 'Dorms', value: zone.counts.dorms },
-    { label: 'Beds', value: zone.counts.beds },
-    { label: 'Washrooms', value: zone.counts.washrooms ?? '—' },
-    ...(zone.counts.other > 0 ? [{ label: 'Other Units', value: zone.counts.other }] : []),
+    { label: t('maintenance.rooms'), value: zone.counts.rooms },
+    { label: t('maintenance.dorms'), value: zone.counts.dorms },
+    { label: t('maintenance.beds'), value: zone.counts.beds },
+    { label: t('maintenance.washrooms'), value: zone.counts.washrooms ?? '—' },
+    ...(zone.counts.other > 0
+      ? [{ label: t('maintenance.otherUnits'), value: zone.counts.other }]
+      : []),
   ];
 
   return (
@@ -36,7 +40,7 @@ export const ZoneCard: React.FC<ZoneCardProps> = ({ zone, onClick }) => {
           )}
         </div>
         <div className="flex items-center gap-1 text-[#33B059] font-semibold text-xs flex-shrink-0">
-          <span>View Zone</span>
+          <span>{t('maintenance.viewZone')}</span>
           <ArrowRight className="w-4 h-4 stroke-[2.5]" />
         </div>
       </div>
@@ -58,18 +62,18 @@ export const ZoneCard: React.FC<ZoneCardProps> = ({ zone, onClick }) => {
         <div className="flex items-center gap-2">
           {stats.length > 4 && (
             <span className="text-[11px] text-[#667174]">
-              +{stats[4].value} other units
+              +{stats[4].value} {t('maintenance.otherUnitsSuffix')}
             </span>
           )}
         </div>
         {zone.open_issues > 0 ? (
           <span className="flex items-center gap-1 text-[11px] font-semibold text-[#C2410C] bg-[#FFF1E8] px-2 py-1 rounded-lg">
             <AlertTriangle className="w-3.5 h-3.5" />
-            {zone.open_issues} Open Issue{zone.open_issues === 1 ? '' : 's'}
+            {t('maintenance.openIssues', { count: zone.open_issues })}
           </span>
         ) : (
           <span className="text-[11px] font-medium text-[#278B46] bg-[#E8F7ED] px-2 py-1 rounded-lg">
-            All clear
+            {t('maintenance.allClear')}
           </span>
         )}
       </div>

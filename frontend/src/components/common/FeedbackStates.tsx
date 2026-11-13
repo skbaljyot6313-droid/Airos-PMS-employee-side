@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ClipboardList, Wrench, AlertTriangle, RefreshCw, WifiOff } from 'lucide-react';
 import { SecondaryButton } from './Buttons';
 
@@ -20,7 +21,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const Icon = type === 'maintenance' ? Wrench : ClipboardList;
 
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center px-6 py-8 text-center">
       <div className="w-11 h-11 rounded-xl bg-soft flex items-center justify-center text-mute mb-3">
         <Icon className="w-5 h-5 stroke-[1.75]" />
       </div>
@@ -45,9 +46,11 @@ interface ErrorStateProps {
 }
 
 export const ErrorState: React.FC<ErrorStateProps> = ({
-  message = "Couldn't connect to Airco PMS. Check your internet connection and try again.",
+  message,
   onRetry,
 }) => {
+  const { t } = useTranslation();
+  const msg = message ?? t('errors.connectionFailed');
   const [offline, setOffline] = React.useState(
     () => typeof navigator !== 'undefined' && navigator.onLine === false
   );
@@ -68,7 +71,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   }, [onRetry]);
 
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-10 text-center mx-4 my-6 bg-surface rounded-xl border border-line">
+    <div className="flex flex-col items-center justify-center px-5 py-6 text-center mx-4 my-4 bg-surface rounded-xl border border-line">
       <div className="w-10 h-10 rounded-full bg-dngsoft flex items-center justify-center text-dng mb-3">
         {offline ? (
           <WifiOff className="w-5 h-5 stroke-[2]" />
@@ -77,12 +80,12 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
         )}
       </div>
       <h3 className="text-sm font-semibold text-ink mb-1 font-['Space_Grotesk']">
-        {offline ? "You're Offline" : 'Operational Sync Issue'}
+        {offline ? t('errors.offlineTitle') : t('errors.syncIssue')}
       </h3>
       <p className="text-xs text-sub max-w-[280px] leading-relaxed mb-4">
         {offline
-          ? "No internet connection. Your data is safe — we'll reconnect automatically when you're back online."
-          : message}
+          ? t('errors.offlineDesc')
+          : msg}
       </p>
       {onRetry && (
         <SecondaryButton
@@ -91,7 +94,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
           onClick={onRetry}
           icon={<RefreshCw className="w-3.5 h-3.5" />}
         >
-          {offline ? 'Try Again' : 'Retry Connection'}
+          {offline ? t('common.tryAgain') : t('errors.retryConnection')}
         </SecondaryButton>
       )}
     </div>
@@ -100,7 +103,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
 
 /** Skeleton row matching the real task-row footprint. */
 const SkeletonRow: React.FC = () => (
-  <div className="px-4 py-3.5">
+  <div className="px-4 py-3">
     <div className="flex items-center justify-between mb-2">
       <div className="h-2.5 w-16 rounded bg-soft" />
       <div className="h-2.5 w-10 rounded bg-soft" />
@@ -112,10 +115,12 @@ const SkeletonRow: React.FC = () => (
 );
 
 export const LoadingState: React.FC<{ message?: string }> = ({
-  message = 'Loading operational data...',
+  message,
 }) => {
+  const { t } = useTranslation();
+  const msg = message ?? t('errors.loadingDefault');
   return (
-    <div className="divide-y divide-line animate-pulse" aria-busy="true" aria-label={message}>
+    <div className="divide-y divide-line animate-pulse" aria-busy="true" aria-label={msg}>
       <SkeletonRow />
       <SkeletonRow />
       <SkeletonRow />

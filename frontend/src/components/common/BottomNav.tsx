@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { ClipboardList, Wrench, CalendarCheck, User } from 'lucide-react';
 
 export type TabType = 'tasks' | 'maintenance' | 'attendance' | 'profile';
@@ -16,28 +17,29 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   tasksCount,
   maintenanceCount,
 }) => {
+  const { t } = useTranslation();
   const tabs = [
     {
       id: 'tasks' as TabType,
-      label: 'Tasks',
+      label: t('nav.tasks'),
       icon: ClipboardList,
       badge: tasksCount && tasksCount > 0 ? tasksCount : null,
     },
     {
       id: 'maintenance' as TabType,
-      label: 'Maintenance',
+      label: t('nav.maintenance'),
       icon: Wrench,
       badge: maintenanceCount && maintenanceCount > 0 ? maintenanceCount : null,
     },
     {
       id: 'attendance' as TabType,
-      label: 'Attendance',
+      label: t('nav.attendance'),
       icon: CalendarCheck,
       badge: null,
     },
     {
       id: 'profile' as TabType,
-      label: 'Profile',
+      label: t('nav.profile'),
       icon: User,
       badge: null,
     },
@@ -45,7 +47,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
   return (
     <nav
-      aria-label="Bottom Navigation"
+      aria-label={t('nav.label')}
       className="bg-surface border-t border-line px-2 pt-1 flex items-center justify-around flex-shrink-0 z-30 select-none pb-[max(0.5rem,env(safe-area-inset-bottom))]"
     >
       {tabs.map((tab) => {
@@ -57,7 +59,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             key={tab.id}
             onClick={() => onChangeTab(tab.id)}
             aria-current={isActive ? 'page' : undefined}
-            className={`flex-1 flex flex-col items-center justify-center pt-1 pb-1.5 px-2 transition-colors relative min-h-[48px] ${
+            className={`flex-1 flex flex-col items-center justify-center pt-1 pb-1.5 px-2 transition-colors relative min-h-[44px] ${
               isActive ? 'text-ink' : 'text-mute hover:text-sub'
             }`}
           >
@@ -70,7 +72,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             />
             <div className="relative">
               <Icon
-                className={`w-[18px] h-[18px] transition-transform ${
+                className={`w-5 h-5 transition-transform ${
                   isActive ? 'stroke-[2.25]' : 'stroke-[1.75]'
                 }`}
               />
@@ -81,7 +83,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               )}
             </div>
             <span
-              className={`text-[10px] mt-1 tracking-tight ${
+              className={`text-[11px] mt-1 tracking-tight ${
                 isActive ? 'font-semibold text-ink' : 'font-medium text-mute'
               }`}
             >

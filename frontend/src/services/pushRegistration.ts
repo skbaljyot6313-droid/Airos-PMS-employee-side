@@ -26,6 +26,12 @@ import {
 } from '@capacitor/push-notifications';
 
 import { registerDeviceApi, unregisterDeviceApi } from '../api/notifications';
+import {
+  API_BASE,
+  secureStorage,
+  TOKEN_REFRESHED_EVENT,
+} from '../api/client';
+import { NativeLocation } from './nativeLocation';
 import { StaffNotification } from '../types';
 
 const APP_VERSION_FALLBACK = '1.0.13'; // only when App.getInfo is unavailable
@@ -100,6 +106,25 @@ function emitForeground(n: PushNotificationSchema): void {
   foregroundListeners.forEach((l) => l(item));
 }
 
+/** Persist apiBase + credentials natively so the 30-min work-feed poll
+ *  (WorkFeedPollReceiver) works even when GPS tracking is disabled —
+ *  FCM stays primary; this is only the fallback's auth plumbing. */
+async function configureNativeFeed(): Promise<void> {
+  const accessToken = secureStorage.getToken();
+  if (!accessToken) return;
+  try {
+    await NativeLocation.configure({
+      apiBase: API_BASE,
+      accessToken,
+      ...(secureStorage.getRefreshToken()
+        ? { refreshToken: secureStorage.getRefreshToken()! }
+        : {}),
+    });
+  } catch {
+    /* plugin absent (web/older APK) — FCM still delivers */
+  }
+}
+
 /** Called once per auth'd session from App. Registers listeners,
  *  requests permission (Android 13+), uploads the FCM token. Safe to
  *  re-call after logout/login. Returns a teardown. */
@@ -137,6 +162,12 @@ export function initPushNotifications(tapHandler: TapHandler): () => void {
     await PushNotifications.register().catch(() => undefined);
   })();
 
+  // Arm the tracking-independent poll fallback + keep its credentials
+  // fresh across token rotation.
+  void configureNativeFeed();
+  const onRefreshed = () => void configureNativeFeed();
+  window.addEventListener(TOKEN_REFRESHED_EVENT, onRefreshed);
+
   // Re-register on resume so a rotated token never sits stale.
   let appState: { remove: () => void } | null = null;
   void CapacitorApp.addListener('appStateChange', ({ isActive }) => {
@@ -150,6 +181,7 @@ export function initPushNotifications(tapHandler: TapHandler): () => void {
     onTap = null;
     handles.forEach((h) => h.remove());
     appState?.remove();
+    window.removeEventListener(TOKEN_REFRESHED_EVENT, onRefreshed);
   };
 }
 

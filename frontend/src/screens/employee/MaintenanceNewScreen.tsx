@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { useAuth } from '../../context/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { EligibleLocation, MaintenanceCategory, MaintenancePriority, MaintenanceTarget, MaintenanceTicket } from '../../types';
 import { fetchEligibleLocationsApi, createMaintenanceTicketApi } from '../../api/maintenance';
 import { uploadMediaApi } from '../../api/media';
@@ -45,6 +46,23 @@ interface MaintenanceNewScreenProps {
   // When provided, the target unit is locked — raised from the zone workspace
   target?: MaintenanceTarget;
 }
+
+/** Display-label key for a wire category name. */
+const CAT_KEYS: Record<MaintenanceCategory, string> = {
+  HVAC: 'hvac',
+  Plumbing: 'plumbing',
+  Electrical: 'electrical',
+  Carpentry: 'carpentry',
+  Furniture: 'furniture',
+  Appliance: 'appliance',
+  Painting: 'painting',
+  Internet: 'internet',
+  'Water / Drainage': 'waterDrainage',
+  'Cleaning Equipment': 'cleaningEquipment',
+  Civil: 'civil',
+  Safety: 'safety',
+  Other: 'other',
+};
 
 const CATEGORIES: { name: MaintenanceCategory; icon: React.ReactNode; issues: string[] }[] = [
   {
@@ -120,6 +138,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   target,
 }) => {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [locations, setLocations] = useState<EligibleLocation[]>([]);
   const [loadingLocations, setLoadingLocations] = useState<boolean>(!target);
   const [locationsLoadFailed, setLocationsLoadFailed] = useState<boolean>(false);
@@ -155,7 +174,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
       setLocations(data);
     } catch (err: unknown) {
       setLocationsLoadFailed(true);
-      setError(errorMessage(err, 'Unable to load eligible workplace locations.'));
+      setError(errorMessage(err, t('maintenance.loadingLocationsError')));
     } finally {
       setLoadingLocations(false);
     }
@@ -180,7 +199,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
           const uploaded = await uploadMediaApi(dataUrl, file.name);
           setPhotos((prev) => [...prev, uploaded.path]);
         } catch {
-          setError('Failed to upload maintenance photo.');
+          setError(t('maintenance.photoUploadFailed'));
         } finally {
           setUploadingPhoto(false);
           inputEl.value = '';
@@ -208,7 +227,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
       }
     } catch (err: unknown) {
       if (!/cancel/i.test(errorMessage(err, ''))) {
-        setError(errorMessage(err, 'Failed to capture photo.'));
+        setError(errorMessage(err, t('maintenance.photoCaptureFailed')));
       }
     } finally {
       setUploadingPhoto(false);
@@ -221,11 +240,11 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
 
   const handleSubmit = async () => {
     if ((!selectedLocation && !target) || !selectedCategory || !selectedIssue) {
-      setError('Please complete all required fields.');
+      setError(t('maintenance.completeFieldsError'));
       return;
     }
     if (!user?.property_uid) {
-      setError('Your account is not linked to a property — contact your manager.');
+      setError(t('maintenance.noPropertyError'));
       return;
     }
 
@@ -239,7 +258,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
       else if (target.kind === 'washroom') targetFields.washroom_uid = target.uid;
       else if (target.kind === 'fixture') {
         if (!target.washroom_uid) {
-          setError('This fixture is missing its washroom reference — cannot submit.');
+          setError(t('maintenance.fixtureMissingWashroom'));
           return;
         }
         targetFields.washroom_uid = target.washroom_uid;
@@ -252,7 +271,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
       else if (selectedLocation.kind === 'washroom') targetFields.washroom_uid = selectedLocation.id;
       else if (selectedLocation.kind === 'fixture') {
         if (!selectedLocation.washroom_uid) {
-          setError('This fixture is missing its washroom reference — cannot submit.');
+          setError(t('maintenance.fixtureMissingWashroom'));
           return;
         }
         targetFields.washroom_uid = selectedLocation.washroom_uid;
@@ -275,7 +294,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
 
       setSubmissionResult(ticket);
     } catch (err: unknown) {
-      setError(errorMessage(err, 'Unable to submit maintenance ticket.'));
+      setError(errorMessage(err, t('maintenance.submitFailed')));
     } finally {
       setSubmitting(false);
     }
@@ -284,8 +303,8 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   if (loadingLocations) {
     return (
       <div className="flex-1 flex flex-col bg-[#F7F8F6]">
-        <ScreenHeader title="Raise Maintenance" onBack={onBack} />
-        <LoadingState message="Loading your permitted coverage locations..." />
+        <ScreenHeader title={t('maintenance.raiseTitle')} onBack={onBack} />
+        <LoadingState message={t('maintenance.loadingLocations')} />
       </div>
     );
   }
@@ -295,9 +314,9 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   if (locationsLoadFailed && !target) {
     return (
       <div className="flex-1 flex flex-col bg-[#F7F8F6]">
-        <ScreenHeader title="Raise Maintenance" onBack={onBack} />
+        <ScreenHeader title={t('maintenance.raiseTitle')} onBack={onBack} />
         <ErrorState
-          message={error || 'Unable to load eligible workplace locations.'}
+          message={error || t('maintenance.loadingLocationsError')}
           onRetry={loadLocations}
         />
       </div>
@@ -308,52 +327,52 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   if (submissionResult) {
     return (
       <div className="flex-1 flex flex-col bg-[#F7F8F6]">
-        <ScreenHeader title="Ticket Recorded" onBack={() => onSuccess(submissionResult.id)} />
-        <div className="flex-1 p-6 flex flex-col justify-center items-center text-center">
+        <ScreenHeader title={t('maintenance.ticketRecorded')} onBack={() => onSuccess(submissionResult.id)} />
+        <div className="flex-1 p-4 flex flex-col justify-center items-center text-center">
           <div className="w-16 h-16 rounded-full bg-[#E8F7ED] border border-[#BBECCC] text-[#33B059] flex items-center justify-center mb-4">
             <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
           </div>
 
-          <h2 className="text-xl font-bold text-[#20292C] font-['Space_Grotesk'] mb-1">
-            Maintenance Request Submitted
+          <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk'] mb-1">
+            {t('maintenance.successTitle')}
           </h2>
           <p className="text-xs text-[#667174] max-w-xs mb-6">
-            The issue has been registered in the Airco PMS operations system and dispatched.
+            {t('maintenance.successDesc')}
           </p>
 
           <div className="w-full max-w-sm bg-white rounded-2xl p-4 border border-[#E4E8E6] text-left space-y-3 mb-6 shadow-sm">
             <div className="flex items-center justify-between border-b border-[#F0F2F1] pb-2">
-              <span className="text-xs text-[#8D999C]">Ticket ID</span>
+              <span className="text-xs text-[#8D999C]">{t('maintenance.ticketId')}</span>
               <span className="font-mono text-xs font-bold text-[#20292C] bg-[#F0F2F1] px-2 py-0.5 rounded">
                 {submissionResult.ticket_number || submissionResult.id}
               </span>
             </div>
             <div className="flex items-center justify-between border-b border-[#F0F2F1] pb-2">
-              <span className="text-xs text-[#8D999C]">Issue</span>
+              <span className="text-xs text-[#8D999C]">{t('maintenance.issue')}</span>
               <span className="text-xs font-medium text-[#20292C] truncate max-w-[200px]">
                 {submissionResult.issue}
               </span>
             </div>
             <div className="flex items-center justify-between border-b border-[#F0F2F1] pb-2">
-              <span className="text-xs text-[#8D999C]">Location</span>
+              <span className="text-xs text-[#8D999C]">{t('maintenance.location')}</span>
               <span className="text-xs font-medium text-[#20292C]">
                 {submissionResult.location_name}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[#8D999C]">Assigned Tech</span>
+              <span className="text-xs text-[#8D999C]">{t('maintenance.assignedTech')}</span>
               <span className="text-xs font-bold text-[#278B46]">
-                {submissionResult.assigned_to_name || 'Queued / Unassigned'}
+                {submissionResult.assigned_to_name || t('maintenance.queuedUnassigned')}
               </span>
             </div>
           </div>
 
           <div className="w-full max-w-sm space-y-2">
             <PrimaryButton onClick={() => onSuccess(submissionResult.id)}>
-              View Ticket
+              {t('common.viewTicket')}
             </PrimaryButton>
             <SecondaryButton onClick={onBack}>
-              Back to Zone
+              {t('maintenance.backToZone')}
             </SecondaryButton>
           </div>
         </div>
@@ -368,13 +387,13 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   const photoSection = (
     <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
       <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider mb-2 font-['Space_Grotesk']">
-        Attach Photos (Optional)
+        {t('maintenance.attachPhotos')}
       </label>
 
       <div className="grid grid-cols-2 gap-3 mb-2">
         {photos.map((url, i) => (
           <div key={i} className="relative aspect-video rounded-xl overflow-hidden border border-[#E4E8E6]">
-            <img src={mediaUrl(url)} alt="Evidence" className="w-full h-full object-cover" />
+            <img src={mediaUrl(url)} alt={t('maintenance.evidenceAlt')} className="w-full h-full object-cover" />
             <button
               onClick={() => handleRemovePhoto(i)}
               className="absolute top-1 right-1 p-1 bg-black/60 rounded-full text-white hover:bg-black/80"
@@ -395,8 +414,8 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
           ) : (
             <>
               <Camera className="w-5 h-5 text-[#667174] mb-1" />
-              <span className="text-[11px] font-semibold text-[#20292C]">+ Add Photo</span>
-              <span className="text-[10px] text-[#8D999C]">Camera or Gallery</span>
+              <span className="text-[11px] font-semibold text-[#20292C]">{t('common.addPhoto')}</span>
+              <span className="text-[10px] text-[#8D999C]">{t('common.cameraOrGallery')}</span>
             </>
           )}
         </button>
@@ -407,8 +426,8 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   return (
     <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
       <ScreenHeader
-        title="Raise Maintenance"
-        subtitle={target ? target.path.join(' · ') : `Step ${stepNumber} of ${totalSteps} · Guided Request`}
+        title={t('maintenance.raiseTitle')}
+        subtitle={target ? target.path.join(' · ') : t('maintenance.guidedRequest', { step: stepNumber, total: totalSteps })}
         onBack={step > firstStep ? () => setStep(step - 1) : onBack}
       />
 
@@ -428,7 +447,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
             </div>
             <div className="min-w-0">
               <span className="text-[10px] font-bold text-[#8D999C] uppercase tracking-wider block">
-                Location
+                {t('maintenance.location')}
               </span>
               <span className="text-xs font-semibold text-[#20292C] block truncate">
                 {target.path.join(' · ')}
@@ -442,12 +461,12 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
           <div className="space-y-3">
             <div>
               <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
-                Where is the problem located?
+                {t('maintenance.whereProblem')}
               </h2>
               <p className="text-xs text-[#667174]">
                 {drillParent
-                  ? `Inside ${drillParent.name} — the whole unit or a specific part.`
-                  : 'Select an area within your assigned operational coverage.'}
+                  ? t('maintenance.insideUnit', { name: drillParent.name })
+                  : t('maintenance.selectAreaHint')}
               </p>
             </div>
 
@@ -457,7 +476,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                 onClick={() => setDrillParent(null)}
                 className="text-xs font-semibold text-[#278B46]"
               >
-                ← All locations
+                {t('maintenance.allLocations')}
               </button>
             )}
 
@@ -474,7 +493,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                   : MapPin;
                 const context = drillParent
                   ? (isWholeUnit
-                      ? `Everything inside ${drillParent.name}`
+                      ? t('maintenance.everythingInside', { name: drillParent.name })
                       : drillParent.name)
                   : [
                       loc.zone_name,
@@ -505,7 +524,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                       </div>
                       <div>
                         <span className="text-sm font-semibold text-[#20292C] block">
-                          {isWholeUnit ? `Whole ${loc.name}` : loc.name}
+                          {isWholeUnit ? t('maintenance.wholeUnit', { name: loc.name }) : loc.name}
                         </span>
                         <span className="text-xs text-[#667174]">{context}</span>
                       </div>
@@ -525,10 +544,10 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
           <div className="space-y-3">
             <div>
               <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
-                What category of maintenance is needed?
+                {t('maintenance.whatCategory')}
               </h2>
               <p className="text-xs text-[#667174]">
-                At {target?.name || selectedLocation?.name}
+                {t('maintenance.at', { name: target?.name || selectedLocation?.name })}
               </p>
             </div>
 
@@ -553,7 +572,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                     <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#33B059] text-white' : 'bg-[#F0F2F1] text-[#667174]'}`}>
                       {cat.icon}
                     </div>
-                    <span className="text-xs font-semibold">{cat.name}</span>
+                    <span className="text-xs font-semibold">{t(`maintenance.cat.${CAT_KEYS[cat.name]}`)}</span>
                   </button>
                 );
               })}
@@ -566,10 +585,10 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
           <div className="space-y-4">
             <div>
               <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
-                Select the specific issue
+                {t('maintenance.selectIssue')}
               </h2>
               <p className="text-xs text-[#667174]">
-                {selectedCategory} · {target?.name || selectedLocation?.name}
+                {t(`maintenance.cat.${CAT_KEYS[selectedCategory ?? 'Other']}`)} · {target?.name || selectedLocation?.name}
               </p>
             </div>
 
@@ -603,7 +622,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                     : 'border-[#E4E8E6] bg-white hover:bg-[#F7F8F6]'
                 }`}
               >
-                <span className="text-xs font-medium text-[#20292C]">Other custom issue</span>
+                <span className="text-xs font-medium text-[#20292C]">{t('maintenance.otherCustomIssue')}</span>
                 {selectedIssue === 'Other' && <Check className="w-4 h-4 text-[#33B059] stroke-[3]" />}
               </div>
             </div>
@@ -611,12 +630,12 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
             {/* Free-text description */}
             <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
               <label className="block text-xs font-semibold text-[#20292C] uppercase tracking-wider mb-1">
-                Description / Additional Notes
+                {t('maintenance.descNotes')}
               </label>
               <textarea
                 value={customDescription}
                 onChange={(e) => setCustomDescription(e.target.value)}
-                placeholder="Describe exact location, symptoms, or warnings for the technician..."
+                placeholder={t('maintenance.descPlaceholder')}
                 rows={3}
                 className="w-full p-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-xs text-[#20292C] focus:bg-white focus:outline-none focus:border-[#33B059]"
               />
@@ -630,7 +649,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
               onClick={() => setStep(4)}
               icon={<ArrowRight className="w-4 h-4" />}
             >
-              Continue to Priority & Photos
+              {t('maintenance.continueToPriority')}
             </PrimaryButton>
           </div>
         )}
@@ -640,10 +659,10 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
           <div className="space-y-4">
             <div>
               <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
-                Priority & Photographic Evidence
+                {t('maintenance.priorityPhotosTitle')}
               </h2>
               <p className="text-xs text-[#667174]">
-                Review and dispatch to property maintenance.
+                {t('maintenance.reviewDispatch')}
               </p>
             </div>
 
@@ -653,21 +672,21 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
             {/* Summary Review Card */}
             <div className="bg-[#F7F8F6] rounded-2xl p-4 border border-[#E4E8E6] space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-[#8D999C]">Location:</span>
+                <span className="text-[#8D999C]">{t('maintenance.locationLabel')}</span>
                 <span className="font-semibold text-[#20292C] text-right">
                   {target ? target.path.join(' · ') : selectedLocation?.name}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#8D999C]">Category:</span>
-                <span className="font-semibold text-[#20292C]">{selectedCategory}</span>
+                <span className="text-[#8D999C]">{t('maintenance.categoryLabel')}</span>
+                <span className="font-semibold text-[#20292C]">{t(`maintenance.cat.${CAT_KEYS[selectedCategory ?? 'Other']}`)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#8D999C]">Issue:</span>
+                <span className="text-[#8D999C]">{t('maintenance.issueLabel')}</span>
                 <span className="font-semibold text-[#20292C]">{selectedIssue}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#8D999C]">Priority:</span>
+                <span className="text-[#8D999C]">{t('maintenance.priorityLabel')}</span>
                 <PriorityBadge priority={priority} size="sm" />
               </div>
             </div>
@@ -678,7 +697,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
               size="lg"
               icon={<Send className="w-4 h-4" />}
             >
-              Submit Maintenance Request
+              {t('maintenance.submitRequest')}
             </PrimaryButton>
           </div>
         )}
@@ -713,7 +732,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
           >
             <div className="w-10 h-1 bg-[#E4E8E6] rounded-full mx-auto mb-3" />
             <h4 className="text-sm font-bold text-[#20292C] font-['Space_Grotesk'] mb-3">
-              Add Photo Evidence
+              {t('common.addPhotoEvidence')}
             </h4>
             <button
               type="button"
@@ -731,8 +750,8 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                 <Camera className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-sm font-semibold text-[#20292C] block">Take Photo</span>
-                <span className="text-[11px] text-[#8D999C]">Use camera to capture now</span>
+                <span className="text-sm font-semibold text-[#20292C] block">{t('common.takePhoto')}</span>
+                <span className="text-[11px] text-[#8D999C]">{t('common.takePhotoSub')}</span>
               </div>
             </button>
             <button
@@ -751,8 +770,8 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                 <ImageIcon className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-sm font-semibold text-[#20292C] block">Choose from Gallery</span>
-                <span className="text-[11px] text-[#8D999C]">Select an existing photo</span>
+                <span className="text-sm font-semibold text-[#20292C] block">{t('common.chooseGallery')}</span>
+                <span className="text-[11px] text-[#8D999C]">{t('common.chooseGallerySub')}</span>
               </div>
             </button>
             <button
@@ -760,7 +779,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
               onClick={() => setShowPhotoOptions(false)}
               className="w-full p-3 rounded-xl text-xs font-semibold text-[#667174] hover:bg-[#F7F8F6] transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         </div>

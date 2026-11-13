@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { TaskStatus, MaintenanceStatus } from '../../types';
 import { Clock, CheckCircle2, AlertTriangle, Send, RefreshCw, AlertCircle } from 'lucide-react';
 
@@ -8,6 +9,7 @@ interface StatusBadgeProps {
 }
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md' }) => {
+  const { t } = useTranslation();
   const isSm = size === 'sm';
 
   const config: Record<
@@ -15,79 +17,79 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'md' })
     { label: string; bg: string; text: string; icon: React.ReactNode }
   > = {
     assigned: {
-      label: 'Assigned',
+      label: t('status.assigned'),
       bg: 'bg-soft',
       text: 'text-ink',
       icon: <Clock className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     pending: {
-      label: 'Pending',
+      label: t('status.pending'),
       bg: 'bg-soft',
       text: 'text-sub',
       icon: <Clock className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     in_progress: {
-      label: 'In Progress',
+      label: t('status.in_progress'),
       bg: 'bg-accsoft',
       text: 'text-acc',
       icon: <RefreshCw className={`${isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} animate-spin`} />,
     },
     reopened: {
-      label: 'Returned',
+      label: t('status.reopened'),
       bg: 'bg-warnsoft',
       text: 'text-warn',
       icon: <AlertTriangle className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     submitted: {
-      label: 'In Review',
+      label: t('status.submitted'),
       bg: 'bg-infosoft',
       text: 'text-info',
       icon: <Send className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     completed: {
-      label: 'Completed',
+      label: t('status.completed'),
       bg: 'bg-accsoft',
       text: 'text-ok',
       icon: <CheckCircle2 className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     cancelled: {
-      label: 'Cancelled',
+      label: t('status.cancelled'),
       bg: 'bg-soft',
       text: 'text-mute',
       icon: <AlertCircle className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     resolved: {
-      label: 'Resolved',
+      label: t('status.resolved'),
       bg: 'bg-accsoft',
       text: 'text-ok',
       icon: <CheckCircle2 className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     on_hold: {
-      label: 'On Hold',
+      label: t('status.on_hold'),
       bg: 'bg-warnsoft',
       text: 'text-warn',
       icon: <Clock className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     abandoned: {
-      label: 'Abandoned',
+      label: t('status.abandoned'),
       bg: 'bg-soft',
       text: 'text-mute',
       icon: <AlertCircle className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     scheduled: {
-      label: 'Scheduled',
+      label: t('status.scheduled'),
       bg: 'bg-soft',
       text: 'text-sub',
       icon: <Clock className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     reported: {
-      label: 'Reported',
+      label: t('status.reported'),
       bg: 'bg-warnsoft',
       text: 'text-warn',
       icon: <Clock className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,
     },
     overdue: {
-      label: 'Overdue',
+      label: t('status.overdue'),
       bg: 'bg-dngsoft',
       text: 'text-dng',
       icon: <AlertTriangle className={isSm ? 'w-3 h-3' : 'w-3.5 h-3.5'} />,

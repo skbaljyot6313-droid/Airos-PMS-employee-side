@@ -19,6 +19,16 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - Whole stack (default): `python main.py` → docker compose (postgres:5432,
   redis:6379, migrate→api:8000, web:3000). `python main.py --seed` adds demo
   tenant (`admin@demo.local` / `employee@demo.local`, `Demo!Pass123`).
+  The launcher force-overrides any remote `DATABASE_URL` from root `.env`
+  to the bundled local postgres — the local stack NEVER talks to a remote
+  DB. Note the web container serves the frontend `dist/` baked at image
+  build — after frontend changes, re-run `python main.py` (it builds) to
+  see them; for live-reload frontend work use `--native --web`.
+- No-Docker local dev: `python main.py --local --seed --web` — same dev
+  servers but the backend runs on local SQLite (`backend/dev.db`, created
+  by `scripts/dev_local_db.py`; schema via `Base.metadata`, NOT the
+  Postgres-targeted Alembic chain). Seed includes 2 demo tasks so task
+  audio/UI are visible immediately.
 - Bare-metal dev: `python main.py --native` (uvicorn --reload + `tsx server.ts`,
   optional Android emulator via `cap run`; `--web`, `--backend-only`,
   `--frontend-only`, `--backend-port/--frontend-port` flags).
@@ -29,11 +39,20 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - CI: `.github/workflows/ci.yml` (backend pytest, frontend typecheck+build,
   android assembleRelease); `build-android.yml` (manual APK artifact build
   only — no deploy step).
-- Deployment: NONE configured. This copy was detached from the old Railway
-  production environment (`dev/infrastructure-isolation`): `railway.toml`,
-  `deploy-railway.yml`, `centrifugo-vars.yml`, and `release-android.yml`
-  were removed, and no remaining workflow can reach Railway. Any future
-  hosting is configured fresh — do not resurrect the old Railway wiring.
+- Deployment: NO production deploy configured. This copy was detached from the
+  old Railway production environment (`dev/infrastructure-isolation`):
+  `railway.toml`, `deploy-railway.yml`, `centrifugo-vars.yml`, and
+  `release-android.yml` were removed, and no remaining workflow can reach
+  Railway. Any future hosting is configured fresh — do not resurrect the
+  old Railway wiring.
+- Dev infrastructure DOES exist (commit "Cloud Run deploy prep"):
+  `.github/workflows/dev-distribution.yml` (manual) builds a dev APK against
+  the dev Cloud Run API
+  `https://airos-eb-api-dev-94363806721.asia-south1.run.app/api/v1`
+  (GCP project `final-airos-os`, asia-south1) and, when `distribute=true`,
+  pushes it to Firebase App Distribution group `airos-employee-dev-testers`
+  via secret `FIREBASE_SERVICE_ACCOUNT_EMPLOYEE_DEV`. No workflow deploys
+  the backend itself — the Cloud Run service is managed outside this repo.
 - Former prod API (dead reference — this repo no longer deploys there):
   `https://employee-api-production-c0e3.up.railway.app/api/v1`. Docs like
   `location_api.md` still cite it for the pre-isolation deployment.
@@ -61,7 +80,12 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   `location_tracking.py` (Redis hot path + sessions/history),
   `location.py` (geo fixes at attendance/task actions — RECORD don't
   reject; flags `outside_geofence`/`low_accuracy`, server clock only),
-  `notifications.py`, `push.py` (log|fcm providers), `rollover.py` (IST
+  `notifications.py` (durable push outbox — `push_status` on each row:
+  queued→dispatching→accepted|retry_pending→failed|opened; atomic claim,
+  exponential backoff, sweep in `main.py` lifespan; 'delivered' is
+  reserved/unused since FCM can't confirm device delivery),
+  `push.py` (log|fcm providers, `validate_push_config` at startup —
+  fcm misconfig refuses boot in production), `rollover.py` (IST
   operational-day rollover — present for models/tests, no scheduler runs
   here), `occupancy.py`, `auth.py`, `mobile_release.py`, `task_location.py`,
   `bootstrap.py` + `employee_shift.py` (see API surface + index below).
@@ -92,8 +116,10 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   `rate_limit.py` (Redis fixed-window, in-memory fallback, fail-open),
   `redis.py` (`mt:` key prefix convention, accelerator-not-truth),
   `centrifugo.py` (realtime tokens, post-commit publish, location throttle),
-  `storage.py` (S3-compatible object store only — Supabase Storage's S3
-  endpoint; no local-disk backend),
+  `storage.py` (two object-store backends, no local-disk: `GCSStorage`
+  via ADC when `GCS_BUCKET` is set — preferred on Cloud Run — else
+  `S3Storage` against Supabase Storage's S3 endpoint; `STORAGE_BACKEND`
+  is env-compat only and selects nothing),
   `exceptions.py` (dual `detail`+`error` envelopes), `middleware.py`,
   `metrics.py` (request-local timing/pool-wait instrumentation),
   `logging.py`.
@@ -184,7 +210,12 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   end tracking/notifications while a session is active),
   `LocationTrackerPlugin` (`AirosLocation`), `AppUpdatePlugin`
   (`AirosUpdate` — APK download/install), `AiroMessagingService` (FCM
-  data-only → shared seen-notification ledger), `MainActivity`.
+  data-only → shared seen-notification ledger),
+  `WorkFeedPollScheduler`/`WorkFeedPollReceiver` (30-min AlarmManager
+  doze-friendly work-feed poll — fallback for devices where FCM is
+  broken AND the location FGS is not running; dedupes on the shared
+  seen ledger), `BootReceiver` (re-arms the poll after reboot),
+  `MainActivity`.
 - Version source of truth: `app.json` (`expo.version` +
   `expo.android.versionCode`); `scripts/bump-version.mjs` bumps it.
 
@@ -206,7 +237,7 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - Migrations: full linear Alembic chain retained; apply via
   `alembic upgrade head` (compose `migrate` service / Railway preDeploy).
 
-## Additional implementation index (verified 2026-10-28)
+## Additional implementation index (verified 2026-11-13)
 
 - `api/v1/bootstrap.py` + `services/bootstrap.py`: `GET /bootstrap`, gated by
   `BOOTSTRAP_ENABLED`, consolidates user/company/zones/shift/unread count.
@@ -251,7 +282,13 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   but does NOT run the frontend Vitest suite. Native checked-in tests are
   scaffold examples, not tracking/updater behavioral coverage.
 - Documentation caveats: `backend/docs/ARCHITECTURE.md` still describes local
-  storage and an older migration count; actual storage is S3-only. Compose's
-  legacy `STORAGE_BACKEND=local`/uploads volume does not enable local storage.
+  storage and an older migration count; actual storage is GCS-preferred /
+  S3-fallback (`get_storage()` picks on `GCS_BUCKET`). Compose's legacy
+  `STORAGE_BACKEND=local`/uploads volume does not enable local storage.
   `updateService.ts` uses a 4h throttle despite older 24h comments. Removed
   release/Railway workflow references in comments are not active deployment.
+  `arq` is a requirements dep but this repo ships no worker module — only
+  comment references remain. `@google/genai` is in frontend deps but
+  unused by `src/`. `capacitor.config.json`/`app.json` still carry the
+  pre-rebrand name "Airos Property Pro"; user-facing brand is
+  "Airco PMS Staff".

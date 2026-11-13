@@ -62,6 +62,7 @@ docker run --rm `
   -v "${RepoRoot}:/repo" `
   -v "airos-frontend-node-modules:/repo/frontend/node_modules" `
   -v "airos-gradle-cache:/root/.gradle" `
+  -v "airos-android-debug-keys:/root/.android" `
   -w "/repo/frontend" `
   $Image bash scripts/docker-build-apk.sh
 if ($LASTEXITCODE -ne 0) { throw "docker build run failed ($LASTEXITCODE)" }

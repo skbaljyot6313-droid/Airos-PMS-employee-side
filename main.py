@@ -156,6 +156,7 @@ def backend_python() -> str:
     venv = BACKEND / (".venv/Scripts/python.exe" if IS_WINDOWS else ".venv/bin/python")
     return str(venv) if venv.exists() else sys.executable
 
+
 # Android helpers
 
 def resolve_sdk() -> Path:
@@ -437,7 +438,30 @@ def docker_mode(args: argparse.Namespace) -> int:
         cmd += ["--profile", "seed"]
     cmd += ["up", "--build"]
 
-    child = spawn(cmd, PROJECT_ROOT, dict(os.environ))
+    # SAFETY: always run against the bundled local postgres. The root .env
+    # carries a remote DATABASE_URL for other tooling; a plain
+    # `python main.py` must never point the local stack at a remote DB.
+    # (Shell-env override of DATABASE_URL is still honored only when it
+    # already resolves to a loopback/local host.)
+    env = dict(os.environ)
+    local_pg = (
+        "postgresql+asyncpg://"
+        f"{os.environ.get('POSTGRES_USER', 'mgmt')}:"
+        f"{os.environ.get('POSTGRES_PASSWORD', 'mgmt-dev-password')}"
+        f"@postgres:5432/{os.environ.get('POSTGRES_DB', 'mgmt')}"
+    )
+    cur = env.get("DATABASE_URL", "")
+    if "@" in cur:
+        host = cur.split("@", 1)[1].split("/", 1)[0].split(":", 1)[0]
+    else:
+        host = ""
+    if host not in ("postgres", "localhost", "127.0.0.1", "::1"):
+        if cur:
+            print("NOTE: overriding remote DATABASE_URL from .env -> bundled "
+                  "local postgres (local runs never touch remote DBs).")
+        env["DATABASE_URL"] = local_pg
+
+    child = spawn(cmd, PROJECT_ROOT, env)
     stream = start_stream(child, "DOCKER")
 
     print("========================================")
@@ -485,17 +509,25 @@ def main() -> int:
     parser.add_argument("--native", action="store_true",
                         help="bare-metal dev servers (uvicorn --reload + tsx) "
                              "instead of Docker; required for the emulator flow")
+    parser.add_argument("--local", action="store_true",
+                        help="native mode with a fully local SQLite database "
+                             "(backend/dev.db) — no Docker, no remote DB. "
+                             "--seed adds the demo tenant + demo tasks.")
     parser.add_argument("--seed", action="store_true",
-                        help="docker mode: also run the demo-tenant seed profile")
+                        help="docker mode: also run the demo-tenant seed profile "
+                             "(with --local: seeds backend/dev.db instead)")
     parser.add_argument("--down", action="store_true",
                         help="docker mode: stop the stack (compose down)")
     args = parser.parse_args()
 
+    args.native = args.native or args.local
+
     if not args.native:
         return docker_mode(args)
 
-    if args.seed or args.down:
-        fail("--seed/--down only apply in Docker mode (drop --native).")
+    if args.down or (args.seed and not args.local):
+        fail("--seed only applies in Docker mode or with --local; "
+             "--down only applies in Docker mode (drop --native).")
 
     if not BACKEND.is_dir():
         fail(f"backend directory not found at {BACKEND}")
@@ -522,6 +554,16 @@ def main() -> int:
         if probe.returncode != 0:
             fail(f"uvicorn not importable via {py} - run: {py} -m pip install -r backend/requirements.txt")
         env = dict(os.environ, PYTHONUNBUFFERED="1")
+        if args.local:
+            # Local-only SQLite: overrides backend/.env's remote DATABASE_URL
+            # for the child process — the .env file itself is not touched.
+            env["DATABASE_URL"] = "sqlite+aiosqlite:///./dev.db"
+            init = [py, "-m", "scripts.dev_local_db"]
+            if args.seed:
+                init.append("--seed")
+            rc = subprocess.run(init, cwd=BACKEND, env=env).returncode
+            if rc != 0:
+                fail("local DB bootstrap failed - see output above.")
         children["BACKEND"] = spawn(
             [py, "-m", "uvicorn", "app.main:app", "--reload", "--host", host, "--port", str(bport)],
             BACKEND, env)
@@ -545,6 +587,11 @@ def main() -> int:
     print("========================================")
     if run_backend:
         print(f"Backend:  http://{host}:{bport}   API: http://{host}:{bport}/api/v1   Docs: http://{host}:{bport}/docs")
+    if args.local:
+        print("Database: backend/dev.db (SQLite — fully local; remote .env DB "
+              "overridden for the backend process only)")
+        if args.seed:
+            print("Seed:     employee@demo.local / Demo!Pass123")
     if run_frontend:
         print(f"Frontend: http://localhost:{fport}")
     if android:

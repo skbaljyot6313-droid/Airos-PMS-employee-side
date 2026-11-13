@@ -10,6 +10,7 @@ import { WashroomCard } from '../../components/maintenance/WashroomCard';
 import { UnitActionSheet } from '../../components/maintenance/UnitActionSheet';
 import { EmptyState, ErrorState, LoadingState } from '../../components/common/FeedbackStates';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ZoneWorkspaceScreenProps {
   zoneId: string;
@@ -38,6 +39,7 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
   onViewTicket,
 }) => {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [workspace, setWorkspace] = useState<ZoneWorkspace | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -53,7 +55,7 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
         const data = await fetchZoneWorkspaceApi(zoneId, user?.employee_uid ?? undefined);
         setWorkspace(data);
       } catch (err: unknown) {
-        setError(errorMessage(err, "Couldn't load this zone."));
+        setError(errorMessage(err, t('maintenance.zoneLoadError')));
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -89,11 +91,11 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
   return (
     <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
       <ScreenHeader
-        title={zone?.name || 'Zone'}
+        title={zone?.name || t('maintenance.zoneFallback')}
         subtitle={
           zone
-            ? `${zone.counts.rooms} Rooms · ${zone.counts.dorms} Dorms · ${zone.counts.beds} Beds · ${zone.counts.washrooms ?? 0} Washrooms`
-            : 'Loading zone...'
+            ? `${zone.counts.rooms} ${t('maintenance.rooms')} · ${zone.counts.dorms} ${t('maintenance.dorms')} · ${zone.counts.beds} ${t('maintenance.beds')} · ${zone.counts.washrooms ?? 0} ${t('maintenance.washrooms')}`
+            : t('maintenance.loadingZone')
         }
         onBack={onBack}
         rightElement={
@@ -101,7 +103,7 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
             onClick={() => loadData(true)}
             disabled={refreshing}
             className="p-2 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-[#20292C] hover:bg-[#EFEFEF] transition-all"
-            aria-label="Refresh zone"
+            aria-label={t('maintenance.refreshZone')}
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#33B059]' : 'text-[#667174]'}`} />
           </button>
@@ -110,15 +112,15 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
 
       <div className="flex-1 p-4 pb-8 space-y-5">
         {loading ? (
-          <LoadingState message="Loading zone workspace..." />
+          <LoadingState message={t('maintenance.loadingWorkspace')} />
         ) : error ? (
           <ErrorState message={error} onRetry={() => loadData(false)} />
         ) : !workspace || totalUnits === 0 ? (
           <EmptyState
             type="maintenance"
-            title="No covered units"
-            description="No covered units — no rooms, dorms or washrooms in your coverage for this zone."
-            actionLabel="Refresh"
+            title={t('maintenance.noCoveredUnits')}
+            description={t('maintenance.noCoveredUnitsDesc')}
+            actionLabel={t('common.refresh')}
             onAction={() => loadData(true)}
           />
         ) : (
@@ -127,13 +129,13 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
             {zone && zone.open_issues > 0 && (
               <div className="flex items-center gap-2 bg-[#FFF1E8] border border-[#FBDDC7] rounded-xl px-3.5 py-2.5 text-xs font-semibold text-[#C2410C]">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                {zone.open_issues} active maintenance issue{zone.open_issues === 1 ? '' : 's'} in this zone
+                {t('maintenance.activeIssuesInZone', { count: zone.open_issues })}
               </div>
             )}
 
             {/* Rooms */}
             {grouped.rooms.length > 0 && (
-              <ResourceSection title="Rooms">
+              <ResourceSection title={t('maintenance.roomsSection')}>
                 <div className="grid grid-cols-2 gap-2">
                   {grouped.rooms.map((room) => (
                     <UnitTile key={room.id} resource={room} onPress={setSelectedUnit} />
@@ -144,7 +146,7 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
 
             {/* Dormitories — expandable to individual beds */}
             {grouped.dorms.length > 0 && (
-              <ResourceSection title="Dormitories">
+              <ResourceSection title={t('maintenance.dormitories')}>
                 <div className="space-y-2.5">
                   {grouped.dorms.map((dorm) => (
                     <DormCard
@@ -160,7 +162,7 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
 
             {/* Washrooms — expandable to individual fixtures */}
             {grouped.washrooms.length > 0 && (
-              <ResourceSection title="Washrooms">
+              <ResourceSection title={t('maintenance.washroomsSection')}>
                 <div className="space-y-2.5">
                   {grouped.washrooms.map((w) => (
                     <WashroomCard

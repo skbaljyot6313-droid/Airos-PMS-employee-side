@@ -5,7 +5,37 @@ MaintenanceService, OccupancyService, StructureService,
 ResourceStateService) — the same code paths the HTTP routes call, minus
 the FastAPI plumbing.
 """
+import sys
+import types
 import uuid
+
+# Application Control on this dev machine blocks asyncpg's compiled
+# protocol DLL from loading. The service tests below run entirely on
+# in-memory SQLite and never open a Postgres connection, so a stub module
+# satisfies the engine construction in `app.core.database` at import time.
+if "asyncpg" not in sys.modules:  # pragma: no cover - environment shim
+    _asyncpg = types.ModuleType("asyncpg")
+    _asyncpg.__version__ = "0.0.0-stub"
+
+    async def _no_connect(*args, **kwargs):  # noqa: D103
+        raise RuntimeError(
+            "asyncpg is stubbed in tests — Postgres connections are not allowed"
+        )
+
+    _asyncpg.connect = _no_connect
+    _exc = types.ModuleType("asyncpg.exceptions")
+    for _name in (
+        "PostgresError", "InterfaceError", "InternalServerError",
+        "SyntaxOrAccessError", "IntegrityConstraintViolationError",
+        "RestrictViolationError", "NotNullViolationError",
+        "ForeignKeyViolationError", "UniqueViolationError",
+        "CheckViolationError", "ExclusionViolationError",
+        "InternalClientError", "InvalidCachedStatementError",
+    ):
+        setattr(_exc, _name, type(_name, (Exception,), {}))
+    _asyncpg.exceptions = _exc
+    sys.modules["asyncpg"] = _asyncpg
+    sys.modules["asyncpg.exceptions"] = _exc
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

@@ -9,6 +9,7 @@ import { perfMarkOnce } from '../../utils/perf';
 import { TaskCard } from '../../components/tasks/TaskCard';
 import { EmptyState, ErrorState, LoadingState } from '../../components/common/FeedbackStates';
 import { RefreshCw, MapPin, Building2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export interface TaskListSelection {
   id: string;
@@ -22,6 +23,7 @@ interface TasksScreenProps {
 
 export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksCountChange }) => {
   const { employee, company } = useAuth();
+  const { t } = useTranslation();
   const [activeBucket, setActiveBucket] = useState<TaskBucket>('to_do');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -51,7 +53,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
         onTasksCountChange(todoCount);
       }
     } catch (err: unknown) {
-      setError(errorMessage(err, 'Unable to load your operational tasks.'));
+      setError(errorMessage(err, t('tasks.loadError')));
     } finally {
       loadInFlight.current = false;
       setLoading(false);
@@ -105,27 +107,32 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
 
   // Greeting based on current time
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const firstName = employee?.name ? employee.name.split(' ')[0] : 'Staff';
+  const greeting =
+    hour < 12
+      ? t('greeting.morning')
+      : hour < 17
+      ? t('greeting.afternoon')
+      : t('greeting.evening');
+  const firstName = employee?.name ? employee.name.split(' ')[0] : t('greeting.staff');
 
   const buckets: { id: TaskBucket; label: string; count: number }[] = [
-    { id: 'to_do', label: 'To Do', count: todoCount },
-    { id: 'in_review', label: 'In Review', count: inReviewCount },
-    { id: 'done', label: 'Completed', count: doneCount },
+    { id: 'to_do', label: t('tasks.bucketToDo'), count: todoCount },
+    { id: 'in_review', label: t('tasks.bucketInReview'), count: inReviewCount },
+    { id: 'done', label: t('tasks.bucketDone'), count: doneCount },
   ];
 
   return (
     <div className="flex-1 flex flex-col bg-app overflow-y-auto">
       {/* Editorial header — greeting, title, refresh, context, underline tabs */}
       <div className="bg-surface border-b border-line sticky top-0 z-20">
-        <div className="px-4 pt-4 pb-1">
+        <div className="px-4 pt-3 pb-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <span className="text-[11px] font-normal text-mute block">
                 {greeting}, {firstName}
               </span>
-              <h1 className="text-[23px] font-semibold tracking-[-0.02em] text-ink font-['Space_Grotesk'] leading-tight">
-                Your tasks
+              <h1 className="text-[22px] font-bold tracking-[-0.02em] text-ink font-['Space_Grotesk'] leading-tight">
+                {t('tasks.yourTasks')}
               </h1>
             </div>
 
@@ -133,7 +140,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
               onClick={() => loadTasks(true)}
               disabled={refreshing}
               className="p-2 -mr-1 mt-0.5 rounded-md text-mute hover:text-ink hover:bg-soft active:scale-95 transition-all"
-              aria-label="Refresh tasks"
+              aria-label={t('tasks.refresh')}
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-acc' : ''}`} />
             </button>
@@ -143,12 +150,12 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
           <div className="flex items-center gap-1.5 text-[11px] text-sub mt-1 min-w-0">
             <Building2 className="w-3 h-3 text-mute flex-shrink-0" />
             <span className="font-medium text-ink truncate">
-              {company?.brand_name || company?.name || 'Company'}
+              {company?.brand_name || company?.name || t('tasks.company')}
             </span>
             <span className="text-mute">·</span>
             <MapPin className="w-3 h-3 text-mute flex-shrink-0" />
             <span className="truncate">
-              {employee?.zone_name || 'Zone not assigned'}
+              {employee?.zone_name || t('tasks.zoneNotAssigned')}
             </span>
           </div>
         </div>
@@ -156,7 +163,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
         {/* Status tabs — hairline separator, lime underline on active */}
         <div
           role="tablist"
-          aria-label="Task status"
+          aria-label={t('tasks.statusAria')}
           className="flex items-stretch px-2 mt-2"
         >
           {buckets.map((b) => {
@@ -167,7 +174,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
                 role="tab"
                 aria-selected={active}
                 onClick={() => setActiveBucket(b.id)}
-                className={`relative flex-1 px-2 pb-2.5 pt-1.5 text-xs transition-colors flex items-center justify-center gap-1.5 ${
+                className={`relative flex-1 px-2 pb-2 pt-1 text-[11px] transition-colors flex items-center justify-center gap-1.5 ${
                   active ? 'text-ink font-semibold' : 'text-mute font-medium hover:text-sub'
                 }`}
               >
@@ -190,7 +197,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
       {/* Task List Content — editorial rows separated by hairlines */}
       <div className="flex-1">
         {loading ? (
-          <LoadingState message="Loading your assigned tasks..." />
+          <LoadingState message={t('tasks.loading')} />
         ) : error ? (
           <ErrorState message={error} onRetry={() => loadTasks(false)} />
         ) : filteredTasks.length === 0 ? (
@@ -198,23 +205,23 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
             type="tasks"
             title={
               activeBucket === 'to_do'
-                ? 'No tasks right now'
+                ? t('tasks.emptyToDo')
                 : activeBucket === 'in_review'
-                ? 'No tasks in review'
-                : 'Nothing completed today'
+                ? t('tasks.emptyInReview')
+                : t('tasks.emptyDone')
             }
             description={
               activeBucket === 'to_do'
-                ? "You're all caught up with your assigned work for this shift."
+                ? t('tasks.emptyToDoDesc')
                 : activeBucket === 'in_review'
-                ? 'Tasks submitted for supervisor approval will appear here.'
-                : 'Work you finish today will appear here.'
+                ? t('tasks.emptyInReviewDesc')
+                : t('tasks.emptyDoneDesc')
             }
-            actionLabel="Refresh list"
+            actionLabel={t('common.refreshList')}
             onAction={() => loadTasks(true)}
           />
         ) : (
-          <div className="divide-y divide-line pb-8">
+          <div className="px-4 pt-3 pb-8 space-y-2.5">
             {filteredTasks.map((task) => (
               <TaskCard
                 key={task.id}

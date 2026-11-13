@@ -3,6 +3,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { createEdgeSwipe } from './services/navSwipe';
 import { Capacitor } from '@capacitor/core';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { useTranslation } from 'react-i18next';
 import {
   startLocationTracking,
   stopLocationTracking,
@@ -28,6 +29,9 @@ import {
   subscribeForegroundPush,
 } from './services/pushRegistration';
 import { realtimeResume } from './services/realtime';
+import { preferencesService } from './services/preferencesService';
+import { audioService } from './services/audio/AudioService';
+import './i18n';
 import {
   startRealtime,
   stopRealtime,
@@ -60,6 +64,7 @@ type StackRoute =
 
 const AppNavigator: React.FC = () => {
   const { isAuthenticated, isLoading, user, connectionError, retrySession, logout } = useAuth();
+  const { t } = useTranslation();
   const [route, setRoute] = useState<StackRoute>({ type: 'tabs', tab: 'tasks' });
   // Centralized navigation history — navigate() pushes the current
   // route, goBack/goForward walk the stack. Tab switches stay root-level
@@ -154,6 +159,31 @@ const AppNavigator: React.FC = () => {
   // notification-feed poll; the 45 s poll stays as reconciliation).
   // No-ops when the backend reports realtime unconfigured.
   const employeeUid = user?.employee_uid ?? null;
+
+  // Language preferences — hydrate once per session (cache → server sync),
+  // never blocking auth. Clears on logout so a different employee never
+  // inherits another account's languages.
+  useEffect(() => {
+    if (!isAuthenticated || !employeeUid) return;
+    void preferencesService.loadForEmployee(employeeUid);
+  }, [isAuthenticated, employeeUid]);
+
+  useEffect(() => {
+    if (isAuthenticated) return;
+    preferencesService.clear();
+    void audioService.reset();
+  }, [isAuthenticated]);
+
+  // Speech lifecycle — navigation, backgrounding, and logout all stop TTS.
+  useEffect(() => {
+    void audioService.stop();
+  }, [route]);
+
+  useEffect(() => {
+    const sub = CapacitorApp.addListener('pause', () => void audioService.stop());
+    return () => { void sub.then((h) => h.remove()); };
+  }, []);
+
   useEffect(() => {
     if (!isAuthenticated || !employeeUid) return;
     const stop = startRealtime(employeeUid);
@@ -210,7 +240,7 @@ const AppNavigator: React.FC = () => {
         <div className="w-12 h-12 rounded-2xl bg-[#33B059] flex items-center justify-center text-white mb-3 shadow-sm animate-pulse">
           <span className="font-bold text-lg font-['Space_Grotesk']">A</span>
         </div>
-        <LoadingState message="Validating employee credentials..." />
+        <LoadingState message={t('profile.validating')} />
       </div>
     );
   }

@@ -120,4 +120,35 @@ async def notify_allocation(
         previous_employee_id=payload.previous_employee_uid,
         event_created_at=payload.event_created_at,
     )
-    return {"notified": n is not None}
+    return {
+        "notified": n is not None,
+        "notification_uid": str(n.id) if n is not None else None,
+        # Truthful dispatch state at response time — the outbox drains
+        # post-commit, so 'queued' is expected here.
+        "push_status": n.push_status if n is not None else None,
+    }
+
+
+@router.get("/push-status")
+async def push_status(
+    _service: None = Depends(require_location_service),
+    session: AsyncSession = Depends(get_db),
+):
+    """Push-delivery diagnostics for the SA backend — per-status counts
+    (queued/retry_pending/accepted/failed/opened) + the configured
+    provider. Counts only; no tokens, no secrets."""
+    from sqlalchemy import func as _func
+    from sqlalchemy import select as _select
+
+    from app.core.config import settings as _s
+    from app.models.notifications import Notification
+
+    rows = await session.execute(
+        _select(
+            Notification.push_status, _func.count()
+        ).group_by(Notification.push_status)
+    )
+    return {
+        "provider": (_s.PUSH_PROVIDER or "log").strip().lower(),
+        "counts": {status: int(c) for status, c in rows.all()},
+    }

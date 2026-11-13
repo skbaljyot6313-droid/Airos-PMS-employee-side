@@ -41,9 +41,30 @@ class PushUnavailable(Exception):
 
 @dataclass
 class PushResult:
+    """Outcome of one provider.send() call — semantics, not vibes.
+
+    delivered      — tokens the PROVIDER ACCEPTED (FCM returned a 200 +
+                     message name). Never proof of device delivery.
+    accepted_ids   — provider message references (FCM 'name' field),
+                     parallel to delivered where available.
+    invalid_tokens — registration tokens the provider reported DEAD;
+                     the caller deactivates them (never retryable).
+    retryable_error — a transient failure (429, 5xx, timeout, creds
+                     refresh) occurred; the caller should retry later.
+                     No token is blamed.
+    permanent_error — a non-retryable provider failure (4xx other than
+                     dead-token codes, provider misconfiguration).
+    noop           — the provider did NOT send anything (log stub). The
+                     caller must record an honest failure, never
+                     'accepted'.
+    """
+
     delivered: list[str] = field(default_factory=list)
-    # Registration tokens FCM reported as dead — caller deactivates them.
+    accepted_ids: list[str] = field(default_factory=list)
     invalid_tokens: list[str] = field(default_factory=list)
+    retryable_error: str | None = None
+    permanent_error: str | None = None
+    noop: bool = False
 
 
 class PushProvider(Protocol):
@@ -59,7 +80,8 @@ class PushProvider(Protocol):
 
 class LogPushProvider:
     """STUB — writes the payload to the app.push log until FCM creds
-    exist. Cannot detect dead tokens: invalid_tokens is always empty."""
+    exist. Reports noop=True: nothing was delivered anywhere, so the
+    caller records a truthful failure instead of a phantom success."""
 
     async def send(
         self,
@@ -73,7 +95,7 @@ class LogPushProvider:
             "push:stub tokens=%d title=%r body=%r data=%s tag=%s",
             len(tokens), title, body, data, tag,
         )
-        return PushResult(delivered=list(tokens))
+        return PushResult(noop=True, permanent_error="LOG_PROVIDER_STUB")
 
 
 class FCMProvider:
@@ -158,21 +180,32 @@ class FCMProvider:
         async with httpx.AsyncClient(timeout=10.0) as client:
             access = await self._access_token(client)
             for token in tokens:
-                res = await client.post(
-                    url,
-                    headers={"Authorization": f"Bearer {access}"},
-                    json={
-                        "message": {
-                            "token": token,
-                            "data": str_data,
-                            # HIGH so data messages reach a dozing/killed
-                            # app — the app's service posts the tray entry.
-                            "android": {"priority": "HIGH"},
-                        }
-                    },
-                )
+                try:
+                    res = await client.post(
+                        url,
+                        headers={"Authorization": f"Bearer {access}"},
+                        json={
+                            "message": {
+                                "token": token,
+                                "data": str_data,
+                                # HIGH so data messages reach a dozing/killed
+                                # app — the app's service posts the tray entry.
+                                "android": {"priority": "HIGH"},
+                            }
+                        },
+                    )
+                except httpx.HTTPError as exc:
+                    # Timeout / transport failure — transient, retry later.
+                    result.retryable_error = type(exc).__name__
+                    continue
                 if res.status_code == 200:
                     result.delivered.append(token)
+                    name = ""
+                    try:
+                        name = str(res.json().get("name") or "")
+                    except Exception:
+                        name = ""
+                    result.accepted_ids.append(name)
                     continue
                 status = ""
                 try:
@@ -185,11 +218,22 @@ class FCMProvider:
                     pass
                 if status in _DEAD_TOKEN_ERRORS:
                     result.invalid_tokens.append(token)
-                else:
-                    logger.warning(
-                        "FCM send failed token=%s… status=%s http=%s",
-                        token[:12], status, res.status_code,
+                elif res.status_code == 429 or res.status_code >= 500:
+                    # FCM throttling / server error — retryable, tokens
+                    # stay valid.
+                    result.retryable_error = (
+                        f"HTTP_{res.status_code}:{status or 'unknown'}"
                     )
+                else:
+                    # Other 4xx (e.g. SENDER_ID_MISMATCH, THIRD_PARTY_*
+                    # errors) — retrying won't help.
+                    result.permanent_error = (
+                        f"HTTP_{res.status_code}:{status or 'unknown'}"
+                    )
+                logger.warning(
+                    "FCM send failed token=%s… status=%s http=%s",
+                    token[:12], status, res.status_code,
+                )
         return result
 
 
@@ -198,3 +242,24 @@ def get_push_provider() -> PushProvider:
     if (settings.PUSH_PROVIDER or "log").strip().lower() == "fcm":
         return FCMProvider.from_settings()
     return LogPushProvider()
+
+
+def validate_push_config() -> str:
+    """Startup check — prove the configured provider can initialize.
+
+    Returns a short human description ('log', 'fcm:project-id'). Raises
+    PushUnavailable when PUSH_PROVIDER=fcm cannot build credentials —
+    the caller decides whether that is fatal (production) or a loud
+    error (development). NEVER silently downgrades to log mode: an
+    operator who asked for fcm gets fcm or a boot failure.
+    """
+    provider = (settings.PUSH_PROVIDER or "log").strip().lower()
+    if provider == "fcm":
+        FCMProvider.from_settings()  # raises PushUnavailable on bad config
+        return f"fcm:{settings.FCM_PROJECT_ID}"
+    if provider != "log":
+        raise PushUnavailable(
+            f"unknown PUSH_PROVIDER {settings.PUSH_PROVIDER!r} "
+            "(expected 'log' or 'fcm')"
+        )
+    return "log"

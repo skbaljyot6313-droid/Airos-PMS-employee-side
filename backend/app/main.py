@@ -1,5 +1,6 @@
 """Airco PMS employee backend application entrypoint."""
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -18,6 +19,21 @@ setup_logging()
 logger = get_logger("app.main")
 
 
+async def _push_sweep_loop() -> None:
+    """Durable push outbox sweep — drains due queued/retry_pending
+    notifications on a timer so a restart or transient FCM failure can
+    never lose a pending send. Claiming is atomic (UPDATE … WHERE
+    status), so multiple replicas may run this loop concurrently."""
+    from app.services.notifications import dispatch_pending_pushes
+
+    while True:
+        await asyncio.sleep(settings.PUSH_SWEEP_INTERVAL_SECONDS)
+        try:
+            await dispatch_pending_pushes()
+        except Exception as exc:  # pragma: no cover — loop must not die
+            logger.warning("push sweep tick failed: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     for warning in settings.production_warnings():
@@ -28,9 +44,32 @@ async def lifespan(app: FastAPI):
         settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW,
         settings.DB_POOL_TIMEOUT, settings.DB_POOL_RECYCLE, settings.DB_POOL_PRE_PING,
     )
+    # Push provider must initialize — production never silently degrades
+    # to the log stub: PUSH_PROVIDER=fcm without working credentials is a
+    # boot failure, not a hidden outage.
+    from app.services.push import PushUnavailable, validate_push_config
+
+    try:
+        desc = validate_push_config()
+        logger.info("Push provider ready: %s", desc)
+    except PushUnavailable as exc:
+        if settings.is_production:
+            raise RuntimeError(
+                f"Push provider misconfigured — refusing to boot: {exc}"
+            ) from exc
+        logger.error(
+            "Push provider misconfigured (%s) — pushes are disabled "
+            "until this is fixed", exc,
+        )
+    sweep_task = asyncio.create_task(_push_sweep_loop())
     try:
         yield
     finally:
+        sweep_task.cancel()
+        try:
+            await sweep_task
+        except asyncio.CancelledError:
+            pass
         try:
             await close_redis()
         finally:
