@@ -21,9 +21,9 @@ async def test_defaults_for_employee_without_row(session, seed):
     out = await svc.get_preferences(seed["emp_user"])
     assert out.text_language == DEFAULT_LANGUAGE == "en"
     assert out.audio_language == "en"
-    codes = [l.code for l in out.available_languages]
+    codes = [lang.code for lang in out.available_languages]
     assert codes == ["en", "hi", "mr"]
-    assert {l.native_name for l in out.available_languages} == {
+    assert {lang.native_name for lang in out.available_languages} == {
         "English", "हिन्दी", "मराठी"
     }
 
@@ -78,6 +78,7 @@ async def test_upsert_creates_one_row_per_employee(session, seed):
         seed["emp_user"], EmployeePreferencesPatch(text_language="mr")
     )
     from sqlalchemy import func, select
+
     from app.models.employee_preference import EmployeePreference
 
     count = (

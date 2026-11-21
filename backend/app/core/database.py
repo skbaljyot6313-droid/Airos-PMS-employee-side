@@ -7,9 +7,9 @@ the `get_db` dependency (see app/dependencies/db.py).
 
 import asyncio
 import socket
+import ssl as ssl_module
 import time
 import uuid
-import ssl as ssl_module
 from collections.abc import AsyncGenerator
 
 from fastapi import status

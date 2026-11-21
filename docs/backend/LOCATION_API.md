@@ -34,7 +34,7 @@ the Redis hot-path marker the ingest path validates against.
 ```
 
 - Employees may hold multiple sessions per day (shift gaps, app
-  restarts). Sessions are deliberately decoupled from attendance days.
+  restarts). Sessions run only inside the workday: `POST /location/start` requires an open workday with no open break (409 `NOT_ON_DUTY` otherwise), and Start Break / End Day stop every open session server-side.
 - If Redis is unavailable the request fails with 503 — no session is
   created, so retry is always safe.
 
@@ -220,7 +220,7 @@ coverage, not truncation) and `downsampled` is `true`.
 
 | Key | Type | TTL |
 |---|---|---|
-| `mt:location:emp:{id}` | HASH — live fix | `LOCATION_CURRENT_TTL_SECONDS` (120 s) |
+| `mt:location:emp:{id}` | HASH — live fix | `LOCATION_CURRENT_TTL_SECONDS` (600 s; freshness is `LOCATION_LIVE_MAX_AGE_SECONDS`, 360 s) |
 | `mt:location` | ZSET — live index, score = expiry epoch | members pruned on read |
 | `mt:location:history:{id}:{YYYY-MM-DD}` | ZSET — day partition, score = captured ms | `LOCATION_HISTORY_RETENTION_DAYS` (90) |
 | `mt:location:geo:{YYYY-MM-DD}` | GEO index (member = event id) | retention |

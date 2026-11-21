@@ -60,7 +60,10 @@ async def get_live_locations(
         if property_id is not None:
             q = q.where(Employee.property_id == property_id)
         if zone_id is not None:
-            q = q.where(Employee.zone_id == zone_id)
+            # Union coverage semantics — primary zone OR secondary zone OR
+            # property-wide staff (they work in every zone).
+            from app.domain.coverage import covers_zone
+            q = q.where(covers_zone(zone_id))
         scoped_ids = {
             str(r) for r in (await session.execute(q)).scalars().all()
         }

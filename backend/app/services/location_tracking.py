@@ -25,9 +25,8 @@ from the requested range; live reads go through the index ZSET.
 """
 
 import json
-import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,14 +103,14 @@ def event_key(
 
 
 def _utc(ts: float) -> datetime:
-    return datetime.fromtimestamp(ts, tz=timezone.utc)
+    return datetime.fromtimestamp(ts, tz=UTC)
 
 
 def _day_bounds(from_dt: datetime, to_dt: datetime):
     d = from_dt.date()
     end = to_dt.date()
     while d <= end:
-        yield datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+        yield datetime(d.year, d.month, d.day, tzinfo=UTC)
         d += _DAY
 
 
@@ -132,9 +131,23 @@ async def start_session(
 ) -> LocationTrackingSession:
     """Create the session row + the Redis marker the ingest path checks.
 
+    Tracking is part of the workday: a session can only start while the
+    employee is on duty (open workday, no open break). Break and End Day
+    stop every open session server-side (stop_open_sessions).
+
     A Redis restart loses only the marker — the employee just calls
     /start again; the Postgres row remains the audit record.
     """
+    from app.services.structure import ConflictErr
+    from app.services.work_allocation import WorkAllocationService
+
+    if user.property_id is None or not await WorkAllocationService(session).is_on_duty(
+        employee_id, user.property_id
+    ):
+        raise ConflictErr(
+            "Location tracking starts when your workday starts and stops on break.",
+            code="NOT_ON_DUTY",
+        )
     row = LocationTrackingSession(employee_id=employee_id)
     session.add(row)
     await session.commit()
@@ -203,7 +216,7 @@ async def stop_session(
     row = await session.get(LocationTrackingSession, session_id)
     if row is None or row.employee_id != employee_id:
         raise TrackingSessionNotFound()
-    stopped_at = datetime.now(timezone.utc)
+    stopped_at = datetime.now(UTC)
     if row.status == SESSION_STATUS_ACTIVE:
         row.status = SESSION_STATUS_STOPPED
         row.ended_at = stopped_at
@@ -225,6 +238,31 @@ async def stop_session(
     return stopped_at
 
 
+async def stop_open_sessions(employee_id: uuid.UUID, session: AsyncSession) -> int:
+    """Stop every open tracking session for the employee, server-side.
+
+    Called on Start Break and End Day so tracking ends even if the device
+    never calls /stop (offline, killed app). Best-effort per session: a
+    Redis failure is logged and the Postgres row is still closed."""
+    from sqlalchemy import select
+
+    open_ids = (await session.execute(
+        select(LocationTrackingSession.id).where(
+            LocationTrackingSession.employee_id == employee_id,
+            LocationTrackingSession.status == SESSION_STATUS_ACTIVE,
+        )
+    )).scalars().all()
+    for session_id in open_ids:
+        try:
+            await stop_session(None, employee_id, session_id, session)
+        except Exception as exc:
+            logger.warning(
+                "server-side stop failed for session %s: %s",
+                session_id, type(exc).__name__,
+            )
+    return len(open_ids)
+
+
 # ---------------------------------------------------------------------------
 # Ingest helpers — used by location_live.post_current
 # ---------------------------------------------------------------------------
@@ -239,7 +277,7 @@ def resolve_capture(payload: LocationUpdate) -> float:
     if payload.captured_at is not None:
         dt = payload.captured_at
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         return dt.timestamp()
     return float(payload.timestamp)
 
@@ -366,9 +404,9 @@ async def get_history(
     a route map needs coverage, not truncation).
     """
     if from_dt.tzinfo is None:
-        from_dt = from_dt.replace(tzinfo=timezone.utc)
+        from_dt = from_dt.replace(tzinfo=UTC)
     if to_dt.tzinfo is None:
-        to_dt = to_dt.replace(tzinfo=timezone.utc)
+        to_dt = to_dt.replace(tzinfo=UTC)
     if to_dt <= from_dt:
         raise InvalidHistoryQuery("`to` must be after `from`.")
     if (to_dt - from_dt).days > settings.LOCATION_MAX_HISTORY_RANGE_DAYS:

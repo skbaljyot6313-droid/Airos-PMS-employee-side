@@ -27,7 +27,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text,
-    UniqueConstraint, Uuid, func, text,
+    UniqueConstraint, Uuid, exists, func, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -259,4 +259,22 @@ class AttendanceRequest(Base):
         Index(
             "ix_request_property_to", "property_id", "to_date",
         ),
+    )
+
+
+def on_duty(employee_id, op_date: str):
+    """Predicate: the employee is ON DUTY on `op_date` — an open, started
+    workday with no open break. Only on-duty employees may receive new
+    work (allocation pools and explicit assignment)."""
+    open_break = exists().where(
+        AttendanceBreak.attendance_day_id == AttendanceDay.id,
+        AttendanceBreak.ended_at.is_(None),
+    )
+    return exists().where(
+        AttendanceDay.employee_id == employee_id,
+        AttendanceDay.attendance_date == op_date,
+        AttendanceDay.status == "present",
+        AttendanceDay.started_at.is_not(None),
+        AttendanceDay.ended_at.is_(None),
+        ~open_break,
     )

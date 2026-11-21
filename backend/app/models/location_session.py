@@ -10,9 +10,9 @@ status: active → stopped | expired (TTL lapse, applied lazily on read).
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func, Uuid
+from sqlalchemy import DateTime, ForeignKey, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
@@ -40,7 +40,7 @@ class LocationTrackingSession(Base):
     )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(), nullable=False,
     )
     ended_at: Mapped[datetime | None] = mapped_column(
@@ -53,7 +53,7 @@ class LocationTrackingSession(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         server_default=func.now(), nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(

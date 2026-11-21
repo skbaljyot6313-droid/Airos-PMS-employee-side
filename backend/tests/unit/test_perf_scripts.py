@@ -26,7 +26,7 @@ def test_parses_pw_at_end_of_line():
         "method=GET path=/api/v1/tasks status=200 duration_ms=1500 "
         "db=1400/60x6 redis=8x2 ext=0 user=u company=c pw=700\n"
     )
-    line = next(l for l in out.splitlines() if "GET /api/v1/tasks" in l)
+    line = next(ln for ln in out.splitlines() if "GET /api/v1/tasks" in ln)
     cols = line.split()
     assert cols[7] == "700"  # pw95 column = max of the two samples
     assert "*SLOW" in line and "POOLWAIT" in line  # 183ms/q, 700 pw95
@@ -37,7 +37,7 @@ def test_absent_pw_shows_dash_and_no_poolwait_flag():
         "method=GET path=/api/v1/zones status=304 duration_ms=60 "
         "db=45/10x1 redis=0x0 ext=0 user=u company=c\n"
     )
-    line = next(l for l in out.splitlines() if "GET /api/v1/zones" in l)
+    line = next(ln for ln in out.splitlines() if "GET /api/v1/zones" in ln)
     cols = line.split()
     assert cols[7] == "-"  # pw95 column
     assert "POOLWAIT" not in line

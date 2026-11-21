@@ -56,7 +56,7 @@ public class LocationTrackerPlugin extends Plugin {
                         call.getString("refreshToken"))
                 .putString(LocationTrackingService.KEY_SESSION, sessionId)
                 .putInt(LocationTrackingService.KEY_INTERVAL,
-                        call.getInt("intervalSeconds", 30))
+                        call.getInt("intervalSeconds", 180))
                 .remove(LocationTrackingService.KEY_LAST_ERROR);
         // New session → restart the sequence; same session (resume) keeps it.
         if (!sessionId.equals(oldSession)) {

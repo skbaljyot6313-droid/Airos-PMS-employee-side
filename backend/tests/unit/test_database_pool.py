@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core import database, metrics
 from app.core.config import Settings
 from app.core.exceptions import register_exception_handlers
+from duty import clock_in
 
 
 def test_pool_defaults_and_engine_configuration():
@@ -173,6 +174,8 @@ async def test_shutdown_disposes_database_if_redis_cleanup_fails(monkeypatch):
     close = AsyncMock()
     monkeypatch.setattr(main, "close_db", close)
     monkeypatch.setattr(main, "close_redis", AsyncMock(side_effect=RuntimeError("redis")))
+    # No migrated DB in tests — stub the shared-schema drift gate.
+    monkeypatch.setattr(main, "check_schema_version", AsyncMock(return_value=None))
     with pytest.raises(RuntimeError, match="redis"):
         async with main.lifespan(main.app):
             pass
@@ -181,6 +184,7 @@ async def test_shutdown_disposes_database_if_redis_cleanup_fails(monkeypatch):
 
 async def test_push_releases_connection_before_external_send(session, seed, monkeypatch):
     from types import SimpleNamespace
+
     from app.models.notifications import DeviceRegistration, Notification
     from app.services import notifications
 
@@ -214,6 +218,7 @@ async def test_push_releases_connection_before_external_send(session, seed, monk
 
 async def test_location_releases_completed_reads_before_redis(session, seed, monkeypatch):
     from types import SimpleNamespace
+
     from app.services import location_tracking
 
     async def redis_operation(*args, **kwargs):
@@ -223,6 +228,7 @@ async def test_location_releases_completed_reads_before_redis(session, seed, mon
     monkeypatch.setattr(location_tracking, "_redis_required", AsyncMock(return_value=redis))
     employee_id = seed["employee"].id
     user = seed["emp_user"]
+    await clock_in(session, seed["employee"])
     row = await location_tracking.start_session(user, employee_id, session)
     await location_tracking.stop_session(user, employee_id, row.id, session)
     await location_tracking.stop_session(user, employee_id, row.id, session)
@@ -231,8 +237,10 @@ async def test_location_releases_completed_reads_before_redis(session, seed, mon
 async def test_media_releases_auth_session_before_storage(monkeypatch):
     from io import BytesIO
     from types import SimpleNamespace
+
     from fastapi import UploadFile
     from starlette.datastructures import Headers
+
     from app.api.v1 import media
 
     session = AsyncMock()
@@ -250,6 +258,7 @@ async def test_media_releases_auth_session_before_storage(monkeypatch):
 
 async def test_apk_releases_read_session_before_storage(monkeypatch):
     from types import SimpleNamespace
+
     from app.api.v1 import mobile
 
     session = AsyncMock()

@@ -16,6 +16,7 @@ from app.models.employee import Employee
 from app.models.structure import Area, Zone
 from app.models.task import Task
 from app.services.work_allocation import WorkAllocationService
+from duty import clock_in
 
 
 def _emp(session, seed, name, dept, *, zone=None, area=None,
@@ -33,6 +34,7 @@ def _emp(session, seed, name, dept, *, zone=None, area=None,
 
 async def _alloc(session, seed, *, zone, work_type="cleaning"):
     """allocate + record — the same pair production callers run."""
+    await clock_in(session)
     svc = WorkAllocationService(session)
     res = await svc.allocate(
         seed["admin"],
@@ -69,6 +71,7 @@ async def staffed_area(session, seed):
         "e7": _emp(session, seed, "E7", "Housekeeping", area=area),
     }
     await session.flush()
+    await clock_in(session)
     return {"area": area, "zone": zone, "staff": staff}
 
 
@@ -163,6 +166,7 @@ async def test_employee_in_both_pools_deduplicated(session, seed, staffed_area):
     staff = staffed_area["staff"]
     staff["e1"].area_id = staffed_area["area"].id  # dual assignment
     await session.flush()
+    await clock_in(session)
     pool, _ = await WorkAllocationService(session).eligible_employees(
         seed["prop"].id, staffed_area["zone"].id,
         area_id=staffed_area["area"].id,
@@ -179,6 +183,7 @@ async def test_deactivated_and_on_leave_excluded(session, seed, staffed_area):
     _emp(session, seed, "ONLEAVE", "Housekeeping",
          zone=staffed_area["zone"], leave=True)
     await session.flush()
+    await clock_in(session)
     pool, _ = await WorkAllocationService(session).eligible_employees(
         seed["prop"].id, staffed_area["zone"].id,
         area_id=staffed_area["area"].id,
@@ -218,6 +223,7 @@ async def test_unified_pool_order_is_scope_agnostic(session, seed, staffed_area)
         if e is not area_emp and e.created_at is None:
             e.created_at = _dt.datetime(2024, 1, 2)
     await session.flush()
+    await clock_in(session)
 
     svc = WorkAllocationService(session)
     _, _, pool, level = await svc._eligible_pools(
@@ -236,6 +242,7 @@ async def test_unified_pool_order_is_scope_agnostic(session, seed, staffed_area)
 async def _alloc_scoped(session, seed, *, zone=None, area=None,
                         work_type="cleaning"):
     """allocate at any level — zone / area / property (all None)."""
+    await clock_in(session)
     svc = WorkAllocationService(session)
     res = await svc.allocate(
         seed["admin"],

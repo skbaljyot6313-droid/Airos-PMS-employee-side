@@ -1,12 +1,10 @@
 """Maintenance ticket request/response schemas — flat *_uid conventions."""
 
 import uuid
-from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 from app.core.storage import proxy_media_url
-
 
 MAINTENANCE_TYPES = {
     "electrical", "plumbing", "civil", "carpentry", "hvac", "painting",

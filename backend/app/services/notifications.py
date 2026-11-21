@@ -15,7 +15,7 @@ Conventions (mirrors AttendanceService):
 import asyncio
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -92,7 +92,7 @@ async def _claim_for_dispatch(
     losing claim's rowcount=0 makes duplicate sends impossible).
     Stale 'dispatching' rows (a process died mid-send) are reclaimable
     after PUSH_DISPATCH_STALE_SECONDS."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stale_before = now - timedelta(
         seconds=settings.PUSH_DISPATCH_STALE_SECONDS
     )
@@ -143,7 +143,7 @@ async def _record_push_outcome(
             push_last_error=(error or "")[:120] or None,
             push_provider_ref=provider_ref,
             push_next_attempt_at=next_attempt_at,
-            push_updated_at=datetime.now(timezone.utc),
+            push_updated_at=datetime.now(UTC),
         )
     )
     await session.commit()
@@ -167,7 +167,7 @@ async def _fail_or_retry(
     await _record_push_outcome(
         session, notification_id, status="retry_pending",
         error=error,
-        next_attempt_at=datetime.now(timezone.utc)
+        next_attempt_at=datetime.now(UTC)
         + timedelta(seconds=_retry_delay_s(attempts)),
     )
 
@@ -522,7 +522,7 @@ class NotificationService:
         caller notify — reassigned-away work stays silent. Commits only
         when rows were created; returns the count."""
         employee_id = self._require_employee(user)
-        cutoff = datetime.now(timezone.utc) - ALLOCATION_SYNC_WINDOW
+        cutoff = datetime.now(UTC) - ALLOCATION_SYNC_WINDOW
         created = await self._sync_allocations(employee_id, cutoff)
         if created:
             await self.session.commit()
@@ -708,7 +708,7 @@ class NotificationService:
         if notification.is_read:
             return notification
         notification.is_read = True
-        notification.read_at = datetime.now(timezone.utc)
+        notification.read_at = datetime.now(UTC)
         # OPENED = the employee interacted. Only upgrades a completed
         # send — a pending/failed row keeps its dispatch state.
         if notification.push_status in ("accepted", "delivered"):
@@ -795,7 +795,7 @@ class DeviceRegistry:
         device.platform = platform
         device.app_version = app_version
         device.is_active = True
-        device.last_seen_at = datetime.now(timezone.utc)
+        device.last_seen_at = datetime.now(UTC)
         _audit(
             self.session, user=user, action="device_registered",
             entity_id=device.id, property_id=user.property_id,

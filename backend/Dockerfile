@@ -2,7 +2,7 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --timeout 120 --retries 8 -r requirements.txt
 COPY . .
 RUN useradd --system --uid 10001 --home /app appuser && chown -R appuser:appuser /app
 USER appuser

@@ -5,6 +5,7 @@ MaintenanceService, OccupancyService, StructureService,
 ResourceStateService) — the same code paths the HTTP routes call, minus
 the FastAPI plumbing.
 """
+import os
 import sys
 import types
 import uuid
@@ -13,7 +14,8 @@ import uuid
 # protocol DLL from loading. The service tests below run entirely on
 # in-memory SQLite and never open a Postgres connection, so a stub module
 # satisfies the engine construction in `app.core.database` at import time.
-if "asyncpg" not in sys.modules:  # pragma: no cover - environment shim
+# Integration runs (AIROS_TEST_DATABASE_URL set) need the real driver.
+if "asyncpg" not in sys.modules and not os.environ.get("AIROS_TEST_DATABASE_URL"):  # pragma: no cover - environment shim
     _asyncpg = types.ModuleType("asyncpg")
     _asyncpg.__version__ = "0.0.0-stub"
 

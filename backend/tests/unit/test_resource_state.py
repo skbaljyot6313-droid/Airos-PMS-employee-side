@@ -3,6 +3,7 @@ authorization, and OCCUPIED-without-occupancy rejection.
 """
 import pytest
 
+from app.dependencies.auth import Forbidden
 from app.domain.resource_events import SRC_ADMIN_OVERRIDE
 from app.domain.resource_states import (
     BED_STATUSES,
@@ -15,7 +16,6 @@ from app.models.resource_state_event import ResourceStateEvent
 from app.services.occupancy import OccupancyService
 from app.services.resource_state import ResourceStateService
 from app.services.structure import ConflictErr, ValidationErr
-from app.dependencies.auth import Forbidden
 
 
 def svc(session):

@@ -1,8 +1,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ClipboardList, Wrench, CalendarCheck, User } from 'lucide-react';
+import { ClipboardList, Wrench, CalendarCheck, User, Wallet } from 'lucide-react';
 
-export type TabType = 'tasks' | 'maintenance' | 'attendance' | 'profile';
+export type TabType = 'tasks' | 'maintenance' | 'attendance' | 'salary' | 'profile';
 
 interface BottomNavProps {
   currentTab: TabType;
@@ -35,6 +35,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       id: 'attendance' as TabType,
       label: t('nav.attendance'),
       icon: CalendarCheck,
+      badge: null,
+    },
+    {
+      id: 'salary' as TabType,
+      label: t('nav.salary'),
+      icon: Wallet,
       badge: null,
     },
     {

@@ -1,7 +1,8 @@
 """TaskService — CRUD + lifecycle + repetitive-series generation."""
 
 import uuid
-from datetime import datetime, time as dtime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from datetime import time as dtime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
@@ -15,7 +16,10 @@ from app.core.storage import get_storage, storage_key_from_url
 from app.models.employee import Employee, employee_is_assignable
 from app.models.structure import Bed, Dorm, Room, Washroom, WashroomFixture, Zone
 from app.models.task import (
-    Task, TaskCompletionImage, TaskCompletionSubmission, TaskHistoryEvent,
+    Task,
+    TaskCompletionImage,
+    TaskCompletionSubmission,
+    TaskHistoryEvent,
 )
 from app.models.user import User, UserRole
 from app.schemas.structure import (
@@ -156,8 +160,8 @@ def _expired(task: Task) -> bool:
     if exp is None:
         return False
     if exp.tzinfo is None:
-        exp = exp.replace(tzinfo=timezone.utc)  # sqlite round-trip
-    return exp <= datetime.now(timezone.utc)
+        exp = exp.replace(tzinfo=UTC)  # sqlite round-trip
+    return exp <= datetime.now(UTC)
 
 
 def _raise_if_expired(task: Task) -> None:
@@ -367,7 +371,7 @@ class TaskService:
             WashroomFixture, task.washroom_fixture_id
         )
         if fixture is not None:
-            fixture.last_cleaned_at = datetime.now(timezone.utc)
+            fixture.last_cleaned_at = datetime.now(UTC)
 
     def _history(self, task, type_, user, note=None, photos=None):
         event = TaskHistoryEvent(
@@ -429,8 +433,8 @@ class TaskService:
             employee_name=event.actor_name or user.name,
             attempt_number=(res.scalar_one_or_none() or 0) + 1,
             status=status,
-            submitted_at=event.at or datetime.now(timezone.utc),
-            reviewed_at=datetime.now(timezone.utc) if reviewed else None,
+            submitted_at=event.at or datetime.now(UTC),
+            reviewed_at=datetime.now(UTC) if reviewed else None,
             reviewed_by_id=user.id if reviewed else None,
             reviewed_by_name=user.name if reviewed else None,
             review_comment=review_note if reviewed else None,
@@ -456,7 +460,7 @@ class TaskService:
         self, task: Task, event: TaskHistoryEvent,
         submission: TaskCompletionSubmission, urls: list[str], user: User,
     ) -> None:
-        base = datetime.now(timezone.utc)
+        base = datetime.now(UTC)
         task_images_loaded = "completion_images" not in sa_inspect(task).unloaded
         submission_images_loaded = (
             "images" not in sa_inspect(submission).unloaded
@@ -917,7 +921,7 @@ class TaskService:
                 field="photo_urls",
             )
         task.status = "completed"
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
         await self._stamp_fixture_cleaned(task)
         event = self._history(task, "completed", user, note=payload.note,
                               photos=urls)
@@ -975,13 +979,14 @@ class TaskService:
         from app.models.company import Company
         from app.models.property import Property
         from app.services.rollover import (
-            operational_day_key, parse_day_start,
+            operational_day_key,
+            parse_day_start,
         )
         task.scheduled_for = occ_naive.replace(
-            tzinfo=IST).astimezone(timezone.utc)
+            tzinfo=IST).astimezone(UTC)
         nxt = next_occurrence(task, occ_naive)
         task.expires_at = (
-            nxt.replace(tzinfo=IST).astimezone(timezone.utc)
+            nxt.replace(tzinfo=IST).astimezone(UTC)
             if nxt else None
         )
         res = await self.session.execute(
@@ -1143,7 +1148,7 @@ class TaskService:
         # successor through uq_tasks_open_room_title.
         from app.services.rollover import RolloverService
         await RolloverService(self.session).expire_due(
-            now_l.replace(tzinfo=IST).astimezone(timezone.utc))
+            now_l.replace(tzinfo=IST).astimezone(UTC))
         res = await self.session.execute(
             select(Task).where(
                 Task.task_type == "repetitive",
@@ -1207,7 +1212,7 @@ class TaskService:
 
         urls = await self._evidence_urls(task, payload.photo_urls)
         task.status = "submitted"
-        task.submitted_at = datetime.now(timezone.utc)
+        task.submitted_at = datetime.now(UTC)
         event = self._history(task, "submitted", user, note=payload.note,
                               photos=urls)
         await self.session.flush()
@@ -1267,12 +1272,12 @@ class TaskService:
             raise ConflictErr("Only submitted tasks can be approved.")
         if not already_completed:
             task.status = "completed"
-            task.completed_at = datetime.now(timezone.utc)
+            task.completed_at = datetime.now(UTC)
             await self._stamp_fixture_cleaned(task)
             submission = self._latest_pending_submission(task)
             if submission:
                 submission.status = "approved"
-                submission.reviewed_at = datetime.now(timezone.utc)
+                submission.reviewed_at = datetime.now(UTC)
                 submission.reviewed_by_id = user.id
                 submission.reviewed_by_name = user.name
                 submission.review_comment = note
@@ -1316,7 +1321,7 @@ class TaskService:
         submission = self._latest_pending_submission(task)
         if submission:
             submission.status = "disapproved"
-            submission.reviewed_at = datetime.now(timezone.utc)
+            submission.reviewed_at = datetime.now(UTC)
             submission.reviewed_by_id = user.id
             submission.reviewed_by_name = user.name
             submission.review_comment = reason

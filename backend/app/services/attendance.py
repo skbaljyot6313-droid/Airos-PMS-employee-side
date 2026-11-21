@@ -14,7 +14,8 @@ fails with IntegrityError → 409.
 
 import calendar as cal
 import uuid
-from datetime import date as date_type, datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
+from datetime import date as date_type
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Uuid, bindparam, func, select
@@ -23,11 +24,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.attendance import (
+    LEAVE_TYPES,
+    REQUEST_TYPES,
     AttendanceBreak,
     AttendanceDay,
     AttendanceRequest,
-    LEAVE_TYPES,
-    REQUEST_TYPES,
 )
 from app.models.audit import AuditEvent
 from app.models.company import Company
@@ -47,14 +48,14 @@ REVIEWER_ROLES = (UserRole.SUPER_ADMIN,)
 
 def _aware(dt: datetime) -> datetime:
     """sqlite round-trips timestamptz naive — normalize to aware UTC."""
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 def _op_day_end_utc(date_key: str, start: time) -> datetime:
     """UTC instant at which operational day `date_key` ends — i.e. the
     following calendar date at the company's day-start, IST wall-clock."""
     d = date_type.fromisoformat(date_key) + timedelta(days=1)
-    return datetime.combine(d, start, tzinfo=IST).astimezone(timezone.utc)
+    return datetime.combine(d, start, tzinfo=IST).astimezone(UTC)
 
 
 def _validate_date(value: str | None, *, field: str = "date") -> str:
@@ -216,7 +217,7 @@ class AttendanceService:
             )
         if day.started_at is not None:
             raise ConflictErr("The workday has already started.")
-        day.started_at = datetime.now(timezone.utc)
+        day.started_at = datetime.now(UTC)
         day.zone_id = emp.zone_id
         if fix is not None:
             from app.services.location import LocationService
@@ -232,6 +233,8 @@ class AttendanceService:
         )
         await self.session.commit()
         self._emit_day(prop_id, emp.id, op_date, "attendance.checked_in")
+        from app.services.availability import AvailabilityService
+        await AvailabilityService(self.session).sweep_on_duty(emp.id, actor_name=user.name)
         return day, op_date
 
     async def _close_stale_open_days(
@@ -318,7 +321,7 @@ class AttendanceService:
             raise ConflictErr("A break is already in progress.")
         br = AttendanceBreak(
             attendance_day_id=day.id,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
         self.session.add(br)
         try:
@@ -334,6 +337,8 @@ class AttendanceService:
             detail={"date": op_date, "state": "on_break"},
         )
         await self.session.commit()
+        from app.services.location_tracking import stop_open_sessions
+        await stop_open_sessions(day.employee_id, self.session)
         self._emit_day(
             prop_id, day.employee_id, op_date, "attendance.break_started"
         )
@@ -344,7 +349,7 @@ class AttendanceService:
         br = await self.repo.open_break(day.id)
         if br is None:
             raise ConflictErr("No break is in progress.")
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         br.ended_at = now
         br.duration_seconds = max(
             0, int((now - _aware(br.started_at)).total_seconds())
@@ -363,6 +368,8 @@ class AttendanceService:
         self._emit_day(
             prop_id, day.employee_id, op_date, "attendance.break_ended"
         )
+        from app.services.availability import AvailabilityService
+        await AvailabilityService(self.session).sweep_on_duty(day.employee_id, actor_name=user.name)
         return day, op_date
 
     async def end(self, user: User, geo=None) -> tuple[AttendanceDay, str]:
@@ -376,7 +383,7 @@ class AttendanceService:
             raise ConflictErr(
                 "Resume the open break before ending the workday."
             )
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         day.ended_at = now
         day.work_seconds = max(
             0,
@@ -389,6 +396,16 @@ class AttendanceService:
                 property_id=prop_id, employee_id=user.employee_id, fix=fix,
                 source="attendance_end", attendance_day_id=day.id,
             )
+        # The ended day must be visible to the replacement pool before the
+        # open work is handed over (production sessions run autoflush off).
+        await self.session.flush()
+        from app.services.reassignment import ReassignmentService
+        emp = await self.session.get(Employee, day.employee_id) if day.employee_id else None
+        handover = (
+            await ReassignmentService(self.session).release_for_end_of_day(
+                emp, actor_name=user.name,
+            ) if emp is not None else None
+        )
         self._audit(
             user=user, action="attendance_ended",
             entity_type="attendance_day", entity_id=day.id,
@@ -396,9 +413,12 @@ class AttendanceService:
             detail={
                 "date": op_date, "state": "completed",
                 "work_seconds": day.work_seconds,
+                "handover": handover,
             },
         )
         await self.session.commit()
+        from app.services.location_tracking import stop_open_sessions
+        await stop_open_sessions(day.employee_id, self.session)
         self._emit_day(
             prop_id, day.employee_id, op_date, "attendance.checked_out"
         )
@@ -680,7 +700,7 @@ class AttendanceService:
         req.status = "approved" if approve else "rejected"
         req.reviewed_by_id = user.id
         req.reviewed_by_name = user.name
-        req.reviewed_at = datetime.now(timezone.utc)
+        req.reviewed_at = datetime.now(UTC)
         req.review_comment = (review_comment or "").strip() or None
         self._audit(
             user=user,

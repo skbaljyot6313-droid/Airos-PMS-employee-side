@@ -69,8 +69,8 @@ async def test_detail_shape_unchanged(session, seed):
     # ticket_out on a non-eager instance lazy-loads per row — that is the
     # documented detail path; the list route uses ticket_summary_out.
     out = ticket_out(
-        (await MaintenanceService(session)._get_ticket(
-            seed["emp_user"], t.id))
+        await MaintenanceService(session)._get_ticket(
+            seed["emp_user"], t.id)
     )
     assert len(out["attachments"]) == 1
     assert rows is not None

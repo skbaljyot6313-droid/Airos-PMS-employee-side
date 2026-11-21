@@ -38,7 +38,7 @@ instance can never block its successor.
 """
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import String, and_, func, or_, select, update
@@ -114,8 +114,8 @@ def operational_day_bounds(
     if local < s:
         s -= timedelta(days=1)
     return (
-        s.astimezone(timezone.utc),
-        (s + timedelta(days=1)).astimezone(timezone.utc),
+        s.astimezone(UTC),
+        (s + timedelta(days=1)).astimezone(UTC),
     )
 
 
@@ -145,7 +145,7 @@ def _task_anchor_key(task: Task, start: time) -> str | None:
     if task.created_at is not None:
         created = task.created_at
         if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
+            created = created.replace(tzinfo=UTC)
         return operational_day_key(created.astimezone(IST), start)
     return None
 
@@ -160,9 +160,9 @@ class RolloverService:
         One pass over every company; each company's own configured day
         start applies. Returns per-company counts for the scheduler log.
         """
-        now_utc = now or datetime.now(timezone.utc)
+        now_utc = now or datetime.now(UTC)
         if now_utc.tzinfo is None:
-            now_utc = now_utc.replace(tzinfo=timezone.utc)
+            now_utc = now_utc.replace(tzinfo=UTC)
 
         res = await self.session.execute(select(Company))
         companies = list(res.scalars())
@@ -285,12 +285,12 @@ class RolloverService:
         global tick sweep leaves it off — windowless rows stay under
         daily-rollover governance.
         """
-        now_utc = now or datetime.now(timezone.utc)
+        now_utc = now or datetime.now(UTC)
         if now_utc.tzinfo is None:
-            now_utc = now_utc.replace(tzinfo=timezone.utc)
+            now_utc = now_utc.replace(tzinfo=UTC)
         cutoff = boundary or now_utc
         if cutoff.tzinfo is None:
-            cutoff = cutoff.replace(tzinfo=timezone.utc)
+            cutoff = cutoff.replace(tzinfo=UTC)
 
         window_pred = Task.expires_at <= cutoff
         if include_windowless:
@@ -406,7 +406,7 @@ def _occurrence_op_key(task: Task, start: time | None) -> str | None:
     if sched is None:
         return _task_anchor_key(task, start or time(6, 0))
     if sched.tzinfo is None:
-        sched = sched.replace(tzinfo=timezone.utc)
+        sched = sched.replace(tzinfo=UTC)
     return operational_day_key(
         sched.astimezone(IST), start or time(6, 0)
     )

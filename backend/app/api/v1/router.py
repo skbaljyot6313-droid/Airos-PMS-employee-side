@@ -3,9 +3,10 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    salary,
     admin,
-    auth,
     attendance,
+    auth,
     bootstrap,
     location,
     maintenance,
@@ -32,3 +33,4 @@ api_router.include_router(location.router)
 api_router.include_router(realtime.router)
 api_router.include_router(mobile.router)
 api_router.include_router(preferences.router)
+api_router.include_router(salary.router)

@@ -8,7 +8,8 @@ backend whose connectivity can be toggled mid-run.
 
 import pytest
 
-from app.core import rate_limit, redis as redis_mod, sessions
+from app.core import rate_limit, sessions
+from app.core import redis as redis_mod
 
 
 class _FlakyBackend:

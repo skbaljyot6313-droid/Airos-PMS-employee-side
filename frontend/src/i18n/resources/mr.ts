@@ -54,6 +54,7 @@ export const mr: Messages = {
     tasks: 'कामे',
     maintenance: 'देखभाल',
     attendance: 'उपस्थिती',
+    salary: 'पगार',
     profile: 'प्रोफाइल',
   },
   auth: {

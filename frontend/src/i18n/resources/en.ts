@@ -53,6 +53,7 @@ export const en = {
     tasks: 'Tasks',
     maintenance: 'Maintenance',
     attendance: 'Attendance',
+    salary: 'Salary',
     profile: 'Profile',
   },
   auth: {

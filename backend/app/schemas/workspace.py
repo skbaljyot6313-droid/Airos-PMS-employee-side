@@ -4,8 +4,7 @@ Workspace DTOs — serialization for the collections the frontend's
 (`*_uid` keys, snake_case).
 """
 
-from datetime import datetime
-from typing import Any, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel
 from sqlalchemy import inspect as sa_inspect
@@ -15,7 +14,10 @@ from app.models.employee import Employee
 from app.models.property import Property
 from app.models.structure import Area, Bed, Dorm, Room, Washroom, Zone
 from app.models.task import (
-    Task, TaskCompletionImage, TaskCompletionSubmission, TaskHistoryEvent,
+    Task,
+    TaskCompletionImage,
+    TaskCompletionSubmission,
+    TaskHistoryEvent,
 )
 
 T = TypeVar("T")

@@ -6,7 +6,6 @@ beds, washrooms (zone-level AND dorm-attached), and individual fixtures.
 """
 
 import pytest
-from sqlalchemy import select
 
 from app.dependencies.auth import Forbidden
 from app.models.structure import Bed, Dorm, Room, Washroom, WashroomFixture, Zone
@@ -143,9 +142,10 @@ async def test_dorm_attached_washroom_passes_coverage(session, seed):
 
 
 async def test_eligible_locations_query_budget(session, seed):
-    """Phase-2.3 — sequential query budget: coverage(1) + rooms(1) +
-    dorms+beds(1) + zones(1) + washrooms+fixtures(1) = 5, down from ~8
-    (coverage get+IN, selectinload beds, selectinload fixtures)."""
+    """Phase-2.3 — sequential query budget: coverage(2 — employee row +
+    extra-area rows) + rooms(1) + dorms+beds(1) + zones(1) +
+    washrooms+fixtures(1) = 6 (coverage get+IN, selectinload beds,
+    selectinload fixtures)."""
     await _coverage_seed(session, seed)
     calls = {"n": 0}
     orig = session.execute
@@ -160,7 +160,7 @@ async def test_eligible_locations_query_budget(session, seed):
             seed["emp_user"])
     finally:
         session.execute = orig
-    assert calls["n"] <= 5, f"ran {calls['n']} sequential queries"
+    assert calls["n"] <= 6, f"ran {calls['n']} sequential queries"
     assert out["rooms"] and out["dorms"] and out["washrooms"]
 
 

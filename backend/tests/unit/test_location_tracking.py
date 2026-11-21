@@ -10,7 +10,7 @@ admin history contract.
 import json
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import fakeredis.aioredis
 import httpx
@@ -22,8 +22,15 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.main import app
+from sqlalchemy import select
+
+from app.models.attendance import AttendanceDay
+from app.models.location_session import LocationTrackingSession
+from app.services import location_live
 from app.services import location_tracking as tracking
+from app.services.attendance import AttendanceService
 from app.services.location_live import LIVE_INDEX_KEY, location_key
+from duty import clock_in
 
 BASE = "/api/v1/location"
 ADMIN = "/api/v1/admin"
@@ -51,7 +58,9 @@ def service_key(monkeypatch):
 
 
 @pytest.fixture
-async def api(session):
+async def api(session, seed):
+    await clock_in(session, seed["employee"])
+
     async def _db():
         yield session
 
@@ -82,7 +91,7 @@ def _svc_header() -> dict:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _fix(sid, seq, lat=12.9716, lng=77.5946, captured=None, **over):
@@ -196,7 +205,7 @@ async def test_ingest_writes_all_views(api, seed, fake_redis):
     assert body["received_at"] and body["location_timestamp"]
 
     emp = seed["employee"].id
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     # live hash
     raw = await fake_redis.hgetall(location_key(emp))
     assert raw["tracking_session_id"] == str(sid)
@@ -207,13 +216,13 @@ async def test_ingest_writes_all_views(api, seed, fake_redis):
     assert await fake_redis.zscore(LIVE_INDEX_KEY, str(emp)) is not None
     # history partition
     members = await fake_redis.zrange(
-        tracking.history_key(emp, datetime.now(timezone.utc)), 0, -1
+        tracking.history_key(emp, datetime.now(UTC)), 0, -1
     )
     assert len(members) == 1
     rec = json.loads(members[0])
     assert rec["seq"] == 1 and rec["sid"] == str(sid)
     # geo index
-    gkey = tracking.geo_key(datetime.now(timezone.utc))
+    gkey = tracking.geo_key(datetime.now(UTC))
     assert await fake_redis.zcard(gkey) == 1
 
 
@@ -233,7 +242,7 @@ async def test_duplicate_event_is_idempotent(api, seed, fake_redis):
 
     emp = seed["employee"].id
     members = await fake_redis.zrange(
-        tracking.history_key(emp, datetime.now(timezone.utc)), 0, -1
+        tracking.history_key(emp, datetime.now(UTC)), 0, -1
     )
     assert len(members) == 1
 
@@ -242,7 +251,7 @@ async def test_delayed_point_uses_captured_order(api, seed, fake_redis):
     """A point replayed after reconnect lands in history at its captured
     position and does not clobber the fresher live hash."""
     sid = await _start(api, seed)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     old = (now - timedelta(hours=2)).isoformat()
     # fresh point first
     await api.post(
@@ -271,7 +280,7 @@ async def test_delayed_point_uses_captured_order(api, seed, fake_redis):
 async def test_future_timestamp_rejected(api, seed, fake_redis):
     sid = await _start(api, seed)
     future = (
-        datetime.now(timezone.utc)
+        datetime.now(UTC)
         + timedelta(seconds=settings.LOCATION_MAX_FUTURE_SKEW_SECONDS + 60)
     ).isoformat()
     res = await api.post(
@@ -294,7 +303,7 @@ async def test_low_accuracy_flagged_not_dropped(api, seed, fake_redis):
     assert res.json()["quality"] == "low_accuracy"
     members = await fake_redis.zrange(
         tracking.history_key(
-            seed["employee"].id, datetime.now(timezone.utc)
+            seed["employee"].id, datetime.now(UTC)
         ),
         0, -1,
     )
@@ -312,7 +321,7 @@ async def test_impossible_speed_flagged(api, seed, fake_redis):
     res = await api.post(
         f"{BASE}/current",
         json=_fix(sid, 2, lat=14.0, lng=78.0,
-                  captured=(datetime.now(timezone.utc)
+                  captured=(datetime.now(UTC)
                             + timedelta(seconds=30)).isoformat()),
         headers=_auth(seed["emp_user"]),
     )
@@ -421,8 +430,8 @@ async def test_history_endpoint(api, seed, service_key, fake_redis):
             headers=_auth(seed["emp_user"]),
         )
     emp = seed["employee"].id
-    frm = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-    to = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    frm = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    to = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
     res = await api.get(
         f"{ADMIN}/location-history/{emp}",
         params={"from": frm, "to": to},
@@ -451,8 +460,8 @@ async def test_history_session_filter(api, seed, service_key, fake_redis):
         f"{BASE}/current", json=_fix(b, 1), headers=_auth(seed["emp_user"])
     )
     emp = seed["employee"].id
-    frm = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-    to = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    frm = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    to = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
     res = await api.get(
         f"{ADMIN}/location-history/{emp}",
         params={"from": frm, "to": to, "tracking_session_id": str(a)},
@@ -467,7 +476,7 @@ async def test_history_crosses_day_partition(api, seed, service_key, fake_redis)
     """A range spanning midnight reads both day partitions — captured_at
     midnight-adjacent points land under their capture date."""
     sid = await _start(api, seed)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     yesterday = now - timedelta(days=1)
     await api.post(
         f"{BASE}/current",
@@ -503,8 +512,8 @@ async def test_history_crosses_day_partition(api, seed, service_key, fake_redis)
 
 async def test_history_rejects_inverted_range(api, seed, service_key, fake_redis):
     emp = seed["employee"].id
-    now = datetime.now(timezone.utc).isoformat()
-    past = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    now = datetime.now(UTC).isoformat()
+    past = (datetime.now(UTC) - timedelta(hours=2)).isoformat()
     res = await api.get(
         f"{ADMIN}/location-history/{emp}",
         params={"from": now, "to": past},
@@ -554,13 +563,13 @@ async def test_history_downsamples_over_cap(
         await api.post(
             f"{BASE}/current",
             json=_fix(sid, seq, captured=(
-                datetime.now(timezone.utc) - timedelta(minutes=4 - seq)
+                datetime.now(UTC) - timedelta(minutes=4 - seq)
             ).isoformat()),
             headers=_auth(seed["emp_user"]),
         )
     emp = seed["employee"].id
-    frm = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-    to = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    frm = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    to = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
     res = await api.get(
         f"{ADMIN}/location-history/{emp}",
         params={"from": frm, "to": to},
@@ -570,3 +579,82 @@ async def test_history_downsamples_over_cap(
     assert body["total_points"] == 4
     assert body["returned_points"] == 2
     assert body["downsampled"] is True
+
+
+# ---------------------------------------------------------------------------
+# Workday-scoped lifecycle, server-side stop, freshness and cadence
+# ---------------------------------------------------------------------------
+
+
+async def test_start_refused_when_not_on_duty(api, seed, fake_redis, session):
+    day = await session.scalar(
+        select(AttendanceDay).where(AttendanceDay.employee_id == seed["employee"].id)
+    )
+    day.ended_at = datetime.now(UTC)
+    await session.commit()
+
+    res = await api.post(f"{BASE}/start", headers=_auth(seed["emp_user"]))
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "NOT_ON_DUTY"
+    assert await fake_redis.keys("mt:location:session:*") == []
+
+
+async def test_break_stops_open_tracking_session_server_side(api, seed, fake_redis, session):
+    sid = await _start(api, seed)
+    await AttendanceService(session).start_break(seed["emp_user"])
+
+    assert await fake_redis.exists(tracking.session_key(sid)) == 0
+    row = await session.get(LocationTrackingSession, sid)
+    assert row.status == "stopped" and row.ended_at is not None
+    res = await api.post(f"{BASE}/current", json=_fix(sid, 1), headers=_auth(seed["emp_user"]))
+    assert res.status_code == 400
+    assert res.json()["error"]["code"] == "INVALID_TRACKING_SESSION"
+
+
+async def test_tracking_restarts_after_resume_not_before(api, seed, fake_redis, session):
+    svc = AttendanceService(session)
+    await _start(api, seed)
+    await svc.start_break(seed["emp_user"])
+    await svc.resume(seed["emp_user"])
+    assert isinstance(await _start(api, seed), uuid.UUID)
+
+
+async def test_end_day_stops_tracking_server_side(api, seed, fake_redis, session):
+    sid = await _start(api, seed)
+    await AttendanceService(session).end(seed["emp_user"])
+
+    assert await fake_redis.exists(tracking.session_key(sid)) == 0
+    assert (await session.get(LocationTrackingSession, sid)).status == "stopped"
+
+
+async def test_stop_open_sessions_is_idempotent(api, seed, fake_redis, session):
+    await _start(api, seed)
+    assert await tracking.stop_open_sessions(seed["employee"].id, session) == 1
+    assert await tracking.stop_open_sessions(seed["employee"].id, session) == 0
+
+
+def test_fix_is_live_only_inside_freshness_window():
+    now = 1_000_000.0
+    window = settings.LOCATION_LIVE_MAX_AGE_SECONDS
+    assert location_live._is_fresh(now - 60, now) is True
+    assert location_live._is_fresh(now - window, now) is True
+    assert location_live._is_fresh(now - window - 1, now) is False
+    assert location_live._is_fresh(None, now) is False
+
+
+async def test_current_fix_outside_window_is_reported_stale(api, seed, fake_redis, monkeypatch):
+    sid = await _start(api, seed)
+    res = await api.post(f"{BASE}/current", json=_fix(sid, 1), headers=_auth(seed["emp_user"]))
+    assert res.status_code == 200, res.text
+    monkeypatch.setattr(settings, "LOCATION_LIVE_MAX_AGE_SECONDS", -1)
+
+    res = await api.get(f"{BASE}/current", headers=_auth(seed["emp_user"]))
+    body = res.json()
+    assert body["is_live"] is False
+    assert body["is_stale"] is True
+
+
+def test_cadence_defaults_leave_retention_and_freshness_consistent():
+    interval = settings.LOCATION_TRACKING_INTERVAL_SECONDS
+    assert interval == 180
+    assert interval < settings.LOCATION_LIVE_MAX_AGE_SECONDS < settings.LOCATION_CURRENT_TTL_SECONDS

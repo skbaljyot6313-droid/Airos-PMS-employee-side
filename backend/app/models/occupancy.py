@@ -9,7 +9,14 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    CheckConstraint, DateTime, ForeignKey, Index, String, func, text, Uuid,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Uuid,
+    func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 

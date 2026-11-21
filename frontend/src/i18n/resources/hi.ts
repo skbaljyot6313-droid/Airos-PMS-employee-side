@@ -54,6 +54,7 @@ export const hi: Messages = {
     tasks: 'कार्य',
     maintenance: 'रखरखाव',
     attendance: 'उपस्थिति',
+    salary: 'वेतन',
     profile: 'प्रोफ़ाइल',
   },
   auth: {

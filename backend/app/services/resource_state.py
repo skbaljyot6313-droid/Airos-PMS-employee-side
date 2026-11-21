@@ -14,11 +14,12 @@ Nothing else may execute `resource.status = ...` as a business operation.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.dependencies.auth import Forbidden
 from app.domain.resource_events import (
     SRC_ADMIN_OVERRIDE,
     SRC_DERIVE,
@@ -33,6 +34,7 @@ from app.domain.resource_states import (
 from app.domain.transitions import is_legal
 from app.models.maintenance import MaintenanceTicket
 from app.models.occupancy import Occupancy
+from app.models.property import Property
 from app.models.resource_state_event import ResourceStateEvent
 from app.models.structure import (
     Bed,
@@ -41,10 +43,8 @@ from app.models.structure import (
     Washroom,
     WashroomFixture,
 )
-from app.models.property import Property
 from app.models.task import Task
 from app.models.user import User, UserRole
-from app.dependencies.auth import Forbidden
 from app.services.structure import (
     ConflictErr,
     NotFoundErr,
@@ -204,7 +204,7 @@ class ResourceStateService:
             # projection can never silently diverge from the record.
             occ = await self._open_occupancy(row, lock=True)
             if occ is not None:
-                occ.checked_out_at = datetime.now(timezone.utc)
+                occ.checked_out_at = datetime.now(UTC)
                 occ.checked_out_by = user.id if user else None
                 if isinstance(row, Room):
                     row.current_guest = None

@@ -19,7 +19,6 @@ import fakeredis.aioredis
 import httpx
 import pytest
 
-from app.api.v1.admin import get_live_locations
 from app.core import redis as redis_core
 from app.core.config import settings
 from app.core.database import get_db

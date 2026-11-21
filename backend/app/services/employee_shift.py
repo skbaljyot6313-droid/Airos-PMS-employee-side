@@ -14,7 +14,6 @@ Times stay IST wall-clock 'HH:MM' — the UI renders them verbatim; a
 device timezone conversion would silently shift the displayed window.
 """
 
-import uuid
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 

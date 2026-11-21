@@ -13,10 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.attendance import (
+    OPEN_REQUEST_STATUSES,
     AttendanceBreak,
     AttendanceDay,
     AttendanceRequest,
-    OPEN_REQUEST_STATUSES,
 )
 from app.models.property import Property
 from app.models.user import User, UserRole

@@ -5,7 +5,7 @@ layer is thin routing over NotificationService / DeviceRegistry /
 LocationService.
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 from sqlalchemy import func, select
@@ -23,19 +23,17 @@ from app.models.refresh_token import RefreshToken
 from app.models.task import Task
 from app.schemas.location import GeoCapture
 from app.schemas.structure import TaskCreateRequest, TaskSubmitRequest
-from app.services.attendance import AttendanceService
 from app.services.auth import AuthService
-from app.services.location import GeoFix, LocationService, parse_geo
+from app.services.location import parse_geo
 from app.services.notifications import DeviceRegistry, NotificationService
 from app.services.push import PushResult
 from app.services.structure import (
-    ConflictErr,
     NotFoundErr,
     StructureService,
     ValidationErr,
 )
 from app.services.task import TaskService
-
+from duty import clock_in
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -107,6 +105,7 @@ async def test_notify_no_employee_is_noop(session, seed):
 
 async def test_task_create_notifies_assignee(session, seed):
     """TaskService.create_task → task_assigned row for THAT employee only."""
+    await clock_in(session, seed["employee"])
     task = await TaskService(session).create_task(
         seed["admin"], _task_create(seed),
     )
@@ -127,6 +126,7 @@ async def test_task_reassign_notifies_new_employee(session, seed):
     )
     session.add(emp2)
     await session.commit()
+    await clock_in(session, seed["employee"], emp2)
     task = await TaskService(session).create_task(
         seed["admin"], _task_create(seed),
     )
@@ -143,6 +143,7 @@ async def test_push_failure_does_not_break_allocation(session, seed, monkeypatch
     from app.services import notifications as notif_mod
 
     monkeypatch.setattr(notif_mod, "get_push_provider", lambda: _FailingPush())
+    await clock_in(session, seed["employee"])
     task = await TaskService(session).create_task(
         seed["admin"], _task_create(seed),
     )
@@ -498,7 +499,7 @@ async def test_task_start_and_submit_capture_location(session, seed):
 # the feed materializes them from work_allocation_history at read time.
 # ---------------------------------------------------------------------------
 
-from datetime import timedelta
+from datetime import UTC, timedelta
 
 from app.models.maintenance import MaintenanceTicket
 from app.models.work_allocation import WorkAllocationHistory
@@ -571,6 +572,7 @@ async def test_sync_reassign_event_marks_reassigned(session, seed):
 async def test_sync_skips_event_already_notified(session, seed):
     """EB's own create_task notifies inline AFTER the ledger write —
     the existing row covers the event; sync must not duplicate it."""
+    await clock_in(session, seed["employee"])
     task = await TaskService(session).create_task(
         seed["admin"], _task_create(seed),
     )
@@ -609,7 +611,7 @@ async def test_sync_ignores_events_outside_window(session, seed):
     await session.flush()
     session.add(_alloc_event(
         seed, ticket_id=task.id,
-        when=datetime.now(timezone.utc) - timedelta(days=30),
+        when=datetime.now(UTC) - timedelta(days=30),
     ))
     await session.commit()
     assert await NotificationService(session).sync_assignment_notifications(
@@ -624,7 +626,7 @@ async def test_sync_later_event_notifies_again(session, seed):
     task = _open_task(seed)
     session.add(task)
     await session.flush()
-    t0 = datetime.now(timezone.utc) - timedelta(hours=2)
+    t0 = datetime.now(UTC) - timedelta(hours=2)
     session.add(_alloc_event(seed, ticket_id=task.id, when=t0))
     await session.commit()
     svc = NotificationService(session)
@@ -779,7 +781,7 @@ async def test_event_then_sync_no_double_notify(session, seed):
     task = _open_task(seed)
     session.add(task)
     await session.flush()
-    t0 = datetime.now(timezone.utc) - timedelta(minutes=5)
+    t0 = datetime.now(UTC) - timedelta(minutes=5)
     session.add(_alloc_event(seed, ticket_id=task.id, when=t0))
     await session.commit()
 
@@ -914,15 +916,15 @@ async def test_retryable_error_schedules_retry(
     # SQLite returns naive datetimes — normalize for the comparison.
     nxt = n.push_next_attempt_at
     if nxt.tzinfo is None:
-        nxt = nxt.replace(tzinfo=timezone.utc)
-    assert nxt > datetime.now(timezone.utc)
+        nxt = nxt.replace(tzinfo=UTC)
+    assert nxt > datetime.now(UTC)
 
 
 async def test_retry_budget_exhaustion_fails(
     session, seed, monkeypatch,
 ):
-    from app.services import notifications as notif_mod
     from app.core.config import settings
+    from app.services import notifications as notif_mod
 
     reg = DeviceRegistry(session)
     await reg.register(seed["emp_user"], device_id="d1",
@@ -984,13 +986,14 @@ async def test_stale_dispatching_row_is_reclaimed(
     """A process that died mid-send leaves 'dispatching' — the sweep's
     staleness window makes it claimable again."""
     from datetime import timedelta
-    from app.services import notifications as notif_mod
+
     from app.core.config import settings
+    from app.services import notifications as notif_mod
 
     n = await _queued_notification(session, seed)
     n.push_status = "dispatching"
     n.push_updated_at = (
-        datetime.now(timezone.utc)
+        datetime.now(UTC)
         - timedelta(seconds=settings.PUSH_DISPATCH_STALE_SECONDS + 60)
     )
     await session.commit()
@@ -1028,6 +1031,7 @@ async def test_sweep_dispatches_due_rows(session, seed, monkeypatch):
     (restart between commit and drain) — using a patched factory
     bound to this test's in-memory engine."""
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
     from app.services import notifications as notif_mod
 
     factory = async_sessionmaker(
@@ -1059,6 +1063,7 @@ async def test_fcm_send_collects_message_names(monkeypatch):
     """Mocked FCM HTTP v1 — 200 yields an accepted id, dead tokens are
     flagged, 5xx is retryable, nothing is marked 'delivered'."""
     import httpx
+
     from app.services.push import FCMProvider
 
     responses = {

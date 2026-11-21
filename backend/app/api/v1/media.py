@@ -9,8 +9,7 @@ origin regardless of where the bytes actually live.
 
 import re
 
-from fastapi import APIRouter, Depends, Request, UploadFile, status
-from fastapi import File
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 

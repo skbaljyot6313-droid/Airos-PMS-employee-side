@@ -18,7 +18,7 @@ from sqlalchemy.orm import selectinload
 from app.models.employee import Employee
 from app.models.property import Property
 from app.models.structure import Area, Dorm, Room, Washroom, Zone
-from app.models.task import Task, TaskCompletionSubmission
+from app.models.task import Task
 from app.models.user import User, UserRole
 
 
@@ -155,7 +155,9 @@ class WorkspaceRepository:
         if property_id:
             q = q.where(Employee.property_id == property_id)
         if zone_id:
-            q = q.where(Employee.zone_id == zone_id)
+            # Union coverage semantics — primary, secondary, property-wide.
+            from app.domain.coverage import covers_zone
+            q = q.where(covers_zone(zone_id))
         if department:
             q = q.where(Employee.department == department)
         if status:

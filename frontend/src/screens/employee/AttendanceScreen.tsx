@@ -36,6 +36,10 @@ import {
   startDayApi,
 } from '../../api/attendance';
 import {
+  startLocationTracking,
+  stopLocationTracking,
+} from '../../services/locationTracker';
+import {
   AttendanceDayStatus,
   LeaveType,
   RequestStatus,
@@ -262,8 +266,17 @@ export const AttendanceScreen: React.FC = () => {
       end: endDayApi,
     }[action];
 
+    // Location tracking follows the workday: on while working, off on break/end.
+    const tracking = {
+      start: startLocationTracking,
+      resume: startLocationTracking,
+      break: stopLocationTracking,
+      end: stopLocationTracking,
+    }[action];
+
     try {
       const updated = await call();
+      void tracking();
       if (updated) {
         setWorkday(updated);
         setSynced(true);

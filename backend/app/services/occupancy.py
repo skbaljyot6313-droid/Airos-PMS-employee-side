@@ -11,7 +11,7 @@ SELECT FOR UPDATE so two check-ins can't race the same unit.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -104,7 +104,7 @@ class OccupancyService:
         occ = Occupancy(
             property_id=room.property_id, room_id=room.id,
             guest_name=name, checked_in_by=user.id,
-            checked_in_at=datetime.now(timezone.utc),
+            checked_in_at=datetime.now(UTC),
         )
         self.session.add(occ)
         try:
@@ -140,7 +140,7 @@ class OccupancyService:
         occ = Occupancy(
             property_id=dorm.property_id, bed_id=bed.id,
             guest_name=name, checked_in_by=user.id,
-            checked_in_at=datetime.now(timezone.utc),
+            checked_in_at=datetime.now(UTC),
         )
         self.session.add(occ)
         try:
@@ -232,7 +232,7 @@ class OccupancyService:
         rooms = list(rooms or [])
         beds = list(beds or [])
         occs = await self._open_occupancy_map(rooms=rooms, beds=beds)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         out_rooms = [
             r for r in rooms

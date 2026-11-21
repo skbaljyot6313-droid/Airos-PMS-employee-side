@@ -13,8 +13,8 @@ the storage host at all.
 
 import asyncio
 import uuid
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
-from typing import AsyncIterator, Callable
 from urllib.parse import unquote, urlparse
 
 from app.core.config import settings
@@ -302,9 +302,9 @@ def proxy_media_url(url: str | None) -> str | None:
     """Rewrite a stored storage URL to the same-origin proxy path.
 
     Devices only ever fetch media from the API origin — the object store
-    (supabase.co / S3 endpoints) may be unreachable or DNS-blocked on
-    field networks, while the Railway API domain is already proven
-    reachable. Unknown/external URLs pass through untouched; relative
+    (supabase.co / S3 / GCS endpoints) may be unreachable or DNS-blocked on
+    field networks, while the API domain is already proven reachable.
+    Unknown/external URLs pass through untouched; relative
     /media/file/ paths stay as-is (already proxied).
     """
     if not url:

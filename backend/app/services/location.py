@@ -14,7 +14,6 @@ func.now() (model default); nothing here accepts a client clock.
 import math
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession

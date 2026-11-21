@@ -8,8 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user, require_employee
 from app.models.user import User
-from app.schemas.v1.maintenance.ticket import MaintenanceCreateRequest, MaintenanceResolveRequest, ticket_out
 from app.schemas.maintenance import ticket_summary_out
+from app.schemas.v1.maintenance.ticket import (
+    MaintenanceCreateRequest,
+    MaintenanceResolveRequest,
+    ticket_out,
+)
 from app.services.maintenance import MaintenanceService
 
 router = APIRouter(prefix="/maintenance", tags=["maintenance"])

@@ -84,6 +84,7 @@ async def test_auth_runs_before_304():
     """Route level: an unauthenticated conditional GET must be 401 —
     never 304, even with a forged If-None-Match."""
     from httpx import ASGITransport, AsyncClient
+
     from app.main import app
 
     async with AsyncClient(

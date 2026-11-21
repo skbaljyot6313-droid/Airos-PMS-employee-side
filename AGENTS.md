@@ -88,7 +88,17 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   fcm misconfig refuses boot in production), `rollover.py` (IST
   operational-day rollover — present for models/tests, no scheduler runs
   here), `occupancy.py`, `auth.py`, `mobile_release.py`, `task_location.py`,
-  `bootstrap.py` + `employee_shift.py` (see API surface + index below).
+  `bootstrap.py` + `employee_shift.py` (see API surface + index below),
+  `availability.py` (`AvailabilityService.sweep_on_duty` — hands unassigned
+  zone/area tasks and tickets to an employee when they Start Day or End
+  Break; best-effort, savepoint-isolated, re-checks on-duty under a FOR
+  SHARE lock before writing), `reassignment.py` (End Day handover — moves
+  `assigned` work to an eligible on-duty colleague, otherwise returns it to
+  the unallocated pool; in-progress/submitted/reopened work stays with the
+  employee and is reported; each item in its own savepoint, summary stored in
+  the `attendance_ended` audit detail). Tracking is part of the workday:
+  `POST /location/start` is refused (409 `NOT_ON_DUTY`) unless on duty, and
+  Start Break / End Day call `location_tracking.stop_open_sessions`.
 - `repositories/` — `workspace.py` (company/property-scoped list reads;
   `list_tasks` enforces `Task.employee_id == user.employee_id` for
   employees), `user.py`, `company.py`, `refresh_token.py`, `attendance.py`.
@@ -230,12 +240,27 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - Employees cannot self-complete work: tasks → `submitted` (PENDING_CHECK),
   tickets → `resolved`; only super_admin approves/closes (release point).
 - Tenant scope = caller's `company_id`/`property_id`; employee coverage =
-  `zone_id` ∪ zones inside `area_id` ∪ matching `area_id` resources.
+  `zone_id` ∪ `secondary_zone_id` ∪ zones inside `area_id` ∪ zones inside
+  every extra `employee_area_assignments` row ∪ matching `area_id`
+  resources ∪ (`covers_property` → every zone in the property).
+  `secondary_zone_id`/`covers_property`/`area_id`/
+  `employee_area_assignments` are written by the Super Admin backend;
+  this repo maps them read-only (`models/employee.py`) and unions them in
+  `services/maintenance.py::_employee_coverage`,
+  `services/work_allocation.py::_eligible_pools`, and the live-locations
+  zone filter in `api/v1/admin.py`. The shared predicates live in
+  `app/domain/coverage.py` — byte-identical with the Super Admin copy;
+  edit both together.
 - Redis is an accelerator, never truth — everything degrades/fails open
   except `/location/*` ingest and `/admin/*` which need it (503 honest).
 - Error envelopes: `{detail:{message,code,field?}}` AND `{error:{code,message}}`.
 - Migrations: full linear Alembic chain retained; apply via
   `alembic upgrade head` (compose `migrate` service / Railway preDeploy).
+- Boot refuses to start if the shared `alembic_version` ≠ script head
+  (`check_schema_version` in `app/main.py`, mirrored from the SA backend)
+  — including a DB migrated ahead by the other repo. Local SQLite dev
+  (`dev.db`, no alembic_version table) is tolerated as current. `/ready`
+  reports `"schema": "current"|"stale"` and 503s on stale.
 
 ## Additional implementation index (verified 2026-11-13)
 
@@ -274,6 +299,11 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - Raw continuous location fixes/history are Redis-only, with daily history
   ZSET/GEO partitions; PostgreSQL tracks session lifecycle metadata.
   Task-action location evidence is a separate `services/location.py` path.
+- Integration (PostgreSQL concurrency): `backend/tests/integration/` runs only
+  when `AIROS_TEST_DATABASE_URL` points at an isolated LOCAL database whose name
+  contains `test` (the fixture resets the public schema there). Start one with
+  `docker run -d --name airos-audit-pg -p 55432:5432 -e POSTGRES_PASSWORD=audit
+  -e POSTGRES_DB=airos_audit_test postgres:16-alpine`.
 - Verification map: backend `tests/unit/` covers state/allocation/occupancy,
   attendance/shifts, bootstrap/cache/session behavior, location, notifications,
   media/releases, and performance helpers; `tests/api/` checks OpenAPI.
@@ -292,3 +322,26 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   unused by `src/`. `capacitor.config.json`/`app.json` still carry the
   pre-rebrand name "Airos Property Pro"; user-facing brand is
   "Airco PMS Staff".
+
+## Android signing identity (incident 2026-11-14 — read before any APK build)
+
+- Installed apps only accept updates signed by the SAME certificate
+  (`AppUpdatePlugin` → `WRONG_SIGNATURE`; Android refuses anyway).
+  Releases 17/18/19-20/21 were each signed by whatever per-machine debug
+  key existed — release 21 changed signer and broke in-app updates.
+- Dev APKs (`assembleDebug`) are now PINNED to `frontend/android/dev-debug.keystore`
+  (gitignored; alias `androiddebugkey`, passwords `android`), cert SHA-256
+  `5acf78d3ff65781af7fcd667b081ba107bc7d142f87fe08660ff8859e34379b1`.
+  Override path via `AIROS_DEV_KEYSTORE`. `app/build.gradle` FAILS
+  `packageDebug` if the keystore is missing — never "fix" that by
+  deleting the check. CI restores it from secret `DEV_DEBUG_KEYSTORE_BASE64`.
+- `POST /mobile/releases/apk` rejects unsigned APKs (422) and a signer
+  different from the active release (409 `SIGNER_MISMATCH`) unless
+  `allow_signer_change=true` (deliberate rotation = every device reinstalls).
+  Signer is stamped as `signer_sha256` object metadata
+  (`app/core/apk_signing.py`, pure-Python v2/v3 block read).
+- Release objects live in GCS `final-airos-os-dev-employee-objects-94363806721`
+  (`release-android-<code>-<id>.apk`). Dev Cloud Run has NO
+  `RELEASE_MANAGEMENT_API_KEY`, so the release endpoints 503 there;
+  rows were changed via a one-off Cloud Run job calling
+  `services/mobile_release.activate_release` with the service's DB secret.

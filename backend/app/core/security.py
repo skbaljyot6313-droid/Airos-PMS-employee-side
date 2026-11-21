@@ -9,7 +9,7 @@ import hashlib
 import re
 import secrets
 import unicodedata
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from argon2 import PasswordHasher
@@ -42,7 +42,7 @@ def verify_password(plain: str, password_hash: str) -> bool:
 def create_access_token(
     *, user_id: str, company_id: str, role: str, session_id: str | None = None
 ) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": user_id,
         "user_id": user_id,
@@ -83,7 +83,7 @@ def hash_refresh_token(token: str) -> str:
 
 
 def refresh_token_expiry() -> datetime:
-    return datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    return datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
 
 # ---------------------------------------------------------------------------

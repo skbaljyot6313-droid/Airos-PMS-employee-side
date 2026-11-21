@@ -84,8 +84,11 @@ class Settings(BaseSettings):
 
     # Location tracking — current fix + history live in Redis only;
     # PostgreSQL holds session metadata, never raw GPS points.
-    # Seconds a "live" position stays fresh before it self-evicts.
-    LOCATION_CURRENT_TTL_SECONDS: int = 120
+    # How long the latest fix is RETAINED in Redis. Must exceed the tracking
+    # cadence; whether a fix is LIVE is decided by LOCATION_LIVE_MAX_AGE_SECONDS.
+    LOCATION_CURRENT_TTL_SECONDS: int = 600
+    # A latest fix older than this is never reported as live (is_stale=true).
+    LOCATION_LIVE_MAX_AGE_SECONDS: int = 360
     # Days a daily history partition (ZSET + GEO) is retained.
     LOCATION_HISTORY_RETENTION_DAYS: int = 90
     # Oldest capture age accepted for delayed/offline points.
@@ -106,7 +109,7 @@ class Settings(BaseSettings):
     LOCATION_SESSION_TTL_SECONDS: int = 43200
     # Requested capture/upload cadence handed to trackers at POST
     # /location/start; re-minted sessions adopt a changed value.
-    LOCATION_TRACKING_INTERVAL_SECONDS: int = 10
+    LOCATION_TRACKING_INTERVAL_SECONDS: int = 180
     # Quality thresholds — flagged, never dropped (GPS noise is data too).
     LOCATION_LOW_ACCURACY_M: float = 500.0
     # Implied speed above this (m/s ≈ 288 km/h) → suspicious_speed flag.

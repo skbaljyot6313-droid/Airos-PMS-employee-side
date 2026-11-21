@@ -2,6 +2,7 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,13 +11,60 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
-from app.core.database import check_database, close_db, describe_db_error
+from app.core.database import AsyncSessionLocal, check_database, close_db, describe_db_error
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
 from app.core.middleware import AccessLogMiddleware, RequestIDMiddleware, SecurityHeadersMiddleware
 from app.core.redis import check_redis, close_redis, redis_configured
+
 setup_logging()
 logger = get_logger("app.main")
+
+_ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
+
+
+async def check_schema_version() -> str | None:
+    """Compare the database's alembic_version with the script head.
+
+    This backend shares one PostgreSQL database (and one alembic_version
+    row) with the Super Admin backend. Booting against a revision the
+    models don't match is the silent-killer failure: every query on a
+    missing column surfaces as an unrelated 503. Returns None when
+    current, else a human-readable remediation string."""
+    from alembic.config import Config as AlembicConfig
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import text
+
+    if not _ALEMBIC_INI.exists():
+        return None  # no migration config — nothing to compare
+    try:
+        cfg = AlembicConfig(str(_ALEMBIC_INI))
+        heads = set(ScriptDirectory.from_config(cfg).get_heads())
+        async with AsyncSessionLocal() as session:
+            rows = await session.execute(
+                text("SELECT version_num FROM alembic_version")
+            )
+            current = {r[0] for r in rows}
+    except Exception as exc:
+        # A DB with no alembic_version at all (e.g. local SQLite dev built
+        # via create_all) has no revision to compare — treat as current.
+        # Match on the RAW exception text; describe_db_error sanitizes it
+        # into a network-flavored message that loses the table name.
+        raw = str(exc).lower()
+        if "alembic_version" in raw and (
+            "no such table" in raw or "does not exist" in raw
+        ):
+            return None
+        return (
+            f"could not read schema version ({describe_db_error(exc)}) "
+            "— run `alembic upgrade head`"
+        )
+    if current != heads:
+        return (
+            f"database schema is stale (at {sorted(current) or '[]'}, head is "
+            f"{sorted(heads)}) — run `alembic upgrade head`"
+        )
+    return None
 
 
 async def _push_sweep_loop() -> None:
@@ -61,6 +109,17 @@ async def lifespan(app: FastAPI):
             "Push provider misconfigured (%s) — pushes are disabled "
             "until this is fixed", exc,
         )
+
+    # Schema drift check — a reachable DB on an old (or different) shared
+    # revision produces exactly the "endpoint 503s for no obvious reason"
+    # failure mode. Refuse to serve rather than boot half-broken. The DB
+    # and alembic_version row are shared with the Super Admin backend, so
+    # this also catches the case where only one side migrated.
+    stale = await check_schema_version()
+    if stale:
+        logger.error("FATAL: %s", stale)
+        raise RuntimeError(f"Database schema out of date: {stale}")
+
     sweep_task = asyncio.create_task(_push_sweep_loop())
     try:
         yield
@@ -116,6 +175,12 @@ async def ready():
         result["redis"] = "connected" if await check_redis() else "unreachable"
         if result["redis"] == "unreachable":
             result["status"] = "degraded"
+    if result["database"] == "connected":
+        stale = await check_schema_version()
+        result["schema"] = "current" if stale is None else "stale"
+        if stale is not None:
+            result["status"] = "degraded"
+            result["schema_detail"] = stale
     return JSONResponse(status_code=200 if result["status"] == "ok" else 503, content=result)
 
 

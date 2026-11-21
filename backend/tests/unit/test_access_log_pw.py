@@ -2,7 +2,6 @@
 line after company= so existing stage-field parsers keep working."""
 import logging
 
-import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app

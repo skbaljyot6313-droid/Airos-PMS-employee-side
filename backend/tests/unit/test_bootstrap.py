@@ -5,13 +5,11 @@ Run against the in-memory SQLite session + fakeredis, mirroring the
 service-level test style; route mounting is covered by the app tests.
 """
 
-import json
 
 import fakeredis.aioredis
 import pytest
 
 from app.core.config import settings
-from app.dependencies.auth import Forbidden
 from app.models.notifications import Notification
 from app.models.structure import Zone
 from app.repositories.workspace import WorkspaceRepository
@@ -176,8 +174,8 @@ async def test_ref_version_changes_with_content(session, seed, fake_redis):
 async def test_zone_mutation_evicts_scope_cache(session, seed, fake_redis):
     """create_zone must drop the cached scope block (best-effort; TTL
     is the bound for SA-backend writes)."""
-    from app.services.structure import StructureService
     from app.schemas.structure import ZoneCreateRequest
+    from app.services.structure import StructureService
 
     admin = seed["admin"]
     user = seed["emp_user"]
@@ -228,8 +226,8 @@ async def test_zone_eviction_only_own_scope(
 ):
     """A zone mutation in tenant 1 evicts tenant-1 keys only — tenant 2's
     cached block survives untouched."""
-    from app.services.structure import StructureService
     from app.schemas.structure import ZoneCreateRequest
+    from app.services.structure import StructureService
 
     t2 = await make_tenant("B")
     await boot.get_bootstrap(seed["emp_user"], session)

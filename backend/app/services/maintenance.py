@@ -14,7 +14,7 @@ permanent record; the room status is derived state.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,6 @@ from app.models.maintenance import (
 )
 from app.models.structure import Bed, Dorm, Room, Washroom, WashroomFixture
 from app.models.user import User, UserRole
-from app.services.work_allocation import AllocationResult, WorkAllocationService
 from app.schemas.maintenance import (
     MaintenanceCreateRequest,
     MaintenanceResolveRequest,
@@ -40,6 +39,7 @@ from app.services.structure import (
     StructureService,
     ValidationErr,
 )
+from app.services.work_allocation import AllocationResult, WorkAllocationService
 
 ACTIVE_STATUSES = {"open", "assigned", "in_progress", "on_hold"}
 PRIORITIES = {"low", "medium", "high", "critical"}
@@ -53,10 +53,13 @@ async def next_ticket_number(session: AsyncSession, kind: str) -> str:
     """
     seq = "maintenance_ticket_seq" if kind == "maintenance" else "task_ticket_seq"
     prefix = "MT" if kind == "maintenance" else "TASK"
-    year = datetime.now(timezone.utc).year
+    year = datetime.now(UTC).year
     try:
-        res = await session.execute(text(f"SELECT nextval('{seq}')"))
-        n = int(res.scalar_one())
+        # Savepoint: on PostgreSQL a failed nextval aborts the whole
+        # transaction, which would also poison the fallback below.
+        async with session.begin_nested():
+            res = await session.execute(text(f"SELECT nextval('{seq}')"))
+            n = int(res.scalar_one())
     except Exception:
         from app.models.task import Task
 
@@ -176,35 +179,64 @@ class MaintenanceService:
     # Create — ticket + room status in ONE transaction
     # ------------------------------------------------------------------
 
-    async def _employee_coverage(self, user: User) -> tuple[set, uuid.UUID | None]:
-        """(zone_ids, area_id) the EMPLOYEE may raise tickets for.
+    async def _employee_coverage(self, user: User) -> tuple[set, set, bool]:
+        """(zone_ids, area_ids, covers_property) the EMPLOYEE may raise
+        tickets for.
 
-        Zone assignment → that zone's targets. Area assignment → every
-        zone inside the area plus targets attached to the area directly.
-        Either or both may exist — the union defines coverage."""
+        Zone assignment → that zone's targets, plus the optional
+        secondary zone (max 2). Area assignment → every zone inside the
+        primary ``area_id`` AND every extra ``employee_area_assignments``
+        area (multi-area coverage, written by the Super Admin backend),
+        plus targets attached to those areas directly. Property-wide
+        coverage → every zone in the property. The union defines
+        coverage."""
         zone_ids: set[uuid.UUID] = set()
-        area_id = None
+        area_ids: set[uuid.UUID] = set()
+        covers_property = False
         if user.role == UserRole.EMPLOYEE:
             # One query: the employee row outer-joined to all zones in the
             # employee's area — replaces the get()+IN() two-step.
+            from app.models.employee import EmployeeAreaAssignment
             from app.models.structure import Zone
             res = await self.session.execute(
-                select(Employee.zone_id, Employee.area_id, Zone.id)
+                select(Employee.zone_id, Employee.secondary_zone_id,
+                       Employee.area_id, Employee.covers_property,
+                       Employee.property_id, Zone.id)
                 .outerjoin(Zone, Zone.area_id == Employee.area_id)
                 .where(Employee.id == user.employee_id)
             )
             first = True
-            for emp_zone_id, emp_area_id, area_zone_id in res.all():
+            for (emp_zone_id, emp_secondary_id, emp_area_id, emp_covers,
+                 emp_property_id, area_zone_id) in res.all():
                 if first:
-                    area_id = emp_area_id
-                    if emp_zone_id:
-                        zone_ids.add(emp_zone_id)
+                    if emp_area_id:
+                        area_ids.add(emp_area_id)
+                    for zid in (emp_zone_id, emp_secondary_id):
+                        if zid:
+                            zone_ids.add(zid)
+                    if emp_covers:
+                        covers_property = True
+                        prop_zones = await self.session.execute(
+                            select(Zone.id).where(Zone.property_id == emp_property_id)
+                        )
+                        zone_ids.update(prop_zones.scalars())
                     first = False
                 if area_zone_id:
                     zone_ids.add(area_zone_id)
             if first:
-                return zone_ids, area_id  # employee row missing
-        return zone_ids, area_id
+                return zone_ids, area_ids, covers_property  # employee row missing
+            # Additional whole-area coverage — one joined query resolves
+            # each extra area and the zones inside it.
+            extra = await self.session.execute(
+                select(EmployeeAreaAssignment.area_id, Zone.id)
+                .outerjoin(Zone, Zone.area_id == EmployeeAreaAssignment.area_id)
+                .where(EmployeeAreaAssignment.employee_id == user.employee_id)
+            )
+            for extra_area_id, extra_zone_id in extra.all():
+                area_ids.add(extra_area_id)
+                if extra_zone_id:
+                    zone_ids.add(extra_zone_id)
+        return zone_ids, area_ids, covers_property
 
     async def _enforce_employee_coverage(self, user: User, room=None,
                                        dorm=None, washroom=None) -> None:
@@ -213,11 +245,13 @@ class MaintenanceService:
 
         A dorm-attached washroom carries no zone/area of its own — its
         coverage is inherited from the owning dorm."""
-        zone_ids, area_id = await self._employee_coverage(user)
+        zone_ids, area_ids, covers_property = await self._employee_coverage(user)
+        if covers_property:
+            return
 
         def _covered(zone_id, t_area) -> bool:
             return (zone_id is not None and zone_id in zone_ids) or (
-                area_id is not None and t_area == area_id)
+                t_area is not None and t_area in area_ids)
 
         target = room or dorm or washroom
         if _covered(getattr(target, "zone_id", None),
@@ -241,33 +275,37 @@ class MaintenanceService:
         if user.role != UserRole.EMPLOYEE or user.employee_id is None:
             from app.dependencies.auth import Forbidden
             raise Forbidden()
-        zone_ids, area_id = await self._employee_coverage(user)
-        if not zone_ids and area_id is None:
+        zone_ids, area_ids, covers_property = await self._employee_coverage(user)
+        if not covers_property and not zone_ids and not area_ids:
             return {
                 "rooms": [], "dorms": [], "beds": [],
                 "washrooms": [], "fixtures": [],
             }
 
-        scope = Room.zone_id.in_(zone_ids) if zone_ids else None
-        scope_d = Dorm.zone_id.in_(zone_ids) if zone_ids else None
-        if area_id is not None:
-            scope = or_(scope, Room.area_id == area_id) if scope is not None \
-                else Room.area_id == area_id
-            scope_d = or_(scope_d, Dorm.area_id == area_id) if scope_d \
-                is not None else Dorm.area_id == area_id
+        scope = None if covers_property else (Room.zone_id.in_(zone_ids) if zone_ids else None)
+        scope_d = None if covers_property else (Dorm.zone_id.in_(zone_ids) if zone_ids else None)
+        if area_ids:
+            scope = or_(scope, Room.area_id.in_(area_ids)) if scope is not None \
+                else Room.area_id.in_(area_ids)
+            scope_d = or_(scope_d, Dorm.area_id.in_(area_ids)) if scope_d \
+                is not None else Dorm.area_id.in_(area_ids)
 
         from app.models.structure import Zone
         res = await self.session.execute(
-            select(Room).where(Room.property_id == user.property_id, scope)
-            .order_by(Room.room_number)
+            select(Room).where(
+                Room.property_id == user.property_id,
+                *(scope,) if scope is not None else (),
+            ).order_by(Room.room_number)
         )
         rooms = list(res.scalars())
         from sqlalchemy.orm import joinedload
         res = await self.session.execute(
             select(Dorm)
             .options(joinedload(Dorm.beds))
-            .where(Dorm.property_id == user.property_id, scope_d)
-            .order_by(Dorm.name)
+            .where(
+                Dorm.property_id == user.property_id,
+                *(scope_d,) if scope_d is not None else (),
+            ).order_by(Dorm.name)
         )
         dorms = list(res.unique().scalars())
         zmap = {}
@@ -281,21 +319,24 @@ class MaintenanceService:
         dorm_map = {d.id: d for d in dorms}
 
         # Washrooms: zone-level (zone/area coverage) OR dorm-attached
-        # (coverage inherited from an in-scope dorm).
+        # (coverage inherited from an in-scope dorm). Property-wide
+        # coverage sees every washroom in the property.
         wscope = Washroom.dorm_id.in_(dorm_ids) if dorm_ids else None
         if zone_ids:
             cond = Washroom.zone_id.in_(zone_ids)
             wscope = or_(cond, wscope) if wscope is not None else cond
-        if area_id is not None:
-            cond = Washroom.area_id == area_id
+        if area_ids:
+            cond = Washroom.area_id.in_(area_ids)
             wscope = or_(cond, wscope) if wscope is not None else cond
         washrooms: list[Washroom] = []
-        if wscope is not None:
+        if covers_property or wscope is not None:
             res = await self.session.execute(
                 select(Washroom)
                 .options(joinedload(Washroom.fixtures))
-                .where(Washroom.property_id == user.property_id, wscope)
-                .order_by(Washroom.name)
+                .where(
+                    Washroom.property_id == user.property_id,
+                    *(() if covers_property else (wscope,)),
+                ).order_by(Washroom.name)
             )
             washrooms = list(res.unique().scalars())
 
@@ -917,7 +958,7 @@ class MaintenanceService:
                     field="photo_urls",
                 )
         ticket.status = "resolved"
-        ticket.resolved_at = datetime.now(timezone.utc)
+        ticket.resolved_at = datetime.now(UTC)
         ticket.resolution_notes = payload.resolution_notes.strip()
         # Fixture-level maintenance completion records on the fixture
         # itself — but the fixture stays `maintenance` while the ticket is
@@ -991,7 +1032,7 @@ class MaintenanceService:
         if ticket.status != "resolved":
             raise ConflictErr("Only resolved tickets can be closed.")
         ticket.status = "closed"
-        ticket.closed_at = datetime.now(timezone.utc)
+        ticket.closed_at = datetime.now(UTC)
         self._event(ticket, "closed", user)
         # Supervisor acknowledgement — derive the target's status from any
         # remaining blocking work; a free target goes straight back to

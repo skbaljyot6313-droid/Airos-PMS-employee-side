@@ -9,7 +9,7 @@ locations from the AiROS Staff employee backend.
 ## How it works
 
 ```text
-Employee Android app ──(GPS fix every ~10 s)──▶ Employee API
+Employee Android app ──(GPS fix every ~3 min, on duty only)──▶ Employee API
                                                    │
                                                    ▼
                                           Redis (live fix + history)
@@ -19,10 +19,12 @@ Your system ──(polls over HTTPS)──────────────�
 
 - Each tracked employee's phone uploads one position fix roughly every
   **10 seconds** via a native Android foreground service — uploads
-  continue while the app is closed or the screen is off, as long as the
-  employee stays logged in and location permission is granted.
-- Fixes land in Redis: a **live snapshot** (expires 120 s after the last
-  fix) plus **day-partitioned history** (retained 90 days).
+  continue while the app is closed or the screen is off, but only while the
+  employee is on duty (open workday, not on break) and location permission is granted.
+  Start Break and End Day stop tracking on the server as well as on the device.
+- Fixes land in Redis: a **live snapshot** of each employee's latest fix (retained
+  600 s; reported live only for 360 s — older fixes carry `is_stale`) plus
+  **day-partitioned history** (retained 90 days).
 - You **poll** `GET /admin/live-locations` for the snapshot — it is a
   pull model, not push/webhooks. Polling every 10 s is expected and
   cheap (Redis-only read, no database query unless a scope filter is
@@ -110,7 +112,7 @@ own employee records.
 | `sequence_number` | Per-session monotonic counter. |
 | `quality` | `valid` \| `low_accuracy` \| `delayed` \| `suspicious_speed` — see below. |
 | `source` | Location provider (`fused`, `gps`, …), may be absent. |
-| `is_live` | `true` while the fix is within the 120 s freshness window. |
+| `is_live` | `true` only while the fix is within the 360 s freshness window (`is_stale` is `true` otherwise). |
 | `is_stale` | `true` only in the `is_active=false` + `employee_id` lookup after expiry. |
 
 Legacy synonym fields (`accuracy`, `speed`, `heading`) are also emitted
@@ -202,7 +204,7 @@ downsampled** — evenly spaced so the route keeps its shape — and
 
 Poll `GET /admin/live-locations` every **10 s** (matching the device
 cadence). Faster polling is permitted but yields no new data — device
-fixes arrive at ~10 s intervals per employee.
+fixes arrive at ~3 min intervals per employee while on duty.
 
 ## Examples
 

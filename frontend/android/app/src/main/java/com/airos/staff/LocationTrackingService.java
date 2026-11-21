@@ -87,7 +87,7 @@ public class LocationTrackingService extends Service {
     private static final String WORK_CHANNEL_ID = "airos_work";
     private static final int NOTIFICATION_ID = 0xA1;
     private static final int WORK_NOTIF_BASE = 0xB000;
-    private static final int DEFAULT_INTERVAL_SECONDS = 10;
+    private static final int DEFAULT_INTERVAL_SECONDS = 180;
     private static final int HTTP_TIMEOUT_MS = 10_000;
     /** ~10 h of 30 s fixes — plenty for a shift's worst dead zone. */
     private static final int MAX_QUEUE_LINES = 1_500;
@@ -620,6 +620,13 @@ public class LocationTrackingService extends Service {
         if (res.status == 401 && tryRefresh(this, p)) {
             res = apiPost(base + "/location/start", "{}",
                     p.getString(KEY_ACCESS, null));
+        }
+        if (res.status == 409 && "NOT_ON_DUTY".equals(res.code)) {
+            // Break started or the workday ended — tracking is over for now.
+            // Stop the service instead of re-minting on every fix.
+            p.edit().remove(KEY_SESSION).apply();
+            stopSelf();
+            return false;
         }
         if (!res.ok()) return false;
         try {

@@ -9,7 +9,7 @@ may be unreachable on field networks. Under test:
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import httpx
@@ -133,7 +133,7 @@ def test_attachment_out_rewrites_storage_url(monkeypatch):
         id=uuid.uuid4(), url=f"https://storage.test/{key}",
         file_name="x.jpg", mime_type="image/jpeg", size_bytes=10,
         kind="issue", attempt=1, uploaded_by_name="W",
-        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     assert attachment_out(a)["url"] == f"/api/v1/media/file/{key}"
 
@@ -143,7 +143,7 @@ def test_attachment_out_passes_external_url_through():
         id=uuid.uuid4(), url="https://cdn.example.com/img.jpg",
         file_name="x.jpg", mime_type="image/jpeg", size_bytes=10,
         kind="issue", attempt=1, uploaded_by_name="W",
-        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     assert attachment_out(a)["url"] == "https://cdn.example.com/img.jpg"
 

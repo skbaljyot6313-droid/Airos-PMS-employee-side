@@ -6,5 +6,7 @@ uploads
 .env
 .env.*
 !.env.example
+dev.db
+*.db
 tests
 *.log

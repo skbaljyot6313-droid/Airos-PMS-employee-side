@@ -4,8 +4,15 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    JSON, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint,
-    func, Uuid,
+    JSON,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    Uuid,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 

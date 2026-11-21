@@ -45,6 +45,7 @@ import { TasksScreen } from './screens/employee/TasksScreen';
 import { TaskDetailScreen } from './screens/employee/TaskDetailScreen';
 import { MaintenanceScreen } from './screens/employee/MaintenanceScreen';
 import { AttendanceScreen } from './screens/employee/AttendanceScreen';
+import { SalaryScreen } from './screens/employee/SalaryScreen';
 import { ZoneWorkspaceScreen } from './screens/employee/ZoneWorkspaceScreen';
 import { MaintenanceNewScreen } from './screens/employee/MaintenanceNewScreen';
 import { MaintenanceDetailScreen } from './screens/employee/MaintenanceDetailScreen';
@@ -343,6 +344,7 @@ const AppNavigator: React.FC = () => {
               />
             )}
             {route.tab === 'attendance' && <AttendanceScreen />}
+            {route.tab === 'salary' && <SalaryScreen />}
             {route.tab === 'profile' && <ProfileScreen />}
           </>
         )}

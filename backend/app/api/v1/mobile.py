@@ -1,4 +1,5 @@
 import hashlib
+
 """Mobile release endpoints.
 
 GET /mobile/version is PUBLIC — an app that is too old to log in must
@@ -17,6 +18,7 @@ from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.apk_signing import signer_sha256
 from app.core.database import get_db
 from app.core.exceptions import AppError
 from app.core.logging import get_logger
@@ -49,6 +51,29 @@ class InvalidUpload(AppError):
 class StorageUnavailable(AppError):
     status_code = 502
     code = "STORAGE_UNAVAILABLE"
+
+
+class SignerMismatch(AppError):
+    status_code = 409
+    code = "SIGNER_MISMATCH"
+
+
+async def _stored_signer(download_url: str | None) -> str | None:
+    """Signer fingerprint of a self-hosted release binary — read from the
+    upload-time metadata stamp, else computed from the stored bytes.
+    None for external/missing binaries (nothing to compare against)."""
+    key = storage_key_from_url(download_url) if download_url else None
+    if not key:
+        return None
+    storage = get_storage()
+    meta = await storage.head(key)
+    if meta and meta.get("signer_sha256"):
+        return meta["signer_sha256"]
+    opened = await storage.open(key)
+    if opened is None:
+        return None
+    stream, _ct, _len = opened
+    return signer_sha256(b"".join([chunk async for chunk in stream()]))
 
 
 @router.get("/version", response_model=MobileVersionResponse)
@@ -212,13 +237,21 @@ async def upload_release_apk(
     request: Request,
     platform: str = Query(default="android", pattern=r"^[a-z]+$"),
     version_code: int = Query(ge=1),
+    allow_signer_change: bool = Query(default=False),
     file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db),
     _service: None = Depends(require_release_service),
 ):
     """Self-host a release binary — the CI pipeline uploads the EAS-built
     APK here and registers the returned URL as download_url, so devices
     fetch the update from our storage in one hop instead of chasing
-    expiring/redirecting third-party artifact URLs."""
+    expiring/redirecting third-party artifact URLs.
+
+    Signer gate: installed devices reject any update signed by a different
+    certificate (WRONG_SIGNATURE on device), so a binary whose signer
+    differs from the active release is refused with 409 unless the
+    operator explicitly passes allow_signer_change=true (deliberate key
+    rotation — every device must then reinstall manually)."""
     chunks: list[bytes] = []
     size = 0
     while chunk := await file.read(1024 * 1024):
@@ -230,13 +263,38 @@ async def upload_release_apk(
     if len(data) < 4 or data[:2] != b"PK":
         raise InvalidUpload("Not an APK — ZIP signature missing.")
     digest = hashlib.sha256(data).hexdigest()
+    signer = signer_sha256(data)
+    if signer is None:
+        raise InvalidUpload("APK carries no v2/v3 signature — sign the build first.")
+    active = await release_service.get_active_release(session, platform)
+    active_url = active.download_url if active else None
+    await session.close()
+    try:
+        previous_signer = await _stored_signer(active_url)
+    except Exception as exc:
+        logger.error("active release signer lookup failed: %s", exc)
+        raise StorageUnavailable(
+            "Could not read the active release to verify its signer."
+        ) from exc
+    if previous_signer and previous_signer != signer:
+        if not allow_signer_change:
+            raise SignerMismatch(
+                f"APK signer {signer[:16]}… differs from the active release "
+                f"signer {previous_signer[:16]}… — installed devices would "
+                "reject this update (WRONG_SIGNATURE). Rebuild with the pinned "
+                "signing key, or pass allow_signer_change=true for a deliberate "
+                "key rotation."
+            )
+        logger.warning("release signer change accepted platform=%s code=%s %s -> %s",
+                       platform, version_code, previous_signer, signer)
     # Flat key — object stores treat '/' fine but the local backend and
     # key-from-URL recovery both assume flat names.
     key = f"release-{platform}-{version_code}-{uuid.uuid4().hex[:8]}.apk"
     try:
         url = await get_storage().save(
             data, key, APK_CONTENT_TYPE,
-            metadata={"sha256": digest, "file_size_bytes": str(len(data))},
+            metadata={"sha256": digest, "file_size_bytes": str(len(data)),
+                      "signer_sha256": signer},
         )
     except AppError:
         raise
@@ -254,7 +312,8 @@ async def upload_release_apk(
     proto = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("x-forwarded-host", request.url.netloc)
     proxy_url = f"{proto}://{host}/api/v1/media/file/{key}"
-    return {"url": proxy_url, "key": key, "size_bytes": len(data)}
+    return {"url": proxy_url, "key": key, "size_bytes": len(data),
+            "signer_sha256": signer}
 
 
 @router.patch("/releases/{release_id}", response_model=MobileReleaseOut)

@@ -5,14 +5,13 @@ layer is thin routing over resolve_my_shift + my_shift_out. Covers
 assignment-in-force rules, inactive/expired/future windows, overnight
 and working-day flags, and own-employee scoping.
 """
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
 
 from app.dependencies.auth import Forbidden
 from app.models.employee import Employee
 from app.models.shift import EmployeeShiftAssignment, Shift
-from app.models.user import User, UserRole
 from app.schemas.attendance import my_shift_out
 from app.services.employee_shift import resolve_my_shift, shift_applies_on
 from app.services.rollover import current_operational_day
@@ -20,7 +19,7 @@ from app.services.rollover import current_operational_day
 
 def op_today() -> str:
     """Seed company's op-day (default 06:00 start)."""
-    return current_operational_day(datetime.now(timezone.utc), time(6, 0))
+    return current_operational_day(datetime.now(UTC), time(6, 0))
 
 
 def d(offset: int) -> str:

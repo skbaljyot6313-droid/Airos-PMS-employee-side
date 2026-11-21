@@ -4,14 +4,13 @@ operational-day boundaries, and DB-constraint invariants.
 Service-level suite (same convention as test_occupancy.py) — the HTTP
 layer is thin routing over AttendanceService.
 """
-import uuid
-from datetime import date as date_type, datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
+from datetime import date as date_type
 from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.dependencies.auth import Forbidden
 from app.models.attendance import (
@@ -25,7 +24,6 @@ from app.models.employee import Employee
 from app.models.property import Property
 from app.models.task import Task, TaskHistoryEvent
 from app.models.user import User, UserRole
-from app.models import Base
 from app.repositories.attendance import AttendanceRepository
 from app.services.attendance import AttendanceService, _aware
 from app.services.rollover import (
@@ -45,7 +43,7 @@ FUTURE_TO = "2999-01-12"
 
 def op_date_today() -> str:
     return current_operational_day(
-        datetime.now(timezone.utc), time(6, 0)
+        datetime.now(UTC), time(6, 0)
     )
 
 
@@ -191,11 +189,11 @@ async def test_start_auto_closes_stale_open_day(session, seeded):
         property_id=seeded["prop"].id, employee_id=emp.id,
         employee_name=emp.name, attendance_date="2026-01-01",
         status="present",
-        started_at=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
         breaks=[
             AttendanceBreak(
                 started_at=datetime(
-                    2026, 1, 1, 12, 0, tzinfo=timezone.utc
+                    2026, 1, 1, 12, 0, tzinfo=UTC
                 ),
             ),
         ],
@@ -212,7 +210,7 @@ async def test_start_auto_closes_stale_open_day(session, seeded):
     await session.refresh(stale, attribute_names=["breaks"])
     # Company day-start is 06:00 → op-day '2026-01-01' ends
     # 2026-01-02 06:00 IST = 2026-01-02 00:30 UTC.
-    expected_close = datetime(2026, 1, 2, 0, 30, tzinfo=timezone.utc)
+    expected_close = datetime(2026, 1, 2, 0, 30, tzinfo=UTC)
     assert _aware(stale.ended_at) == expected_close
     assert stale.work_seconds == int(
         (expected_close - _aware(stale.started_at)).total_seconds()
@@ -242,7 +240,7 @@ async def test_start_leaves_other_employees_stale_days(session, seeded):
         employee_id=seeded["employee2"].id,
         employee_name=seeded["employee2"].name,
         attendance_date="2026-01-01", status="present",
-        started_at=datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, 10, 0, tzinfo=UTC),
     )
     session.add(stale)
     await session.commit()
@@ -873,7 +871,7 @@ async def test_get_or_create_integrity_race(session, seeded, monkeypatch):
     existing = AttendanceDay(
         property_id=seeded["prop"].id, employee_id=seeded["employee"].id,
         employee_name="Worker One", attendance_date=op_date_today(),
-        status="present", started_at=datetime.now(timezone.utc),
+        status="present", started_at=datetime.now(UTC),
     )
     session.add(existing)
     await session.commit()
@@ -951,7 +949,7 @@ async def test_check_rejects_invalid_status(session, base_day):
 
 async def test_check_leave_day_never_started(session, base_day):
     session.add(base_day(
-        status="week_off", started_at=datetime.now(timezone.utc),
+        status="week_off", started_at=datetime.now(UTC),
     ))
     with pytest.raises(IntegrityError):
         await session.flush()
@@ -959,7 +957,7 @@ async def test_check_leave_day_never_started(session, base_day):
 
 async def test_check_end_needs_start(session, base_day):
     session.add(base_day(
-        status="present", ended_at=datetime.now(timezone.utc),
+        status="present", ended_at=datetime.now(UTC),
     ))
     with pytest.raises(IntegrityError):
         await session.flush()
@@ -982,11 +980,11 @@ async def test_uq_employee_date(session, base_day):
 async def test_one_open_session_per_employee(session, base_day):
     """uq_attendance_open_session — the concurrent /start backstop."""
     session.add(base_day(
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         attendance_date="2026-05-01",
     ))
     session.add(base_day(
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         attendance_date="2026-05-02",  # different date, same open session
     ))
     with pytest.raises(IntegrityError):
@@ -997,7 +995,7 @@ async def test_one_open_break_per_day(session, seeded):
     day = AttendanceDay(
         property_id=seeded["prop"].id, employee_id=seeded["employee"].id,
         employee_name="Worker One", attendance_date="2026-05-01",
-        status="present", started_at=datetime.now(timezone.utc),
+        status="present", started_at=datetime.now(UTC),
     )
     session.add(day)
     await session.flush()
@@ -1075,7 +1073,7 @@ async def test_expire_due_abandons_open_instance(session, seeded):
     task = Task(
         property_id=seeded["prop"].id, title="Cleaning", status="in_progress",
         task_type="repetitive",
-        expires_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+        expires_at=datetime.now(UTC) - timedelta(minutes=5),
     )
     session.add(task)
     await session.commit()
@@ -1100,12 +1098,12 @@ async def test_expire_due_leaves_submitted_and_open_window(session, seeded):
     submitted = Task(
         property_id=seeded["prop"].id, title="In review",
         status="submitted", task_type="repetitive",
-        expires_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+        expires_at=datetime.now(UTC) - timedelta(minutes=5),
     )
     live = Task(
         property_id=seeded["prop"].id, title="Still valid",
         status="in_progress", task_type="repetitive",
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
     )
     session.add_all([submitted, live])
     await session.commit()

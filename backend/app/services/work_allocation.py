@@ -12,14 +12,15 @@ duplicated.
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import exists, func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
-from app.models.attendance import AttendanceDay
+from app.domain.coverage import covers_area, covers_area_direct, covers_zone
+from app.models.attendance import AttendanceDay, on_duty
 from app.models.employee import Employee, employee_is_assignable
 from app.models.structure import Area, Zone
 from app.models.user import User
@@ -34,10 +35,11 @@ logger = get_logger(__name__)
 
 async def next_batch_number(session: AsyncSession) -> str:
     """WB-YYYY-NNNNN via a PostgreSQL sequence; max-scan fallback on SQLite."""
-    year = datetime.now(timezone.utc).year
+    year = datetime.now(UTC).year
     try:
-        res = await session.execute(text("SELECT nextval('work_batch_seq')"))
-        n = int(res.scalar_one())
+        async with session.begin_nested():  # see maintenance.next_ticket_number
+            res = await session.execute(text("SELECT nextval('work_batch_seq')"))
+            n = int(res.scalar_one())
     except Exception:
         res = await session.execute(
             select(func.count()).select_from(WorkAllocationBatch)
@@ -51,14 +53,15 @@ async def next_batch_numbers(session: AsyncSession, n: int) -> list[str]:
     fallback counts once and offsets — no per-number round trips."""
     if n <= 0:
         return []
-    year = datetime.now(timezone.utc).year
+    year = datetime.now(UTC).year
     try:
-        res = await session.execute(
-            text("SELECT nextval('work_batch_seq') "
-                 "FROM generate_series(1, :n)"),
-            {"n": n},
-        )
-        nums = [int(r[0]) for r in res.all()]
+        async with session.begin_nested():  # see maintenance.next_ticket_number
+            res = await session.execute(
+                text("SELECT nextval('work_batch_seq') "
+                     "FROM generate_series(1, :n)"),
+                {"n": n},
+            )
+            nums = [int(r[0]) for r in res.all()]
     except Exception:
         res = await session.execute(
             select(func.count()).select_from(WorkAllocationBatch)
@@ -174,14 +177,25 @@ class WorkAllocationService:
                 "Employee department is not eligible for this task type.",
                 field="employee_uid",
             )
+        if not await self.is_on_duty(emp.id, property_id):
+            raise ValidationErr(
+                "Employee is not on duty — they must start their workday "
+                "before receiving new work.",
+                field="employee_uid",
+            )
         return emp
+
+    async def is_on_duty(self, employee_id: uuid.UUID, property_id: uuid.UUID) -> bool:
+        op_date = await self._current_operational_date(property_id)
+        return bool(await self.session.scalar(select(on_duty(employee_id, op_date))))
 
     async def _current_operational_date(self, property_id: uuid.UUID) -> str:
         """This property's company op-day key for right now (IST)."""
         from app.models.company import Company
         from app.models.property import Property
         from app.services.rollover import (
-            current_operational_day, parse_day_start,
+            current_operational_day,
+            parse_day_start,
         )
         res = await self.session.execute(
             select(Company.operational_day_start)
@@ -189,7 +203,7 @@ class WorkAllocationService:
             .where(Property.id == property_id)
         )
         return current_operational_day(
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
             parse_day_start(res.scalar_one_or_none()),
         )
 
@@ -214,6 +228,9 @@ class WorkAllocationService:
                 AttendanceDay.status.in_(("week_off", "leave")),
             )
         ))
+        # Availability: only an employee who has started today's workday and
+        # is not on break receives new work (see models.attendance.on_duty).
+        filters.append(on_duty(Employee.id, op_date))
         if departments:
             filters.append(or_(*(
                 Employee.department.ilike(f"%{term}%")
@@ -268,7 +285,7 @@ class WorkAllocationService:
 
         zone_pool = (
             await self._employee_pool(
-                property_id, Employee.zone_id == zone_id,
+                property_id, covers_zone(zone_id),
                 manager_employee_id=manager_employee_id,
                 departments=departments,
             )
@@ -276,22 +293,16 @@ class WorkAllocationService:
         )
         if cover_area is not None and zone_id is None:
             # AREA-LEVEL task — pool = area-wide staff UNION the staff of
-            # every zone inside the area (single query via zone subselect).
+            # every zone inside the area, plus property-wide staff.
             area_pool = await self._employee_pool(
-                property_id,
-                or_(
-                    Employee.area_id == cover_area,
-                    Employee.zone_id.in_(
-                        select(Zone.id).where(Zone.area_id == cover_area)
-                    ),
-                ),
+                property_id, covers_area(cover_area),
                 manager_employee_id=manager_employee_id,
                 departments=departments,
             )
         else:
             area_pool = (
                 await self._employee_pool(
-                    property_id, Employee.area_id == cover_area,
+                    property_id, covers_area_direct(cover_area),
                     manager_employee_id=manager_employee_id,
                     departments=departments,
                 )
@@ -336,13 +347,17 @@ class WorkAllocationService:
         )
         state = res.scalar_one_or_none()
         if state is None:
-            state = ZoneAllocationState(property_id=property_id, zone_id=zone_id)
-            self.session.add(state)
+            new_state = ZoneAllocationState(property_id=property_id, zone_id=zone_id)
             try:
                 async with self.session.begin_nested():
+                    self.session.add(new_state)
                     await self.session.flush()
+                state = new_state
             except IntegrityError:
-                # Concurrent creator won — roll back the savepoint and lock theirs
+                # Concurrent creator won. The savepoint rolled back, but our
+                # pending row must not survive into the next autoflush.
+                if new_state in self.session:
+                    self.session.expunge(new_state)
                 res = await self.session.execute(
                     select(ZoneAllocationState)
                     .where(ZoneAllocationState.zone_id == zone_id)
@@ -655,7 +670,7 @@ class WorkAllocationService:
                 )
             if state is not None:
                 state.last_assigned_employee_id = employee.id
-                state.last_assigned_at = datetime.now(timezone.utc)
+                state.last_assigned_at = datetime.now(UTC)
                 state.version += 1
         if zone_id is None and zone_name is None:
             zone_name = area_name
@@ -893,7 +908,7 @@ class WorkAllocationService:
                 ent["assigned"] += 1
                 if ent["state"] is not None:
                     ent["state"].last_assigned_employee_id = employee.id
-                    ent["state"].last_assigned_at = datetime.now(timezone.utc)
+                    ent["state"].last_assigned_at = datetime.now(UTC)
                     ent["state"].version += 1
             zone_name = u.get("zone_name")
             if u.get("zone_id") is None and zone_name is None:

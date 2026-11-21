@@ -15,7 +15,8 @@ Note: the frontend's api client also understands FastAPI's native
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError, TimeoutError as PoolTimeoutError
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from app.core import metrics
 from app.core.config import settings

@@ -21,6 +21,17 @@ def appJson = new groovy.json.JsonSlurper()
 def appVersionName = appJson.expo.version
 def appVersionCode = appJson.expo.android.versionCode as Integer
 
+// Dev/debug signing identity — PINNED. Every installed build only accepts
+// updates signed by the same certificate (AppUpdatePlugin rejects others
+// with WRONG_SIGNATURE, and Android refuses them anyway). Gradle's default
+// ~/.android/debug.keystore is generated per machine/container/CI runner,
+// which silently changed the signer between releases 20 and 21. Builds now
+// sign with android/dev-debug.keystore (gitignored; CI materializes it from
+// a secret) — SHA-256 5A:CF:78:D3:…:79:B1 — or AIROS_DEV_KEYSTORE if set.
+def devKeystoreFile = System.getenv("AIROS_DEV_KEYSTORE") ?
+        file(System.getenv("AIROS_DEV_KEYSTORE")) :
+        rootProject.file("dev-debug.keystore")
+
 android {
     namespace "com.airos.staff"
     compileSdk rootProject.ext.compileSdkVersion
@@ -38,6 +49,14 @@ android {
         }
     }
     signingConfigs {
+        debug {
+            if (devKeystoreFile.exists()) {
+                storeFile devKeystoreFile
+                storePassword "android"
+                keyAlias "androiddebugkey"
+                keyPassword "android"
+            }
+        }
         release {
             if (keystorePropertiesFile.exists()) {
                 storeFile file(keystoreProperties['storeFile'])
@@ -55,6 +74,18 @@ android {
                 signingConfig signingConfigs.release
             }
         }
+    }
+}
+
+// Fail closed: a debug APK signed by a random per-machine key can never
+// update installed devices. Refuse to package one instead of shipping it.
+gradle.taskGraph.whenReady { graph ->
+    def packagesDebug = graph.allTasks.any { it.project == project && it.name == "packageDebug" }
+    if (packagesDebug && !devKeystoreFile.exists()) {
+        throw new GradleException(
+                "Pinned dev signing key missing: ${devKeystoreFile}. " +
+                "Restore android/dev-debug.keystore (or set AIROS_DEV_KEYSTORE) — " +
+                "building with a fresh debug key breaks in-app updates (WRONG_SIGNATURE).")
     }
 }
 

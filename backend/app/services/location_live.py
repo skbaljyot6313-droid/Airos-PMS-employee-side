@@ -20,11 +20,10 @@ never from the request body.
 Coordinates are never logged — only the employee id.
 """
 
-import json
 import math
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.core import centrifugo
 from app.core import redis as redis_core
@@ -209,10 +208,10 @@ async def post_current(user, payload: LocationUpdate) -> dict:
         else payload.heading
     )
     captured_iso = (
-        datetime.fromtimestamp(captured_ts, tz=timezone.utc).isoformat()
+        datetime.fromtimestamp(captured_ts, tz=UTC).isoformat()
     )
     received_iso = (
-        datetime.fromtimestamp(server_ts, tz=timezone.utc).isoformat()
+        datetime.fromtimestamp(server_ts, tz=UTC).isoformat()
     )
     fields = {
         "latitude": _num(payload.latitude),
@@ -237,7 +236,7 @@ async def post_current(user, payload: LocationUpdate) -> dict:
     if payload.source:
         fields["source"] = payload.source
 
-    day = datetime.fromtimestamp(captured_ts, tz=timezone.utc)
+    day = datetime.fromtimestamp(captured_ts, tz=UTC)
     hist_key = tracking.history_key(employee_id, day)
     gkey = tracking.geo_key(day)
     member = tracking.history_member(
@@ -338,10 +337,10 @@ def _ack(
         "accepted": True,
         "recorded": True,  # legacy contract for the installed app
         "received_at": datetime.fromtimestamp(
-            server_ts, tz=timezone.utc
+            server_ts, tz=UTC
         ).isoformat(),
         "location_timestamp": datetime.fromtimestamp(
-            captured_ts, tz=timezone.utc
+            captured_ts, tz=UTC
         ).isoformat(),
         "server_timestamp": server_ts,  # legacy
         "expires_in": settings.LOCATION_CURRENT_TTL_SECONDS,  # legacy
@@ -360,6 +359,15 @@ def _parse(raw: dict) -> dict:
             except (TypeError, ValueError):
                 out[name] = None
     return out
+
+
+def _is_fresh(server_ts: float | None, now: float | None = None) -> bool:
+    """A fix is live only while its server-receive age is inside the
+    freshness window — Redis retention alone never makes a fix live."""
+    if server_ts is None:
+        return False
+    current = time.time() if now is None else now
+    return current - server_ts <= settings.LOCATION_LIVE_MAX_AGE_SECONDS
 
 
 async def get_current(user) -> dict:
@@ -393,7 +401,8 @@ async def get_current(user) -> dict:
     age = time.time() - server_ts if server_ts is not None else None
     return {
         **base,
-        "is_live": True,
+        "is_live": _is_fresh(server_ts),
+        "is_stale": not _is_fresh(server_ts),
         "latitude": parsed["latitude"],
         "longitude": parsed["longitude"],
         "accuracy": parsed["accuracy"],
@@ -435,8 +444,8 @@ def _live_entry(member_id: str, raw: dict, parsed: dict) -> dict:
         "altitude_m": parsed["altitude"],
         "quality": raw.get("quality"),
         "source": raw.get("source"),
-        "is_live": True,
-        "is_stale": False,
+        "is_live": _is_fresh(parsed["server_timestamp"]),
+        "is_stale": not _is_fresh(parsed["server_timestamp"]),
     }
 
 
@@ -554,7 +563,7 @@ async def get_all_live(
         if not raw:
             continue  # hash expired between ZRANGE and HGETALL
         entry = _parsed_entry(member_id, raw)
-        if entry is not None:
+        if entry is not None and (entry["is_live"] or include_stale):
             locations.append(entry)
 
     logger.debug(

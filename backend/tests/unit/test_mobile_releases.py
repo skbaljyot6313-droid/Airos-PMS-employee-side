@@ -11,9 +11,13 @@ Safety under test:
   * unconfigured service key fails closed with 503
 """
 
+import hashlib
+import struct
+
 import httpx
 import pytest
 
+from app.core.apk_signing import signer_sha256
 from app.core.config import settings
 from app.core.database import get_db
 from app.main import app
@@ -187,13 +191,43 @@ async def test_patch_requires_service_key(api, service_key):
 # ---------------------------------------------------------------------------
 
 
+def _lp(b: bytes) -> bytes:
+    return struct.pack("<I", len(b)) + b
+
+
+def _signed_apk(cert: bytes, scheme_id: int = 0x7109871A) -> bytes:
+    """Minimal ZIP-shaped APK carrying a v2/v3 signing block whose first
+    signer certificate is `cert` — enough for the signer-identity read."""
+    signed_data = _lp(b"") + _lp(_lp(cert))
+    value = _lp(_lp(_lp(signed_data)))
+    pair = struct.pack("<Q", 4 + len(value)) + struct.pack("<I", scheme_id) + value
+    block_size = len(pair) + 24
+    block = (struct.pack("<Q", block_size) + pair
+             + struct.pack("<Q", block_size) + b"APK Sig Block 42")
+    head = b"PK\x03\x04" + b"\x00" * 26
+    cd_offset = len(head) + len(block)
+    central = b"PK\x01\x02" + b"\x00" * 42
+    eocd = (b"PK\x05\x06" + b"\x00" * 8 + struct.pack("<I", len(central))
+            + struct.pack("<I", cd_offset) + b"\x00\x00")
+    return head + block + central + eocd
+
+
+APK_KEY_A = _signed_apk(b"cert-A")
+APK_KEY_B = _signed_apk(b"cert-B")
+
+
 class _FakeStorage:
     def __init__(self):
         self.saved: dict[str, bytes] = {}
+        self.meta: dict[str, dict] = {}
 
     async def save(self, data: bytes, key: str, content_type: str, metadata: dict | None = None) -> str:
         self.saved[key] = data
+        self.meta[key] = dict(metadata or {})
         return f"https://storage.test/{key}"
+
+    async def head(self, key: str):
+        return self.meta.get(key) if key in self.saved else None
 
     async def delete(self, key: str) -> None:
         self.saved.pop(key, None)
@@ -212,22 +246,75 @@ class _FakeStorage:
 async def test_apk_upload_stores_binary(api, service_key, monkeypatch):
     fake = _FakeStorage()
     monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
-    res = await api.post(
-        f"{RELEASES_URL}/apk?platform=android&version_code=3",
-        files={
-            "file": (
-                "app.apk",
-                b"PK\x03\x04fake-apk-bytes",
-                "application/vnd.android.package-archive",
-            )
-        },
-        headers=_auth(),
-    )
+    res = await _upload(api, APK_KEY_A, code=3)
     assert res.status_code == 201
     body = res.json()
     assert body["url"].endswith(".apk")
     assert "release-android-3-" in body["key"]
     assert fake.saved[body["key"]].startswith(b"PK")
+    expected = hashlib.sha256(b"cert-A").hexdigest()
+    assert body["signer_sha256"] == expected
+    assert fake.meta[body["key"]]["signer_sha256"] == expected
+
+
+async def _upload(api, apk: bytes, code: int, extra: str = ""):
+    return await api.post(
+        f"{RELEASES_URL}/apk?platform=android&version_code={code}{extra}",
+        files={"file": ("app.apk", apk, "application/vnd.android.package-archive")},
+        headers=_auth(),
+    )
+
+
+async def _publish_stored(api, fake, apk: bytes, code: int, monkeypatch):
+    """Register a release whose binary lives in fake storage."""
+    monkeypatch.setattr(settings, "S3_BUCKET", "b")
+    monkeypatch.setattr(settings, "S3_PUBLIC_BASE_URL", "https://storage.test")
+    key = f"release-android-{code}-deadbeef.apk"
+    fake.saved[key] = apk  # legacy object: no signer metadata stamp
+    res = await api.post(
+        RELEASES_URL,
+        json=_release(version=f"1.0.{code}", code=code,
+                      url=f"https://storage.test/{key}"),
+        headers=_auth(),
+    )
+    assert res.status_code == 201
+
+
+def test_signer_identity_reads_v2_and_v3():
+    assert signer_sha256(APK_KEY_A) == hashlib.sha256(b"cert-A").hexdigest()
+    v3 = _signed_apk(b"cert-C", scheme_id=0xF05368C0)
+    assert signer_sha256(v3) == hashlib.sha256(b"cert-C").hexdigest()
+    assert signer_sha256(b"PK\x03\x04unsigned") is None
+
+
+async def test_apk_upload_rejects_unsigned(api, service_key, monkeypatch):
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: _FakeStorage())
+    res = await _upload(api, b"PK\x03\x04fake-apk-bytes", code=3)
+    assert res.status_code == 422
+
+
+async def test_apk_upload_rejects_signer_change(api, service_key, monkeypatch):
+    """The release-21 incident: a binary signed by a different key than the
+    active release can never install over it — refuse it at upload."""
+    fake = _FakeStorage()
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
+    await _publish_stored(api, fake, APK_KEY_A, code=20, monkeypatch=monkeypatch)
+
+    res = await _upload(api, APK_KEY_B, code=21)
+    assert res.status_code == 409
+    assert res.json()["error"]["code"] == "SIGNER_MISMATCH"
+    assert not any(k.startswith("release-android-21-") for k in fake.saved)
+
+    same = await _upload(api, APK_KEY_A, code=21)
+    assert same.status_code == 201
+
+
+async def test_apk_upload_allows_explicit_key_rotation(api, service_key, monkeypatch):
+    fake = _FakeStorage()
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
+    await _publish_stored(api, fake, APK_KEY_A, code=20, monkeypatch=monkeypatch)
+    res = await _upload(api, APK_KEY_B, code=21, extra="&allow_signer_change=true")
+    assert res.status_code == 201
 
 
 async def test_apk_upload_rejects_non_apk(api, service_key):
