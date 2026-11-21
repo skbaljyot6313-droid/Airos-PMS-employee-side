@@ -65,7 +65,7 @@ jobs:
       - name: Assemble debug APK (pinned dev keystore)
         if: inputs.build_type == 'debug'
         working-directory: frontend/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: bash ./gradlew assembleDebug --no-daemon
 
       # Release builds need a keystore provided via secrets:
       #   KEYSTORE_BASE64, KEYSTORE_STORE_PASSWORD, KEYSTORE_KEY_ALIAS,
@@ -85,7 +85,7 @@ jobs:
       - name: Assemble release APK (signed)
         if: inputs.build_type == 'release'
         working-directory: frontend/android
-        run: ./gradlew assembleRelease --no-daemon
+        run: bash ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
