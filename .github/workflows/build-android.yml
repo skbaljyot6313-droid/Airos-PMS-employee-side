@@ -10,6 +10,11 @@ on:
         default: "debug"
         type: choice
         options: [debug, release]
+      api_url:
+        description: "VITE_API_URL baked into the bundle"
+        required: true
+        default: "https://airos-eb-api-dev-94363806721.asia-south1.run.app/api/v1"
+        type: string
 
 jobs:
   apk:
@@ -40,7 +45,7 @@ jobs:
       - name: Build web bundle
         run: npm run build
         env:
-          VITE_API_URL: http://localhost:8000/api/v1
+          VITE_API_URL: ${{ inputs.api_url }}
 
       - name: Sync Capacitor Android project
         run: npx cap sync android
