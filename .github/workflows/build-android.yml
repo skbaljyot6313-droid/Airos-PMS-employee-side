@@ -50,11 +50,10 @@ jobs:
       - name: Sync Capacitor Android project
         run: npx cap sync android
 
-      # Pinned dev signing key — a runner-generated debug key can never
-      # update installed devices (WRONG_SIGNATURE). Secret holds
-      # base64 of frontend/android/dev-debug.keystore.
-      - name: Restore pinned dev signing key
-        if: inputs.build_type == 'debug'
+      # ONE signing identity for every installable APK (debug and release).
+      # A second key would be a different signer and break in-app updates
+      # (WRONG_SIGNATURE). Secret holds base64 of frontend/android/dev-debug.keystore.
+      - name: Restore pinned signing key
         working-directory: frontend/android
         env:
           DEV_DEBUG_KEYSTORE_BASE64: ${{ secrets.DEV_DEBUG_KEYSTORE_BASE64 }}
@@ -62,30 +61,18 @@ jobs:
           test -n "$DEV_DEBUG_KEYSTORE_BASE64" || { echo "::error::secret DEV_DEBUG_KEYSTORE_BASE64 is not set"; exit 1; }
           echo "$DEV_DEBUG_KEYSTORE_BASE64" | base64 -d > dev-debug.keystore
 
-      - name: Assemble debug APK (pinned dev keystore)
-        if: inputs.build_type == 'debug'
+      - name: Assemble APK (pinned signing key)
         working-directory: frontend/android
-        run: bash ./gradlew assembleDebug --no-daemon
+        run: bash ./gradlew assemble${{ inputs.build_type == 'release' && 'Release' || 'Debug' }} --no-daemon
 
-      # Release builds need a keystore provided via secrets:
-      #   KEYSTORE_BASE64, KEYSTORE_STORE_PASSWORD, KEYSTORE_KEY_ALIAS,
-      #   KEYSTORE_KEY_PASSWORD
-      - name: Restore release keystore
-        if: inputs.build_type == 'release'
+      - name: Verify APK signer is the pinned identity
         working-directory: frontend/android
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/airos-employee-release.keystore
-          cat > keystore.properties <<EOF
-          storeFile=airos-employee-release.keystore
-          storePassword=${{ secrets.KEYSTORE_STORE_PASSWORD }}
-          keyAlias=${{ secrets.KEYSTORE_KEY_ALIAS }}
-          keyPassword=${{ secrets.KEYSTORE_KEY_PASSWORD }}
-          EOF
-
-      - name: Assemble release APK (signed)
-        if: inputs.build_type == 'release'
-        working-directory: frontend/android
-        run: bash ./gradlew assembleRelease --no-daemon
+          APK=app/build/outputs/apk/${{ inputs.build_type }}/app-${{ inputs.build_type }}.apk
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | \
+            grep -q "SHA-256 digest: 5acf78d3ff65781af7fcd667b081ba107bc7d142f87fe08660ff8859e34379b1" || \
+            { echo "::error::APK is not signed by the pinned identity (5acf78…) — do not distribute"; exit 1; }
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

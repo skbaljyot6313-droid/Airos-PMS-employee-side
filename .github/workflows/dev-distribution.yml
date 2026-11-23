@@ -89,6 +89,9 @@ jobs:
           test -f "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | \
             grep -E "package: name='com.theairco.airos.employee' versionCode='[0-9]+' versionName="
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | \
+            grep -q "SHA-256 digest: 5acf78d3ff65781af7fcd667b081ba107bc7d142f87fe08660ff8859e34379b1" || \
+            { echo "::error::APK is not signed by the pinned identity (5acf78…) — do not distribute"; exit 1; }
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

@@ -335,6 +335,13 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   Override path via `AIROS_DEV_KEYSTORE`. `app/build.gradle` FAILS
   `packageDebug` if the keystore is missing — never "fix" that by
   deleting the check. CI restores it from secret `DEV_DEBUG_KEYSTORE_BASE64`.
+- ONE signing identity for all installable APKs: `buildTypes.release` signs
+  with the same pinned `signingConfigs.debug` keystore (the `KEYSTORE_*`
+  release keystore and `keystore.properties` path were removed). Both
+  `build-android.yml` and `dev-distribution.yml` fail the build unless
+  `apksigner verify --print-certs` reports `5acf78d3…`. Back up
+  `frontend/android/dev-debug.keystore` (and the `DEV_DEBUG_KEYSTORE_BASE64`
+  secret) — losing it means every device must reinstall again.
 - `POST /mobile/releases/apk` rejects unsigned APKs (422) and a signer
   different from the active release (409 `SIGNER_MISMATCH`) unless
   `allow_signer_change=true` (deliberate rotation = every device reinstalls).
