@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import inspect as sa_inspect
 
 from app.core.storage import proxy_media_url
+from app.domain.schedule_conflicts import is_overdue as is_task_overdue
 from app.models.employee import Employee
 from app.models.property import Property
 from app.models.structure import Area, Bed, Dorm, Room, Washroom, Zone
@@ -444,6 +445,8 @@ def task_out(t: Task) -> dict:
         "recurrence_end_date": t.recurrence_end_date,
         "recurrence_window_end": t.recurrence_window_end,
         "created_by_name": t.created_by_name,
+        "created_by_role": t.created_by_role,
+        "is_overdue": is_task_overdue(t),
         "recurrence": t.recurrence,
         "recurrence_interval_days": t.recurrence_interval_days,
         "series_id": str(t.series_id) if t.series_id else None,

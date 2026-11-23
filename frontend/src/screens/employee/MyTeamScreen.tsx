@@ -409,7 +409,7 @@ export const MyTeamScreen: React.FC<Props> = ({ onOpenTask }) => {
 
   const workRow = (task: TaskWire) => {
     const day = taskDay(task);
-    const overdue = OPEN.has(task.status) && day != null && day < today;
+    const overdue = task.is_overdue ?? (OPEN.has(task.status) && day != null && day < today);
     const terminal = ['submitted', 'completed', 'cancelled'].includes(task.status);
     return (
       <div key={task.task_uid}

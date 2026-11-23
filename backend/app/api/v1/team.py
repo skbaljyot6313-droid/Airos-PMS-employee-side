@@ -12,8 +12,7 @@ departments. Review authority (approve/reject submissions) stays with
 Super Admin staff — no approval endpoints live here.
 """
 import uuid
-from datetime import UTC, datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
@@ -23,6 +22,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.exceptions import AppError
 from app.dependencies.auth import get_current_user
+from app.domain.schedule_conflicts import (
+    IST,
+    OPEN_STATUSES,
+    assignment_conflicts,
+    hm as _hm,
+    parse_dt as _parse_dt,
+    task_day,
+)
 from app.models.department import Department
 from app.models.employee import Employee
 from app.models.task import Task, TaskHistoryEvent
@@ -31,9 +38,6 @@ from app.schemas.workspace import task_out
 from app.services.task_resources import attach_task_resources
 
 router = APIRouter(prefix="/team", tags=["team"])
-
-IST = ZoneInfo("Asia/Kolkata")
-OPEN_STATUSES = ("pending", "assigned", "in_progress", "reopened", "scheduled")
 
 
 class _Forbidden(AppError):
@@ -202,90 +206,14 @@ class TeamWorkIn(BaseModel):
     allow_conflicts: bool = False
 
 
-def _hm(value: str | None) -> int | None:
-    """'HH:MM' -> minutes since midnight; None/garbage -> None."""
-    if not value:
-        return None
-    try:
-        h, m = value.strip().split(":")[:2]
-        return int(h) * 60 + int(m)
-    except (ValueError, AttributeError):
-        return None
-
-
-def _task_day(task: Task) -> str | None:
-    if task.scheduled_for is not None:
-        return task.scheduled_for.astimezone(IST).date().isoformat()
-    return (task.due_date or "")[:10] or None
-
-
-def _task_window(task: Task) -> tuple[int | None, int | None]:
-    """(start, end) in minutes — scheduled_for/due_time when explicit
-    window fields are absent; end None = open-ended."""
-    start = _hm(task.start_time) or _hm(task.due_time)
-    if start is None and task.scheduled_for is not None:
-        local = task.scheduled_for.astimezone(IST)
-        start = local.hour * 60 + local.minute
-    return start, _hm(task.end_time)
-
-
 async def _assignment_conflicts(
     session: AsyncSession,
     employees: dict[uuid.UUID, Employee],
-    *,
-    target_day: str | None,
-    start: int | None,
-    end: int | None,
-    title: str,
-    property_id: uuid.UUID,
-    exclude_task_ids: set[uuid.UUID] | None = None,
+    **kwargs,
 ) -> list[dict]:
-    """Overlaps + exact duplicates for the proposed window, per assignee.
-
-    Window-less tasks (no start time) can only conflict as duplicates —
-    a row without a window never blocks a new assignment."""
-    if not employees:
-        return []
-    q = select(Task).where(
-        Task.property_id == property_id,
-        Task.employee_id.in_(list(employees)),
-        Task.status.in_(OPEN_STATUSES),
-    )
-    if exclude_task_ids:
-        q = q.where(~Task.id.in_(exclude_task_ids))
-    rows = (await session.execute(q)).scalars().all()
-    conflicts: list[dict] = []
-    norm = title.strip().lower()
-    for task in rows:
-        if target_day and _task_day(task) != target_day:
-            continue
-        t_start, t_end = _task_window(task)
-        duplicate = (
-            task.title.strip().lower() == norm
-            and (target_day is None or _task_day(task) == target_day)
-        )
-        overlap = (
-            start is not None
-            and t_start is not None
-            and (end is None or t_start < end)
-            and (t_end is None or start < t_end)
-        )
-        if not (duplicate or overlap):
-            continue
-        emp = employees.get(task.employee_id)
-        conflicts.append({
-            "employee_uid": str(task.employee_id),
-            "employee_name": emp.name if emp else None,
-            "task_uid": str(task.id),
-            "title": task.title,
-            "day": _task_day(task),
-            "window": (
-                f"{task.start_time or task.due_time or ''}"
-                f"–{task.end_time or ''}"
-            ).strip("–") or None,
-            "kind": "duplicate" if duplicate else "overlap",
-        })
-    return conflicts
+    """Thin wrapper over the shared scheduling rules (domain module is
+    byte-identical with the Super Admin copy)."""
+    return await assignment_conflicts(session, employees, **kwargs)
 
 
 class _ScheduleConflict(AppError):
@@ -296,18 +224,6 @@ class _ScheduleConflict(AppError):
 
 def _conflict_error(conflicts: list[dict]) -> AppError:
     return _ScheduleConflict(details={"conflicts": conflicts})
-
-
-def _parse_dt(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=IST).astimezone(UTC)
-    return dt.astimezone(UTC)
 
 
 @router.post("/work", status_code=status.HTTP_201_CREATED)
@@ -401,6 +317,7 @@ async def allocate_work(
             break_end_time=payload.break_end_time,
             estimated_minutes=payload.estimated_minutes,
             created_by_name=user.name,
+            created_by_role=user.role.value if user.role else None,
             allocation_batch_id=batch_id,
             allocation_status="manually_assigned",
             allocation_method="manual",
@@ -487,6 +404,11 @@ async def update_work(
     if not changes:
         return task_out(task)
 
+    _SCHEDULE_KEYS = (
+        "due_date", "due_time", "scheduled_for",
+        "start_time", "end_time", "break_start_time", "break_end_time")
+    schedule_snapshot = {f: getattr(task, f) for f in _SCHEDULE_KEYS}
+
     if payload.zone_uid is not None:
         from app.models.structure import Zone
         z = await session.get(Zone, payload.zone_uid)
@@ -539,9 +461,25 @@ async def update_work(
             if str(c.get("title", "")).strip()
         ] or None
 
+    schedule_changed = any(
+        getattr(task, f) != schedule_snapshot[f] for f in _SCHEDULE_KEYS)
     session.add(TaskHistoryEvent(
         task_id=task.id, type="updated", actor_name=user.name,
-        note="Assignment updated"))
+        note="Assignment rescheduled" if schedule_changed
+             else "Assignment updated"))
+    if schedule_changed and task.employee_id:
+        from app.services.notifications import NotificationService
+        day = task_day(task)
+        await NotificationService(session).notify(
+            employee_id=task.employee_id,
+            property_id=task.property_id,
+            type="task_rescheduled",
+            title=f"Rescheduled: {task.title[:80]}",
+            body=f"{user.name} rescheduled “{task.title[:110]}”"
+                 + (f" to {day}" if day else ""),
+            task_id=task.id,
+            employee_name=task.assigned_to_name,
+        )
     await session.commit()
     from app.services.task import TaskService
     TaskService(session)._emit_task(task, "task.updated")

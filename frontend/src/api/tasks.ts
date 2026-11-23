@@ -208,6 +208,8 @@ export const mapTask = (t: TaskWire, zoneNames: Map<string, string>): Task => {
     break_end_time: t.break_end_time ?? null,
     estimated_minutes: t.estimated_minutes ?? null,
     department_name: t.department_name ?? null,
+    is_overdue: t.is_overdue ?? null,
+    created_by_role: t.created_by_role ?? null,
     expires_at: t.expires_at ?? null,
     completed_at: t.completed_at ?? t.abandoned_at ?? latestTerminalAt(history),
     instructions: t.description ?? null,

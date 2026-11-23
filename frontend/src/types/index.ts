@@ -181,6 +181,11 @@ export interface Task {
   break_end_time?: string | null;
   estimated_minutes?: number | null;
   department_name?: string | null;
+  /** Server-computed overdue flag — authoritative; screens must not
+   *  re-derive it from client clocks when present. */
+  is_overdue?: boolean | null;
+  /** Which side created the assignment ('super_admin' | 'department_manager' …). */
+  created_by_role?: string | null;
   expires_at?: string | null;
   /** ISO timestamp when the task reached a terminal (done-bucket) state. */
   completed_at?: string | null;
@@ -448,6 +453,7 @@ export type StaffNotificationType =
   | 'task_assigned'
   | 'task_reassigned'
   | 'task_cancelled'
+  | 'task_rescheduled'
   | 'task_due_soon'
   | 'task_overdue'
   | 'submission_approved'

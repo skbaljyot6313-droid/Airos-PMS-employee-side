@@ -148,7 +148,7 @@ export const CalendarScreen: React.FC<Props> = ({ onOpenTask }) => {
 
   const row = (task: Task) => {
     const day = taskDay(task);
-    const overdue = UPCOMING.has(task.status) && day != null && day < today;
+    const overdue = task.is_overdue ?? (UPCOMING.has(task.status) && day != null && day < today);
     return (
       <button
         key={task.id}

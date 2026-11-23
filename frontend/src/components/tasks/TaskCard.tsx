@@ -53,11 +53,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
     () => getLocalizedTask(task, taskTextLanguage(i18n.language)),
     [task, i18n.language],
   );
-  // Overdue: backend status or a clock-time due in the past, still actionable
+  // Overdue: server-computed flag when present; fall back to status or a
+  // clock-time due in the past, still actionable.
   const dueTime = task.due_at ? new Date(task.due_at).getTime() : null;
   const isOverdue =
-    task.status === 'overdue' ||
-    (!!dueTime && dueTime < Date.now() && !['completed', 'cancelled', 'abandoned', 'submitted'].includes(task.status));
+    task.is_overdue ??
+    (task.status === 'overdue' ||
+      (!!dueTime && dueTime < Date.now() && !['completed', 'cancelled', 'abandoned', 'submitted'].includes(task.status)));
 
   const dueDate = task.due_at ? new Date(task.due_at) : task.due_date ? new Date(`${task.due_date}T00:00:00`) : null;
   const isToday = !!dueDate && new Date().toDateString() === dueDate.toDateString();

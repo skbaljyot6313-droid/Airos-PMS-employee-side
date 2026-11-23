@@ -178,6 +178,10 @@ export interface TaskWire {
   estimated_minutes: number | null;
   department_id: string | null;
   department_name: string | null;
+  /** Server-computed overdue flag (scheduled end passed, still open). */
+  is_overdue?: boolean | null;
+  /** Creator's role — 'super_admin' | 'department_manager' | … */
+  created_by_role?: string | null;
   recurrence_start_date: string | null;
   recurrence_end_date: string | null;
   recurrence_window_end: string | null;

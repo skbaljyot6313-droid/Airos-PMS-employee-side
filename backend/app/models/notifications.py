@@ -40,6 +40,7 @@ NOTIFICATION_TYPES = (
     "task_assigned",
     "task_reassigned",
     "task_cancelled",
+    "task_rescheduled",
     "task_due_soon",
     "task_overdue",
     "submission_approved",

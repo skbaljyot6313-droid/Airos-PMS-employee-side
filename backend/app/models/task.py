@@ -131,6 +131,10 @@ class Task(Base):
     recurrence_end_date: Mapped[str | None] = mapped_column(String(64), nullable=True)
     recurrence_window_end: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Actor role at creation (super_admin | property_manager |
+    # department_manager | …) — lets every interface distinguish
+    # Super-Admin-created work from Department-Head-created work.
+    created_by_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
