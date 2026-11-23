@@ -18,7 +18,7 @@ const PriorityMark: React.FC<{ priority: Task['priority'] }> = ({ priority }) =>
   const { t } = useTranslation();
   if (priority === 'critical') {
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-dng">
+      <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-dng">
         <AlertOctagon className="w-3 h-3" />
         {t('priority.critical')}
       </span>
@@ -26,7 +26,7 @@ const PriorityMark: React.FC<{ priority: Task['priority'] }> = ({ priority }) =>
   }
   if (priority === 'high' || priority === 'urgent') {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-warn">
+      <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-warn">
         <ArrowUp className="w-3 h-3" />
         {t('priority.high')}
       </span>
@@ -34,7 +34,7 @@ const PriorityMark: React.FC<{ priority: Task['priority'] }> = ({ priority }) =>
   }
   if (priority === 'medium') {
     return (
-      <span className="text-[10px] font-medium text-mute">
+      <span className="text-[9px] font-medium text-mute">
         {t('priority.medium')}
       </span>
     );
@@ -86,7 +86,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
     >
       {/* Level 1 — category + priority */}
       <div className="flex items-center justify-between gap-2 mb-1">
-        <span className="text-[10px] font-semibold tracking-[0.08em] uppercase text-mute">
+        <span className="text-[9px] font-semibold tracking-[0.08em] uppercase text-mute">
           {task.category}
         </span>
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -96,7 +96,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
       </div>
 
       {/* Level 2 — task title (localized) */}
-      <h3 className="text-[15px] font-semibold text-ink leading-snug mb-1.5 font-['Space_Grotesk'] line-clamp-2">
+      <h3 className="text-[12px] font-semibold text-ink leading-snug mb-1.5 font-['Satoshi'] line-clamp-2">
         {localized.title}
       </h3>
 

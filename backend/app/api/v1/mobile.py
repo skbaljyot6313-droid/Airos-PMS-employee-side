@@ -1,4 +1,5 @@
 import hashlib
+import time
 
 """Mobile release endpoints.
 
@@ -76,6 +77,30 @@ async def _stored_signer(download_url: str | None) -> str | None:
     return signer_sha256(b"".join([chunk async for chunk in stream()]))
 
 
+# Signer resolution may mean pulling the whole release binary (legacy
+# objects predate the upload-time metadata stamp) — cache per URL.
+_SIGNER_CACHE_TTL_S = 900
+_signer_cache: dict[str, tuple[float, str | None]] = {}
+
+
+async def _cached_signer(download_url: str | None) -> str | None:
+    if not download_url:
+        return None
+    hit = _signer_cache.get(download_url)
+    if hit and hit[0] > time.monotonic():
+        return hit[1]
+    try:
+        signer = await _stored_signer(download_url)
+    except Exception as exc:
+        logger.error("release signer lookup failed url=%s: %s",
+                     download_url, exc)
+        signer = None
+    _signer_cache[download_url] = (
+        time.monotonic() + _SIGNER_CACHE_TTL_S, signer,
+    )
+    return signer
+
+
 @router.get("/version", response_model=MobileVersionResponse)
 async def get_version(
     platform: str = "android",
@@ -99,9 +124,38 @@ async def get_version(
                 size = int(raw) if raw else None
         except Exception:
             pass  # storage hiccup must never break the version check
-    update_available = mandatory = None
+    update_available = mandatory = update_compatible = None
+    incompatible_reason = installed_signer = latest_signer = None
     if installed_version_code is not None:
         update_available = release.version_code > installed_version_code
+        if update_available:
+            # Android refuses an update signed by a different certificate
+            # (WRONG_SIGNATURE) — never advertise such a release as an
+            # installable update. Signers resolve from stored object
+            # metadata (or the binary itself for legacy objects); None on
+            # either side means "unknown" and the device's native signer
+            # check remains the gate.
+            latest_signer = await _cached_signer(release.download_url)
+            installed_rel = await release_service.get_release_by_code(
+                session, platform, installed_version_code
+            )
+            if installed_rel is not None:
+                installed_signer = await _cached_signer(
+                    installed_rel.download_url
+                )
+            if latest_signer and installed_signer:
+                update_compatible = latest_signer == installed_signer
+                if not update_compatible:
+                    incompatible_reason = "SIGNER_MISMATCH"
+                    update_available = False
+                    logger.warning(
+                        "withholding incompatible update: installed "
+                        "code=%s signer=%s latest code=%s signer=%s",
+                        installed_version_code, installed_signer,
+                        release.version_code, latest_signer,
+                    )
+        # Never force a gate the device cannot pass — mandatory is only
+        # meaningful while an installable update exists.
         mandatory = bool(
             update_available
             and (release.force_update
@@ -124,6 +178,10 @@ async def get_version(
         installed_version_code=installed_version_code,
         update_available=update_available,
         mandatory_update=mandatory,
+        update_compatible=update_compatible,
+        incompatibility_reason=incompatible_reason,
+        signer_sha256=latest_signer,
+        installed_signer_sha256=installed_signer,
     )
 
 

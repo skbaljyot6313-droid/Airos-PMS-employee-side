@@ -47,7 +47,7 @@ export const PriorityBadge: React.FC<PriorityBadgeProps> = ({ priority, size = '
   return (
     <span
       className={`inline-flex items-center gap-1 font-medium rounded-md ${current.bg} ${current.text} ${
-        isSm ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-xs'
+        isSm ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-0.5 text-xs'
       }`}
     >
       {current.icon}

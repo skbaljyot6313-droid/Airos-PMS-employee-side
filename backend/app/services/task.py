@@ -246,15 +246,19 @@ class TaskService:
             from app.dependencies.auth import Forbidden
 
             raise Forbidden()
-        # Surface the template's checklist + evidence rules on the detail
-        # payload — the list stays slim; clients render what the server
-        # resolves (mirrors _resolved_area_id).
+        # Surface the checklist + evidence rules on the detail payload —
+        # a task's own checklist (department-head allocated work) takes
+        # precedence over the linked template's; verification still comes
+        # from the template. Mirrors _resolved_area_id and the SA copy.
+        if task.checklist:
+            task._checklist = task.checklist
         if task.template_id:
             from app.models.template import WorkTemplate
 
             tpl = await self.session.get(WorkTemplate, task.template_id)
             if tpl:
-                task._checklist = tpl.checklist or []
+                if not task.checklist:
+                    task._checklist = tpl.checklist or []
                 task._verification = tpl.verification or {}
         return task
 

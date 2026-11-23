@@ -128,10 +128,10 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
         <div className="px-4 pt-3 pb-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <span className="text-[11px] font-normal text-mute block">
+              <span className="text-[9px] font-normal text-mute block">
                 {greeting}, {firstName}
               </span>
-              <h1 className="text-[22px] font-bold tracking-[-0.02em] text-ink font-['Space_Grotesk'] leading-tight">
+              <h1 className="text-[17px] font-bold tracking-[-0.02em] text-ink font-['Satoshi'] leading-tight">
                 {t('tasks.yourTasks')}
               </h1>
             </div>
@@ -147,7 +147,7 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
           </div>
 
           {/* Property · zone metadata — single quiet context line */}
-          <div className="flex items-center gap-1.5 text-[11px] text-sub mt-1 min-w-0">
+          <div className="flex items-center gap-1.5 text-[9px] text-sub mt-1 min-w-0">
             <Building2 className="w-3 h-3 text-mute flex-shrink-0" />
             <span className="font-medium text-ink truncate">
               {company?.brand_name || company?.name || t('tasks.company')}
@@ -174,12 +174,12 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
                 role="tab"
                 aria-selected={active}
                 onClick={() => setActiveBucket(b.id)}
-                className={`relative flex-1 px-2 pb-2 pt-1 text-[11px] transition-colors flex items-center justify-center gap-1.5 ${
+                className={`relative flex-1 px-2 pb-2 pt-1 text-[9px] transition-colors flex items-center justify-center gap-1.5 ${
                   active ? 'text-ink font-semibold' : 'text-mute font-medium hover:text-sub'
                 }`}
               >
                 <span>{b.label}</span>
-                <span className={`text-[10px] tabular-nums font-medium ${active ? 'text-acc' : 'text-mute'}`}>
+                <span className={`text-[9px] tabular-nums font-medium ${active ? 'text-acc' : 'text-mute'}`}>
                   {b.count}
                 </span>
                 <span

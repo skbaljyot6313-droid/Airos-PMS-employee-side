@@ -5,39 +5,39 @@
 
 export const colors = {
   // Primary operational green
-  primary: '#33B059',
-  primaryDark: '#278B46',
-  primaryLight: '#E8F7ED',
+  primary: '#800020',
+  primaryDark: '#800020',
+  primaryLight: '#F7E9EE',
   primaryMuted: '#D0EED9',
 
   // Dark palette
-  dark: '#20292C',
+  dark: '#0D1C42',
   deepBackground: '#121517',
   secondaryDark: '#0F171A',
   softDark: '#151314',
 
   // Surfaces & text (light surface preference)
-  background: '#F7F8F6',
+  background: '#FFFCFA',
   surface: '#FFFFFF',
-  surfaceSubtle: '#F0F2F1',
-  textPrimary: '#20292C',
-  textSecondary: '#667174',
-  textMuted: '#8D999C',
-  border: '#E4E8E6',
-  borderDark: '#D2D8D6',
+  surfaceSubtle: '#F6F4F2',
+  textPrimary: '#0D1C42',
+  textSecondary: '#667085',
+  textMuted: '#98A2B3',
+  border: '#E7E5E4',
+  borderDark: '#CDC9C7',
 
   // Functional semantics
-  success: '#33B059',
-  successLight: '#E8F7ED',
+  success: '#16865B',
+  successLight: '#F7E9EE',
   warning: '#D89B28',
-  warningLight: '#FDF6E8',
-  error: '#D9534F',
-  errorLight: '#FCEBEA',
+  warningLight: '#FDF3E2',
+  error: '#D64545',
+  errorLight: '#FAEBEB',
   info: '#4D7CFE',
-  infoLight: '#EEF3FF',
+  infoLight: '#EAF1FB',
 
   // Overdue
-  overdue: '#D9534F',
+  overdue: '#D64545',
   overdueBg: '#FFF1F0',
 } as const;
 

@@ -22,14 +22,19 @@ import { getMobileVersion, MobileVersionInfo } from '../api/mobile';
 import { NativeUpdate } from './updateInstaller';
 
 const LAST_CHECK_KEY = 'airos_update_last_check';
+// Per-release flag set after a native WRONG_SIGNATURE rejection — such an
+// update can NEVER install, so it is never offered or downloaded again.
+const SIG_BLOCK_PREFIX = 'airos_update_sigblock_';
 // Resume checks are throttled to every 4h; app-start and login checks are
 // always forced, so a freshly published release is discovered on the next
 // cold start regardless of when the last check ran.
 const THROTTLE_MS = 4 * 60 * 60 * 1000;
 
 export interface UpdateState {
-  kind: 'none' | 'optional' | 'required';
+  kind: 'none' | 'optional' | 'required' | 'blocked';
   info: MobileVersionInfo | null;
+  /** The installed build — lets the dialog show "x.y.z → a.b.c". */
+  installed?: { version: string; versionCode: number } | null;
 }
 
 const NONE: UpdateState = { kind: 'none', info: null };
@@ -46,7 +51,8 @@ export type UpdateDiag =
   | 'UPDATE_PARSE_ERROR'
   | 'NO_UPDATE'
   | 'OPTIONAL_UPDATE'
-  | 'FORCED_UPDATE';
+  | 'FORCED_UPDATE'
+  | 'BLOCKED_UPDATE';
 let lastDiag: UpdateDiag = 'IDLE';
 export const getUpdateDiag = (): UpdateDiag => lastDiag;
 
@@ -71,11 +77,39 @@ export function getUpdateState(): UpdateState {
   return state;
 }
 
+/** True when this release is recorded as uninstallable on this device —
+ *  either the server resolved both signers and they differ, or a previous
+ *  download was already rejected by the native WRONG_SIGNATURE gate. */
+export function updateBlocked(info: MobileVersionInfo): boolean {
+  if (info.update_compatible === false) return true;
+  try {
+    return (
+      localStorage.getItem(
+        `${SIG_BLOCK_PREFIX}${info.latest_version_code}`,
+      ) === '1'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function markSignerBlocked(latestCode: number): void {
+  try {
+    localStorage.setItem(`${SIG_BLOCK_PREFIX}${latestCode}`, '1');
+  } catch {
+    // storage unavailable — the native check still rejects the download
+  }
+}
+
 /** Pure decision — exported for tests. */
 export function evaluateUpdate(
   installedCode: number,
   info: MobileVersionInfo,
 ): UpdateState {
+  // A release this build can never install is 'blocked', not 'required' —
+  // a forced gate would soft-lock the app on an update that cannot land.
+  if (installedCode < info.latest_version_code && updateBlocked(info))
+    return { kind: 'blocked', info };
   const required =
     info.force_update || installedCode < info.minimum_version_code;
   if (required) return { kind: 'required', info };
@@ -148,12 +182,13 @@ export function checkForUpdates(force = false): Promise<UpdateState> {
 async function doCheck(force: boolean): Promise<UpdateState> {
   if (!shouldCheckNow(force)) return state;
   try {
-    const code = await installedVersionCode();
-    if (code === null) {
+    const installed = await installedInfo();
+    if (installed === null) {
       diag('APP_INFO_ERROR');
       return state; // web dev / plugin unavailable
     }
-    const info = await getMobileVersion();
+    const code = installed.versionCode;
+    const info = await getMobileVersion('android', code);
     if (!info || typeof info.latest_version_code !== 'number') {
       diag('UPDATE_PARSE_ERROR');
       return state;
@@ -162,16 +197,39 @@ async function doCheck(force: boolean): Promise<UpdateState> {
       `[UPDATE] latest server version=${info.latest_version} versionCode=${info.latest_version_code} ` +
         `minCode=${info.minimum_version_code} force=${info.force_update}`,
     );
+    // Server couldn't resolve a signer verdict (older release rows or
+    // external binaries carry no signer stamp) — the device knows its own
+    // certificate, so compare locally before offering the update.
+    if (
+      info.update_compatible == null &&
+      info.signer_sha256 &&
+      code < info.latest_version_code
+    ) {
+      try {
+        const own = await NativeUpdate.installedSignerSha256();
+        if (own.sha256 && own.sha256 !== info.signer_sha256) {
+          info.update_compatible = false;
+          info.incompatibility_reason ??= 'SIGNER_MISMATCH';
+        } else if (own.sha256) {
+          info.update_compatible = true;
+        }
+      } catch {
+        // plugin absent — download-time native check remains the gate
+      }
+    }
     // Only a successful check updates the throttle timestamp — a failed
     // request must NOT park the app for another 24h.
     stampLastCheck();
     const next = evaluateUpdate(code, info);
+    next.installed = installed;
     diag(
       next.kind === 'required'
         ? 'FORCED_UPDATE'
         : next.kind === 'optional'
           ? 'OPTIONAL_UPDATE'
-          : 'NO_UPDATE',
+          : next.kind === 'blocked'
+            ? 'BLOCKED_UPDATE'
+            : 'NO_UPDATE',
       `installed=${code} latest=${info.latest_version_code}`,
     );
     emit(next);
@@ -298,6 +356,22 @@ export async function pendingMatches(latestCode: number): Promise<boolean> {
   }
 }
 
+/** A signature rejection is permanent for that release — remember it so
+ *  the update is never offered or re-downloaded, and switch the dialog to
+ *  the 'blocked' explanation instead of a retryable error. */
+function signerRejected(info: MobileVersionInfo): void {
+  markSignerBlocked(info.latest_version_code);
+  emit({ kind: 'blocked', info, installed: state.installed });
+}
+
+const isSignatureError = (msg: string): boolean =>
+  msg.includes('WRONG_SIGNATURE') || msg.includes('SIGNATURE_MISMATCH');
+
+/** Release currently moving through the download/install pipeline — set
+ *  by beginUpdate so install-path errors can identify the release even
+ *  when no version-check state exists. */
+let flowInfo: MobileVersionInfo | null = null;
+
 async function installPending(): Promise<void> {
   emitFlow({ phase: 'installing', progress: null, error: null });
   try {
@@ -306,6 +380,12 @@ async function installPending(): Promise<void> {
     // APK stays and 'Update now' retries install without re-downloading.
   } catch (err) {
     const msg = err instanceof Error ? err.message : '';
+    if (isSignatureError(msg)) {
+      const info = flowInfo ?? state.info;
+      if (info) signerRejected(info);
+      emitFlow({ phase: 'error', progress: null, error: 'WRONG_SIGNATURE' });
+      return;
+    }
     emitFlow({
       phase: 'error',
       progress: null,
@@ -321,6 +401,13 @@ export async function beginUpdate(info: MobileVersionInfo): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   if (flowBusy) return;
   if (flow.phase === 'downloading' || flow.phase === 'installing') return;
+  if (updateBlocked(info)) {
+    // Known-uninstallable release — downloading it is wasted bandwidth on a
+    // file Android will reject. Surface the 'blocked' state instead.
+    emit({ kind: 'blocked', info, installed: state.installed });
+    return;
+  }
+  flowInfo = info;
   flowBusy = true;
 
   bindProgressListener();
@@ -343,6 +430,11 @@ export async function beginUpdate(info: MobileVersionInfo): Promise<void> {
     await requestInstall();
   } catch (err) {
     const msg = err instanceof Error ? err.message : '';
+    if (isSignatureError(msg)) {
+      signerRejected(info);
+      emitFlow({ phase: 'error', progress: null, error: 'WRONG_SIGNATURE' });
+      return;
+    }
     emitFlow({
       phase: 'error',
       progress: null,
@@ -375,9 +467,12 @@ export async function openInstallPermissionSettings(): Promise<void> {
   }
 }
 
-/** Retry after a failed download — the pending file (if any) is reused. */
+/** Retry after a failed download — the pending file (if any) is reused.
+ *  Signature rejections are not retried: the same file can never install. */
 export function retryUpdate(): void {
-  if (state.info) void beginUpdate(state.info);
+  if (flow.error === 'WRONG_SIGNATURE') return;
+  if (state.info && !updateBlocked(state.info))
+    void beginUpdate(state.info);
 }
 
 /** Reset flow (used by tests and after logout). */

@@ -30,7 +30,7 @@ export const ScreenHeader: React.FC<ScreenHeaderProps> = ({
             </button>
           )}
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold tracking-tight text-ink truncate font-['Space_Grotesk']">
+            <h1 className="text-lg font-semibold tracking-tight text-ink truncate font-['Satoshi']">
               {title}
             </h1>
             {subtitle && (

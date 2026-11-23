@@ -30,26 +30,26 @@ export const LoginScreen: React.FC = () => {
             <img src="/airco-pms-logo.svg" alt="Airco PMS" className="w-9 h-9 rounded-xl shadow-sm" />
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xl font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
+                <span className="text-xl font-bold tracking-tight text-[#0D1C42] font-['Satoshi']">
                   {t('auth.brand')}
                 </span>
-                <span className="text-[11px] font-bold uppercase tracking-wider bg-[#E8F7ED] text-[#278B46] px-2 py-0.5 rounded-full border border-[#BBECCC]">
+                <span className="text-[9px] font-bold uppercase tracking-wider bg-[#F7E9EE] text-[#0D1C42] px-2 py-0.5 rounded-full border border-[#EAD3DB]">
                   {t('auth.staffBadge')}
                 </span>
               </div>
             </div>
           </div>
-          <h2 className="text-2xl font-bold text-[#20292C] font-['Space_Grotesk'] tracking-tight">
+          <h2 className="text-2xl font-bold text-[#0D1C42] font-['Satoshi'] tracking-tight">
             {t('auth.title')}
           </h2>
-          <p className="text-xs text-[#667174] mt-1">
+          <p className="text-xs text-[#667085] mt-1">
             {t('auth.subtitle')}
           </p>
         </div>
 
         {/* API Error Banner */}
         {authError && (
-          <div className="mb-5 p-3.5 bg-[#FCEBEA] border border-[#F8C8C6] rounded-xl flex items-start gap-2.5 text-xs text-[#D9534F] leading-relaxed">
+          <div className="mb-5 p-3.5 bg-[#FAEBEB] border border-[#F0C8C8] rounded-xl flex items-start gap-2.5 text-xs text-[#D64545] leading-relaxed">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <span className="font-semibold block mb-0.5">{t('auth.errorTitle')}</span>
@@ -61,11 +61,11 @@ export const LoginScreen: React.FC = () => {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-[#20292C] mb-1.5 uppercase tracking-wider">
+            <label className="block text-xs font-semibold text-[#0D1C42] mb-1.5 uppercase tracking-wider">
               {t('auth.identifier')}
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#8D999C]">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#98A2B3]">
                 <User className="w-4 h-4" />
               </div>
               <input
@@ -78,17 +78,17 @@ export const LoginScreen: React.FC = () => {
                 placeholder={t('auth.identifierPlaceholder')}
                 autoCapitalize="none"
                 required
-                className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-sm text-[#20292C] placeholder-[#8D999C] focus:bg-white focus:outline-none focus:border-[#33B059] focus:ring-2 focus:ring-[#33B059]/15 transition-all"
+                className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-sm text-[#0D1C42] placeholder-[#98A2B3] focus:bg-white focus:outline-none focus:border-[#800020] focus:ring-2 focus:ring-[#800020]/15 transition-all"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-[#20292C] mb-1.5 uppercase tracking-wider">
+            <label className="block text-xs font-semibold text-[#0D1C42] mb-1.5 uppercase tracking-wider">
               {t('auth.password')}
             </label>
             <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#8D999C]">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#98A2B3]">
                 <Lock className="w-4 h-4" />
               </div>
               <input
@@ -100,12 +100,12 @@ export const LoginScreen: React.FC = () => {
                 }}
                 placeholder={t('auth.passwordPlaceholder')}
                 required
-                className="w-full pl-10 pr-11 py-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-sm text-[#20292C] placeholder-[#8D999C] focus:bg-white focus:outline-none focus:border-[#33B059] focus:ring-2 focus:ring-[#33B059]/15 transition-all"
+                className="w-full pl-10 pr-11 py-3 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-sm text-[#0D1C42] placeholder-[#98A2B3] focus:bg-white focus:outline-none focus:border-[#800020] focus:ring-2 focus:ring-[#800020]/15 transition-all"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#8D999C] hover:text-[#20292C] transition-colors"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#98A2B3] hover:text-[#0D1C42] transition-colors"
                 aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -127,7 +127,7 @@ export const LoginScreen: React.FC = () => {
 
       </div>
 
-      <div className="text-center text-[11px] text-[#8D999C] py-2">
+      <div className="text-center text-[9px] text-[#98A2B3] py-2">
         {t('auth.footer')}
       </div>
     </div>

@@ -68,6 +68,16 @@ class Task(Base):
         Uuid, ForeignKey("employees.id", ondelete="SET NULL"), nullable=True, index=True
     )
     supervisor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Owned by the Super Admin backend — department-head allocated work is
+    # attributed through this column; mapped read/write here for the Team
+    # Work surface so the employee API can filter dept work.
+    department_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    # Manager-authored checklist — JSON [{text, required}] taking
+    # precedence over a linked template's checklist on detail reads.
+    checklist: Mapped[list | None] = mapped_column(JSON, nullable=True)
     assigned_to_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     allocation_batch_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("work_allocation_batches.id", ondelete="SET NULL"),

@@ -51,10 +51,20 @@ export const en = {
   nav: {
     label: 'Bottom Navigation',
     tasks: 'Tasks',
+    calendar: 'Calendar',
     maintenance: 'Maintenance',
     attendance: 'Attendance',
     salary: 'Salary',
     profile: 'Profile',
+  },
+  calendar: {
+    title: 'My Calendar',
+    month: 'Month',
+    week: 'Week',
+    agenda: 'Agenda',
+    today: 'Today',
+    nothingScheduled: 'No work scheduled',
+    overdue: 'Overdue',
   },
   auth: {
     brand: 'Airco PMS',
@@ -508,7 +518,11 @@ export const en = {
       'Your version of Airco PMS Employee is no longer supported. Please update to continue.',
     availableTitle: 'Update available',
     availableText: 'A new version of Airco PMS Employee is available.',
+    blockedTitle: 'Update cannot be installed',
+    blockedText:
+      'This version of Airco PMS Employee was signed with a different certificate, so Android cannot install the update over it. Your app and data are safe — contact your administrator for the new installer.',
     version: 'Version {{version}}',
+    versionChange: '{{installed}} → {{latest}}',
     updateNow: 'Update now',
     openSettings: 'Open settings',
     later: 'Later',

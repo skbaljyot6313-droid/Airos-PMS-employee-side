@@ -20,8 +20,16 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.get("")
-async def list_tasks(limit: int = Query(default=20, ge=1, le=500), user: User = Depends(get_current_user), session: AsyncSession = Depends(get_db)):
-    res = await WorkspaceRepository(session).list_tasks(user, limit=limit)
+async def list_tasks(limit: int = Query(default=20, ge=1, le=500),
+                     status: str | None = None,
+                     work_type: str | None = None,
+                     date_from: str | None = None,
+                     date_to: str | None = None,
+                     user: User = Depends(get_current_user),
+                     session: AsyncSession = Depends(get_db)):
+    res = await WorkspaceRepository(session).list_tasks(
+        user, limit=limit, status=status, work_type=work_type,
+        date_from=date_from, date_to=date_to)
     tasks = res["items"]
     zone_ids = {task.zone_id for task in tasks if task.zone_id}
     room_ids = {task.room_id for task in tasks if task.room_id}

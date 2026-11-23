@@ -65,7 +65,7 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
       aria-live="polite"
     >
       <div
-        className="pointer-events-auto w-full max-w-sm mx-auto bg-white rounded-2xl shadow-xl border border-[#E4E8E6] flex items-start gap-3 p-4 cursor-pointer touch-pan-y select-none"
+        className="pointer-events-auto w-full max-w-sm mx-auto bg-white rounded-2xl shadow-xl border border-[#E7E5E4] flex items-start gap-3 p-4 cursor-pointer touch-pan-y select-none"
         style={{
           transform: `translateX(${dragX}px)`,
           opacity: 1 - Math.min(Math.abs(dragX) / 160, 0.6),
@@ -80,25 +80,25 @@ export const NotificationToast: React.FC<NotificationToastProps> = ({
           onOpen(notification);
         }}
       >
-        <div className="w-9 h-9 rounded-xl bg-[#E8F7ED] text-[#33B059] flex items-center justify-center flex-shrink-0">
+        <div className="w-9 h-9 rounded-xl bg-[#F7E9EE] text-[#800020] flex items-center justify-center flex-shrink-0">
           <Bell className="w-4.5 h-4.5" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-bold text-[#20292C] font-['Space_Grotesk'] leading-tight">
+          <p className="text-[10px] font-bold text-[#0D1C42] font-['Satoshi'] leading-tight">
             {notification.title}
           </p>
-          <p className="text-xs text-[#667174] mt-0.5 line-clamp-2">
+          <p className="text-xs text-[#667085] mt-0.5 line-clamp-2">
             {notification.body}
           </p>
           {hasTarget && (
-            <p className="text-[11px] font-semibold text-[#33B059] mt-1 flex items-center gap-0.5">
+            <p className="text-[9px] font-semibold text-[#800020] mt-1 flex items-center gap-0.5">
               {t('notifications.tapToView')} <ChevronRight className="w-3 h-3" />
             </p>
           )}
         </div>
         <button
           aria-label={t('common.dismiss')}
-          className="text-[#8D999C] hover:text-[#667174] p-1 -m-1 flex-shrink-0"
+          className="text-[#98A2B3] hover:text-[#667085] p-1 -m-1 flex-shrink-0"
           onClick={(e) => {
             e.stopPropagation();
             onDismiss(notification);

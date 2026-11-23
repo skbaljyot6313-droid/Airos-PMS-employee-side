@@ -14,21 +14,21 @@ export const ConnectionErrorScreen: React.FC<{
 }> = ({ message, onRetry, onLogout }) => {
   const { t } = useTranslation();
   return (
-    <div className="flex-1 flex flex-col items-center justify-center bg-white p-6">
-      <div className="w-12 h-12 rounded-2xl bg-[#667174] flex items-center justify-center text-white mb-3 shadow-sm">
-        <span className="font-bold text-lg font-['Space_Grotesk']">A</span>
+    <div className="flex-1 flex flex-col items-center justify-center bg-white px-[var(--app-px)] pt-[var(--app-top-gap)] pb-[var(--app-bottom-gap)]">
+      <div className="w-12 h-12 rounded-2xl bg-[#667085] flex items-center justify-center text-white mb-3 shadow-sm">
+        <span className="font-bold text-lg font-['Satoshi']">A</span>
       </div>
-      <p className="text-base font-semibold text-[#20292C] mb-1">
+      <p className="text-base font-semibold text-[#0D1C42] mb-1">
         {t('errors.serverUnreachable')}
       </p>
-      <p className="text-sm text-[#667174] text-center mb-6 max-w-xs">{message}</p>
+      <p className="text-sm text-[#667085] text-center mb-6 max-w-xs">{message}</p>
       <button
         onClick={onRetry}
-        className="px-6 py-2.5 rounded-xl bg-[#33B059] text-white font-semibold text-sm active:scale-95 transition-all"
+        className="px-6 py-2.5 rounded-xl bg-[#800020] text-white font-semibold text-sm active:scale-95 transition-all"
       >
         {t('common.tryAgain')}
       </button>
-      <button onClick={onLogout} className="mt-3 text-sm text-[#667174] underline">
+      <button onClick={onLogout} className="mt-3 text-sm text-[#667085] underline">
         {t('errors.differentAccount')}
       </button>
     </div>

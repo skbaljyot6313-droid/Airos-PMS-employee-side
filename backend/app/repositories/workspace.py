@@ -184,7 +184,10 @@ class WorkspaceRepository:
         employee_id=None,
         status=None,
         task_type=None,
+        work_type=None,
         search=None,
+        date_from=None,
+        date_to=None,
         page=1,
         limit=20,
     ) -> dict:
@@ -206,6 +209,21 @@ class WorkspaceRepository:
             q = q.where(Task.status == status)
         if task_type:
             q = q.where(Task.task_type == task_type)
+        if work_type:
+            q = q.where(Task.work_type == work_type)
+        if date_from or date_to:
+            # A task touches the window on any of its scheduling fields —
+            # scheduled_for (IST date), due_date (date prefix) or
+            # operational_date. Same overlap rule as the SA calendar.
+            from sqlalchemy import func as _f
+            lo = date_from or "0001-01-01"
+            hi = date_to or "9999-12-31"
+            sched_ist = _f.timezone("Asia/Kolkata", Task.scheduled_for)
+            q = q.where(or_(
+                _f.date(sched_ist).between(lo, hi),
+                _f.substr(Task.due_date, 1, 10).between(lo, hi),
+                Task.operational_date.between(lo, hi),
+            ))
         if search:
             like = f"%{search}%"
             q = q.where(or_(Task.title.ilike(like), Task.description.ilike(like)))

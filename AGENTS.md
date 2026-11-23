@@ -340,6 +340,20 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   `allow_signer_change=true` (deliberate rotation = every device reinstalls).
   Signer is stamped as `signer_sha256` object metadata
   (`app/core/apk_signing.py`, pure-Python v2/v3 block read).
+- The pre-rotation fleet signer is `bae8c770…` (builds 17–20). It is NOT on
+  this machine and NOT in EAS remote credentials — the EAS project
+  `airos-employee` (baljyot_singh_13) stores a different keystore
+  (`90cdd78a…`, created 2026-10-08). The Oct 8–15 EAS builds produced
+  bae8-signed artifacts, so `bae8` was a *local credentials* keystore on
+  whatever machine ran `eas build`/gradle then — the only recovery path is
+  that machine's `~/.android/debug.keystore` or `credentials.json` keystore.
+  `GET /mobile/version` now returns
+  `update_compatible`/`signer_sha256`/`installed_signer_sha256` and sets
+  `update_available=false` for a known-incompatible signer pair; the client
+  sends `installed_version_code`, marks a WRONG_SIGNATURE-rejected release
+  permanently `blocked`, and falls back to comparing the installed cert
+  fingerprint (`AirosUpdate.installedSignerSha256`) when the server can't
+  resolve a verdict.
 - Release objects live in GCS `final-airos-os-dev-employee-objects-94363806721`
   (`release-android-<code>-<id>.apk`). Dev Cloud Run has NO
   `RELEASE_MANAGEMENT_API_KEY`, so the release endpoints 503 there;

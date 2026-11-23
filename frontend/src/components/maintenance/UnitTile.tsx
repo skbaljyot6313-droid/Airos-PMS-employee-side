@@ -15,11 +15,11 @@ export const RESOURCE_STATE_STYLES: Record<
   ZoneResourceState,
   { dot: string; text: string; bg: string }
 > = {
-  available: { dot: 'bg-[#33B059]', text: 'text-[#278B46]', bg: 'bg-[#E8F7ED]' },
+  available: { dot: 'bg-[#16865B]', text: 'text-[#0E6B47]', bg: 'bg-[#E3F3EC]' },
   occupied: { dot: 'bg-[#7C5CFF]', text: 'text-[#5B3FD4]', bg: 'bg-[#F1EDFF]' },
   cleaning: { dot: 'bg-[#C9A227]', text: 'text-[#8A6D1A]', bg: 'bg-[#FBF6E8]' },
-  maintenance: { dot: 'bg-[#D9534F]', text: 'text-[#D9534F]', bg: 'bg-[#FCEBEA]' },
-  inactive: { dot: 'bg-[#8D999C]', text: 'text-[#667174]', bg: 'bg-[#F0F2F1]' },
+  maintenance: { dot: 'bg-[#D64545]', text: 'text-[#D64545]', bg: 'bg-[#FAEBEB]' },
+  inactive: { dot: 'bg-[#98A2B3]', text: 'text-[#667085]', bg: 'bg-[#F6F4F2]' },
 };
 
 export const RESOURCE_TYPE_ICONS: Record<ZoneResourceType, React.ReactNode> = {
@@ -31,9 +31,9 @@ export const RESOURCE_TYPE_ICONS: Record<ZoneResourceType, React.ReactNode> = {
 };
 
 const UNAVAILABLE_STYLE = {
-  dot: 'bg-[#8D999C]',
-  text: 'text-[#667174]',
-  bg: 'bg-[#F0F2F1]',
+  dot: 'bg-[#98A2B3]',
+  text: 'text-[#667085]',
+  bg: 'bg-[#F6F4F2]',
 };
 
 export const ResourceStateBadge: React.FC<{ state: ZoneResourceState | null; size?: 'sm' | 'md' }> = ({
@@ -46,7 +46,7 @@ export const ResourceStateBadge: React.FC<{ state: ZoneResourceState | null; siz
   return (
     <span
       className={`inline-flex items-center gap-1 font-semibold rounded-md ${s.bg} ${s.text} ${
-        size === 'sm' ? 'text-[10px] px-1.5 py-0.5' : 'text-xs px-2 py-1'
+        size === 'sm' ? 'text-[9px] px-1.5 py-0.5' : 'text-xs px-2 py-1'
       }`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
@@ -72,24 +72,24 @@ export const UnitTile: React.FC<UnitTileProps> = ({ resource, onPress }) => {
       onKeyDown={(e) => e.key === 'Enter' && onPress(resource)}
       className={`bg-white rounded-xl p-3 border transition-all active:scale-[0.98] cursor-pointer text-left ${
         hasTicket
-          ? 'border-[#F8C8C6] shadow-[0_1px_3px_rgba(217,83,79,0.08)]'
-          : 'border-[#E4E8E6] hover:border-[#D2D8D6] shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
+          ? 'border-[#F0C8C8] shadow-[0_1px_3px_rgba(217,83,79,0.08)]'
+          : 'border-[#E7E5E4] hover:border-[#D6D3D1] shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
       }`}
     >
       <div className="flex items-center justify-between gap-1 mb-1.5">
-        <span className="text-[#8D999C]">{RESOURCE_TYPE_ICONS[resource.type]}</span>
+        <span className="text-[#98A2B3]">{RESOURCE_TYPE_ICONS[resource.type]}</span>
         <ResourceStateBadge state={resource.state} />
       </div>
-      <span className="block text-[13px] font-semibold text-[#20292C] leading-tight truncate mb-1.5">
+      <span className="block text-[10px] font-semibold text-[#0D1C42] leading-tight truncate mb-1.5">
         {resource.name}
       </span>
       {hasTicket ? (
-        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#D9534F] truncate">
+        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-[#D64545] truncate">
           <Ticket className="w-3 h-3 flex-shrink-0" />
           {resource.active_ticket_number || t('common.viewTicket')}
         </span>
       ) : (
-        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-[#33B059]">
+        <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-[#800020]">
           <Plus className="w-3 h-3 stroke-[3]" />
           {t('maintenance.maint')}
         </span>

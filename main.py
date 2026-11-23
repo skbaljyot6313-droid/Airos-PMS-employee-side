@@ -102,9 +102,93 @@ def check_port_free(bind_addr: str, port: int, label: str) -> None:
 def port_open(host: str, port: int) -> bool:
     try:
         socket.create_connection((host, port), timeout=0.5).close()
-        return True     
+        return True
     except OSError:
         return False
+
+
+# --- Freeing busy ports ----------------------------------------------------
+# Leftover dev servers (a previous uvicorn/tsx run, or the Docker stack's
+# port proxy) are the normal reason a port is taken. Rather than making the
+# user hunt the PID, the launcher stops the holder itself: containers via
+# `docker compose down` (the project's own compose file), ordinary processes
+# via taskkill/SIGTERM.
+
+def _listening_pids(port: int) -> set[int]:
+    """PIDs holding a TCP listener on `port`."""
+    pids: set[int] = set()
+    if IS_WINDOWS:
+        out = subprocess.run(["netstat", "-ano", "-p", "tcp"],
+                             capture_output=True, text=True).stdout
+        for line in out.splitlines():
+            if "LISTENING" not in line:
+                continue
+            parts = line.split()
+            if len(parts) >= 5 and parts[1].rsplit(":", 1)[-1] == str(port):
+                try:
+                    pids.add(int(parts[-1]))
+                except ValueError:
+                    pass
+    else:
+        out = subprocess.run(["lsof", "-ti", f":{port}"],
+                             capture_output=True, text=True).stdout
+        for pid in out.split():
+            if pid.strip().isdigit():
+                pids.add(int(pid))
+    pids.discard(os.getpid())
+    return pids
+
+
+def _pid_name(pid: int) -> str:
+    if IS_WINDOWS:
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True, text=True).stdout
+        first = out.splitlines()[0] if out.splitlines() else ""
+        return first.split(",")[0].strip('"') if "," in first else ""
+    try:
+        return Path(f"/proc/{pid}/comm").read_text().strip()
+    except OSError:
+        return ""
+
+
+def free_port(port: int, label: str) -> None:
+    """Stop whatever holds `port` so this stack can take it over."""
+    if not port_open("127.0.0.1", port):
+        return
+    pids = _listening_pids(port)
+    names = {pid: _pid_name(pid) for pid in pids}
+    docker_proxy = any("docker" in (n or "").lower() for n in names.values())
+
+    if docker_proxy:
+        # com.docker.backend proxies published container ports — killing it
+        # would hurt Docker Desktop; stop this project's stack instead.
+        docker = shutil.which("docker")
+        if docker:
+            log(f"{label} port {port}: stopping the existing Docker stack…")
+            subprocess.run([docker, "compose", "down"],
+                           cwd=PROJECT_ROOT, capture_output=True)
+    else:
+        for pid, name in names.items():
+            log(f"{label} port {port}: stopping {name or 'process'} (pid {pid})…")
+            if IS_WINDOWS:
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                               capture_output=True)
+            else:
+                try:
+                    os.killpg(os.getpgid(pid), signal.SIGTERM)
+                except OSError:
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except OSError:
+                        pass
+
+    deadline = time.time() + 8
+    while time.time() < deadline and port_open("127.0.0.1", port):
+        time.sleep(0.3)
+    if port_open("127.0.0.1", port):
+        fail(f"{label} port {port} is still in use - stop the process "
+             f"manually (is another stack running? `python main.py --down`).")
 
 # Process helpers - children run in their own process group / session so the
 # whole tree can be signalled without touching anything else.
@@ -423,13 +507,11 @@ def docker_mode(args: argparse.Namespace) -> int:
         return subprocess.run([docker, "compose", "down"],
                               cwd=PROJECT_ROOT).returncode
 
-    # A clear message beats compose's cryptic bind failure.
+    # Free the ports we need — a previous stack (docker proxy or stray dev
+    # servers) is stopped automatically instead of failing the launch.
     for port, label in ((8000, "API"), (3000, "Frontend"),
                         (5432, "Postgres"), (6379, "Redis")):
-        if port_open("127.0.0.1", port):
-            fail(f"{label} port {port} is already in use - stop the other "
-                 f"process first (is the stack already running? "
-                 f"`python main.py --down`).")
+        free_port(port, label)
 
     cmd = [docker, "compose"]
     if args.seed:
@@ -438,28 +520,28 @@ def docker_mode(args: argparse.Namespace) -> int:
         cmd += ["--profile", "seed"]
     cmd += ["up", "--build"]
 
-    # SAFETY: always run against the bundled local postgres. The root .env
-    # carries a remote DATABASE_URL for other tooling; a plain
-    # `python main.py` must never point the local stack at a remote DB.
-    # (Shell-env override of DATABASE_URL is still honored only when it
-    # already resolves to a loopback/local host.)
+    # Shared database: the local stack uses the same DATABASE_URL the
+    # super-admin backend does (backend/.env — shell env wins if set).
+    # Compose honours ${DATABASE_URL}; without it the bundled postgres
+    # would serve an empty, demo-only database.
     env = dict(os.environ)
-    local_pg = (
-        "postgresql+asyncpg://"
-        f"{os.environ.get('POSTGRES_USER', 'mgmt')}:"
-        f"{os.environ.get('POSTGRES_PASSWORD', 'mgmt-dev-password')}"
-        f"@postgres:5432/{os.environ.get('POSTGRES_DB', 'mgmt')}"
-    )
+    if not env.get("DATABASE_URL"):
+        env_file = BACKEND / ".env"
+        if env_file.is_file():
+            for line in env_file.read_text().splitlines():
+                if line.startswith("DATABASE_URL="):
+                    url = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    if url.startswith("postgresql://"):
+                        url = url.replace(
+                            "postgresql://", "postgresql+asyncpg://", 1)
+                    env["DATABASE_URL"] = url
+                    break
     cur = env.get("DATABASE_URL", "")
     if "@" in cur:
-        host = cur.split("@", 1)[1].split("/", 1)[0].split(":", 1)[0]
+        db_host = cur.split("@", 1)[1].split("/", 1)[0].split(":", 1)[0]
     else:
-        host = ""
-    if host not in ("postgres", "localhost", "127.0.0.1", "::1"):
-        if cur:
-            print("NOTE: overriding remote DATABASE_URL from .env -> bundled "
-                  "local postgres (local runs never touch remote DBs).")
-        env["DATABASE_URL"] = local_pg
+        db_host = "(bundled postgres)"
+    print(f"NOTE: API database -> {db_host}")
 
     child = spawn(cmd, PROJECT_ROOT, env)
     stream = start_stream(child, "DOCKER")
@@ -469,7 +551,7 @@ def docker_mode(args: argparse.Namespace) -> int:
     print("========================================")
     print("Frontend: http://localhost:3000")
     print("API:      http://localhost:8000/api/v1   Docs: http://localhost:8000/docs")
-    print("Postgres: 127.0.0.1:5432   Redis: 127.0.0.1:6379")
+    print("Database: (shared — super-admin DB)   Redis: 127.0.0.1:6379")
     if args.seed:
         print("Seed:     demo tenant will be created after migrations "
               "(admin@demo.local / employee@demo.local, Demo!Pass123)")
@@ -548,6 +630,7 @@ def main() -> int:
     threads: list[threading.Thread] = []
 
     if run_backend:
+        free_port(bport, "Backend")
         check_port_free(host, bport, "Backend")
         py = backend_python()
         probe = subprocess.run([py, "-c", "import uvicorn"], capture_output=True)
@@ -570,6 +653,7 @@ def main() -> int:
 
     if run_frontend:
         # server.ts listens on 0.0.0.0
+        free_port(fport, "Frontend")
         check_port_free("0.0.0.0", fport, "Frontend")
         fe_env = dict(os.environ, PORT=str(fport))
         if port_open("127.0.0.1", HMR_PORT):

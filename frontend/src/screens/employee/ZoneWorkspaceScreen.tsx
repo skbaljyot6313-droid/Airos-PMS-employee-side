@@ -25,7 +25,7 @@ const ResourceSection: React.FC<{ title: string; children: React.ReactNode }> = 
   children,
 }) => (
   <section>
-    <h3 className="text-[10px] font-bold text-[#8D999C] uppercase tracking-wider px-1 mb-2">
+    <h3 className="text-[9px] font-bold text-[#98A2B3] uppercase tracking-wider px-1 mb-2">
       {title}
     </h3>
     {children}
@@ -89,7 +89,7 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
   const totalUnits = workspace?.resources.length || 0;
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
+    <div className="flex-1 flex flex-col bg-[#FFFCFA] overflow-y-auto">
       <ScreenHeader
         title={zone?.name || t('maintenance.zoneFallback')}
         subtitle={
@@ -102,10 +102,10 @@ export const ZoneWorkspaceScreen: React.FC<ZoneWorkspaceScreenProps> = ({
           <button
             onClick={() => loadData(true)}
             disabled={refreshing}
-            className="p-2 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-[#20292C] hover:bg-[#EFEFEF] transition-all"
+            className="p-2 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-[#0D1C42] hover:bg-[#F6F4F2] transition-all"
             aria-label={t('maintenance.refreshZone')}
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#33B059]' : 'text-[#667174]'}`} />
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#800020]' : 'text-[#667085]'}`} />
           </button>
         }
       />

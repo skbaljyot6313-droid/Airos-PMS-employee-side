@@ -20,7 +20,7 @@ export const DormCard: React.FC<DormCardProps> = ({ dorm, beds, onUnitPress }) =
       : t('maintenance.dorm');
 
   return (
-    <div className="bg-white rounded-2xl border border-[#E4E8E6] shadow-[0_1px_3px_rgba(0,0,0,0.03)] overflow-hidden">
+    <div className="bg-white rounded-2xl border border-[#E7E5E4] shadow-[0_1px_3px_rgba(0,0,0,0.03)] overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -28,14 +28,14 @@ export const DormCard: React.FC<DormCardProps> = ({ dorm, beds, onUnitPress }) =
         aria-expanded={expanded}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2 rounded-xl bg-[#F0F2F1] text-[#667174] flex-shrink-0">
+          <div className="p-2 rounded-xl bg-[#F6F4F2] text-[#667085] flex-shrink-0">
             {RESOURCE_TYPE_ICONS.dorm}
           </div>
           <div className="min-w-0">
-            <span className="block text-sm font-bold text-[#20292C] font-['Space_Grotesk'] truncate">
+            <span className="block text-sm font-bold text-[#0D1C42] font-['Satoshi'] truncate">
               {dorm.name}
             </span>
-            <span className="text-[11px] text-[#667174]">
+            <span className="text-[9px] text-[#667085]">
               {bedsLabel}
               {openIssues > 0 && (
                 <span className="text-[#C2410C] font-semibold">
@@ -46,24 +46,24 @@ export const DormCard: React.FC<DormCardProps> = ({ dorm, beds, onUnitPress }) =
           </div>
         </div>
         <ChevronDown
-          className={`w-4 h-4 text-[#8D999C] transition-transform flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 text-[#98A2B3] transition-transform flex-shrink-0 ${expanded ? 'rotate-180' : ''}`}
         />
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 pt-1 space-y-4 border-t border-[#F0F2F1]">
+        <div className="px-4 pb-4 pt-1 space-y-4 border-t border-[#F6F4F2]">
           {/* Dorm-level actions */}
           <button
             type="button"
             onClick={() => onUnitPress(dorm)}
-            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-[#D2D8D6] text-[11px] font-semibold text-[#20292C] hover:bg-[#F7F8F6] transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-dashed border-[#D6D3D1] text-[9px] font-semibold text-[#0D1C42] hover:bg-[#FFFCFA] transition-colors"
           >
-            <Droplets className="w-3.5 h-3.5 text-[#8D999C]" />
+            <Droplets className="w-3.5 h-3.5 text-[#98A2B3]" />
             {t('maintenance.dormLevelIssue')}
           </button>
 
           <div>
-            <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#8D999C] uppercase tracking-wider mb-2 mt-2">
+            <div className="flex items-center gap-1.5 text-[9px] font-bold text-[#98A2B3] uppercase tracking-wider mb-2 mt-2">
               <BedSingle className="w-3.5 h-3.5" />
               <span>{t('maintenance.beds')}</span>
             </div>
@@ -74,7 +74,7 @@ export const DormCard: React.FC<DormCardProps> = ({ dorm, beds, onUnitPress }) =
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-[#8D999C]">{t('maintenance.noBeds')}</p>
+              <p className="text-xs text-[#98A2B3]">{t('maintenance.noBeds')}</p>
             )}
           </div>
         </div>

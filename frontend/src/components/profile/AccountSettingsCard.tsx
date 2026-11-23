@@ -22,27 +22,27 @@ const LanguageRow: React.FC<{
   saveState: SaveState;
 }> = ({ icon, title, subtitle, value, onChange, saveState }) => (
   <div className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-    <div className="w-9 h-9 rounded-xl bg-[#F0F2F1] text-[#667174] flex items-center justify-center flex-shrink-0">
+    <div className="w-9 h-9 rounded-xl bg-[#F6F4F2] text-[#667085] flex items-center justify-center flex-shrink-0">
       {icon}
     </div>
     <div className="flex-1 min-w-0">
-      <span className="block text-[13px] font-semibold text-[#20292C] leading-tight">
+      <span className="block text-[10px] font-semibold text-[#0D1C42] leading-tight">
         {title}
       </span>
-      <span className="block text-[11px] text-[#8D999C] mt-0.5">{subtitle}</span>
+      <span className="block text-[9px] text-[#98A2B3] mt-0.5">{subtitle}</span>
     </div>
     <div className="relative flex-shrink-0">
       {saveState === 'saving' ? (
-        <Loader2 className="w-4 h-4 animate-spin text-[#8D999C] absolute -left-6 top-1/2 -translate-y-1/2" />
+        <Loader2 className="w-4 h-4 animate-spin text-[#98A2B3] absolute -left-6 top-1/2 -translate-y-1/2" />
       ) : saveState === 'saved' ? (
-        <Check className="w-4 h-4 text-[#33B059] absolute -left-6 top-1/2 -translate-y-1/2" />
+        <Check className="w-4 h-4 text-[#800020] absolute -left-6 top-1/2 -translate-y-1/2" />
       ) : null}
       <select
         value={value}
         disabled={saveState === 'saving'}
         onChange={(e) => onChange(e.target.value as LanguageCode)}
         aria-label={title}
-        className="appearance-none bg-[#F7F8F6] border border-[#E4E8E6] rounded-xl text-xs font-semibold text-[#20292C] pl-3 pr-7 py-2 focus:outline-none focus:border-[#33B059] disabled:opacity-60"
+        className="appearance-none bg-[#FFFCFA] border border-[#E7E5E4] rounded-xl text-xs font-semibold text-[#0D1C42] pl-3 pr-7 py-2 focus:outline-none focus:border-[#800020] disabled:opacity-60"
       >
         {SUPPORTED_LANGUAGES.map((l) => (
           <option key={l.code} value={l.code}>
@@ -50,7 +50,7 @@ const LanguageRow: React.FC<{
           </option>
         ))}
       </select>
-      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8D999C] text-[10px]">
+      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#98A2B3] text-[9px]">
         ▼
       </span>
     </div>
@@ -89,18 +89,18 @@ export const AccountSettingsCard: React.FC = () => {
   };
 
   return (
-    <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
+    <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
       <div className="flex items-center gap-2 mb-1">
-        <Settings2 className="w-4 h-4 text-[#33B059]" />
-        <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+        <Settings2 className="w-4 h-4 text-[#800020]" />
+        <h3 className="text-xs font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
           {t('profile.accountSettings')}
         </h3>
       </div>
-      <p className="text-[11px] text-[#8D999C] mb-2">
+      <p className="text-[9px] text-[#98A2B3] mb-2">
         {t('profile.accountSettingsSub')}
       </p>
 
-      <div className="divide-y divide-[#F0F2F1]">
+      <div className="divide-y divide-[#F6F4F2]">
         <LanguageRow
           icon={<Type className="w-4 h-4" />}
           title={t('profile.textLanguage')}
@@ -120,7 +120,7 @@ export const AccountSettingsCard: React.FC = () => {
       </div>
 
       {error && (
-        <div className="flex items-center gap-1.5 mt-3 p-2.5 bg-[#FCEBEA] text-[11px] text-[#D9534F] rounded-xl">
+        <div className="flex items-center gap-1.5 mt-3 p-2.5 bg-[#FAEBEB] text-[9px] text-[#D64545] rounded-xl">
           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
           <span>{error}</span>
         </div>

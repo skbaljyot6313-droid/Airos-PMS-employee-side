@@ -87,7 +87,10 @@ async def test_publish_then_public_version(api, service_key):
     assert set(body) == {
         "platform", "latest_version", "latest_version_code",
         "minimum_version", "minimum_version_code", "download_url",
-        "release_notes", "force_update", "sha256", "file_size_bytes", "installed_version_code", "update_available", "mandatory_update",
+        "release_notes", "force_update", "sha256", "file_size_bytes",
+        "installed_version_code", "update_available", "mandatory_update",
+        "update_compatible", "incompatibility_reason",
+        "signer_sha256", "installed_signer_sha256",
     }
 
 
@@ -332,6 +335,107 @@ async def test_apk_upload_requires_service_key(api, service_key):
         files={"file": ("x.apk", b"PK\x03\x04x", "application/octet-stream")},
     )
     assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# GET /mobile/version — signer compatibility verdict
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _clear_signer_cache():
+    from app.api.v1 import mobile as mobile_api
+
+    mobile_api._signer_cache.clear()
+    yield
+    mobile_api._signer_cache.clear()
+
+
+async def _publish_pair(api, fake, installed_apk, latest_apk, monkeypatch):
+    """Install base at code 20, active release at code 21."""
+    await _publish_stored(api, fake, installed_apk, code=20,
+                          monkeypatch=monkeypatch)
+    await _publish_stored(api, fake, latest_apk, code=21,
+                          monkeypatch=monkeypatch)
+
+
+async def test_version_reports_signer_compatible(
+    api, service_key, monkeypatch
+):
+    fake = _FakeStorage()
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
+    await _publish_pair(api, fake, APK_KEY_A, APK_KEY_A, monkeypatch)
+    res = await api.get(f"{VERSION_URL}?installed_version_code=20")
+    body = res.json()
+    assert body["update_available"] is True
+    assert body["update_compatible"] is True
+    assert body["incompatibility_reason"] is None
+    assert body["signer_sha256"] == hashlib.sha256(b"cert-A").hexdigest()
+    assert body["installed_signer_sha256"] == hashlib.sha256(
+        b"cert-A"
+    ).hexdigest()
+
+
+async def test_version_withholds_signer_mismatched_update(
+    api, service_key, monkeypatch
+):
+    """The release-21 incident: a differently-signed release must not be
+    advertised as installable — and must never become a forced gate."""
+    fake = _FakeStorage()
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
+    await _publish_pair(api, fake, APK_KEY_A, APK_KEY_B, monkeypatch)
+    res = await api.get(
+        f"{VERSION_URL}?installed_version_code=20"
+    )
+    body = res.json()
+    assert body["update_available"] is False
+    assert body["update_compatible"] is False
+    assert body["incompatibility_reason"] == "SIGNER_MISMATCH"
+    assert body["mandatory_update"] is False
+    # Still told what the latest release is — the client shows the
+    # "cannot auto-update" state, not silence.
+    assert body["latest_version_code"] == 21
+
+
+async def test_version_mismatch_never_forces_gate(
+    api, service_key, monkeypatch
+):
+    """Even below minimum_version_code, an incompatible release cannot be
+    mandatory — the install would fail anyway."""
+    fake = _FakeStorage()
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
+    await _publish_stored(api, fake, APK_KEY_A, code=20,
+                          monkeypatch=monkeypatch)
+    # minimum_version_code 21 puts installed code 20 below the floor — the
+    # release would be a forced gate if it could install at all.
+    await api.post(
+        RELEASES_URL,
+        json=_release(version="1.0.21", code=21, minimum_version_code=21,
+                      url="https://storage.test/"
+                          "release-android-21-deadbeef.apk"),
+        headers=_auth(),
+    )
+    fake.saved["release-android-21-deadbeef.apk"] = APK_KEY_B
+    res = await api.get(f"{VERSION_URL}?installed_version_code=20")
+    body = res.json()
+    assert body["update_compatible"] is False
+    assert body["update_available"] is False
+    assert body["mandatory_update"] is False
+
+
+async def test_version_unknown_installed_signer_falls_back(
+    api, service_key, monkeypatch
+):
+    """Installed build has no release row → verdict unknown, update still
+    advertised; the native signer check on-device remains the gate."""
+    fake = _FakeStorage()
+    monkeypatch.setattr("app.api.v1.mobile.get_storage", lambda: fake)
+    await _publish_stored(api, fake, APK_KEY_B, code=21,
+                          monkeypatch=monkeypatch)
+    res = await api.get(f"{VERSION_URL}?installed_version_code=15")
+    body = res.json()
+    assert body["update_available"] is True
+    assert body["update_compatible"] is None
 
 
 # ---------------------------------------------------------------------------

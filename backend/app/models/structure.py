@@ -12,6 +12,7 @@ from sqlalchemy import (
     Uuid,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models import Base
@@ -28,6 +29,11 @@ class Area(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     property_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("properties.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Shared table — the section grouping is owned by the Super Admin
+    # backend; mapped here read-only for schema parity.
+    section_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, nullable=True, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[str] = mapped_column(String(32), nullable=False)  # e.g. AREA-001
@@ -66,6 +72,11 @@ class Zone(Base):
     zone_type: Mapped[str] = mapped_column(String(32), nullable=False, default="stay")
     floor: Mapped[str | None] = mapped_column(String(100), nullable=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Free-text unit list for non-stay zones — written by Super Admin,
+    # mapped read-only here (shared table).
+    custom_units: Mapped[list] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
+    )
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(

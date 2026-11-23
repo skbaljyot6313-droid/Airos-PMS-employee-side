@@ -30,6 +30,7 @@ interface AirosUpdatePlugin {
     expectedSha256?: string;
     expectedSizeBytes?: number;
   }): Promise<{ versionCode: number; versionName: string; sizeBytes: number }>;
+  installedSignerSha256(): Promise<{ sha256: string | null }>;
   getPendingApk(): Promise<PendingApk>;
   installApk(): Promise<void>;
   canRequestPackageInstalls(): Promise<{ allowed: boolean }>;

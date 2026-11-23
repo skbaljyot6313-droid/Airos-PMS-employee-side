@@ -45,6 +45,7 @@ import { TasksScreen } from './screens/employee/TasksScreen';
 import { TaskDetailScreen } from './screens/employee/TaskDetailScreen';
 import { MaintenanceScreen } from './screens/employee/MaintenanceScreen';
 import { AttendanceScreen } from './screens/employee/AttendanceScreen';
+import { CalendarScreen } from './screens/employee/CalendarScreen';
 import { SalaryScreen } from './screens/employee/SalaryScreen';
 import { ZoneWorkspaceScreen } from './screens/employee/ZoneWorkspaceScreen';
 import { MaintenanceNewScreen } from './screens/employee/MaintenanceNewScreen';
@@ -237,9 +238,9 @@ const AppNavigator: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-white p-6">
-        <div className="w-12 h-12 rounded-2xl bg-[#33B059] flex items-center justify-center text-white mb-3 shadow-sm animate-pulse">
-          <span className="font-bold text-lg font-['Space_Grotesk']">A</span>
+      <div className="flex-1 flex flex-col items-center justify-center bg-white px-[var(--app-px)] pt-[var(--app-top-gap)] pb-[var(--app-bottom-gap)]">
+        <div className="w-12 h-12 rounded-2xl bg-[#800020] flex items-center justify-center text-white mb-3 shadow-sm animate-pulse">
+          <span className="font-bold text-lg font-['Satoshi']">A</span>
         </div>
         <LoadingState message={t('profile.validating')} />
       </div>
@@ -259,12 +260,16 @@ const AppNavigator: React.FC = () => {
         />
       );
     }
-    return <LoginScreen />;
+    return (
+      <div className="flex-1 flex flex-col h-full bg-white px-[var(--app-px)] pt-[var(--app-top-gap)] pb-[var(--app-bottom-gap)]">
+        <LoginScreen />
+      </div>
+    );
   }
 
   // Employee Application Stack & Tab Routing
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#F7F8F6] relative">
+    <div className="flex-1 flex flex-col h-full bg-[#FFFCFA] relative px-[var(--app-px)] pt-[var(--app-top-gap)] pb-[var(--app-bottom-gap)]">
       <div className="flex-1 flex flex-col min-h-0 relative">
         {route.type === 'task-detail' ? (
           <TaskDetailScreen
@@ -343,9 +348,24 @@ const AppNavigator: React.FC = () => {
                 onMaintenanceCountChange={setMaintenanceCount}
               />
             )}
+            {route.tab === 'calendar' && (
+              <CalendarScreen
+                onOpenTask={(taskId, kind) =>
+                  navigate(
+                    kind === 'maintenance'
+                      ? { type: 'maintenance-detail', ticketId: taskId }
+                      : { type: 'task-detail', taskId }
+                  )
+                }
+              />
+            )}
             {route.tab === 'attendance' && <AttendanceScreen />}
             {route.tab === 'salary' && <SalaryScreen />}
-            {route.tab === 'profile' && <ProfileScreen />}
+            {route.tab === 'profile' && (
+              <ProfileScreen
+                onOpenSalary={() => setRoute({ type: 'tabs', tab: 'salary' })}
+              />
+            )}
           </>
         )}
       </div>

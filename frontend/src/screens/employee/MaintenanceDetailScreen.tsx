@@ -155,7 +155,7 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col bg-[#F7F8F6]">
+      <div className="flex-1 flex flex-col bg-[#FFFCFA]">
         <ScreenHeader title={t('maintenance.detailTitle')} onBack={onBack} />
         <LoadingState message={t('maintenance.loadingTicket')} />
       </div>
@@ -164,7 +164,7 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
 
   if (error || !ticket) {
     return (
-      <div className="flex-1 flex flex-col bg-[#F7F8F6]">
+      <div className="flex-1 flex flex-col bg-[#FFFCFA]">
         <ScreenHeader title={t('maintenance.detailTitle')} onBack={onBack} />
         <ErrorState message={error || t('maintenance.ticketNotFound')} onRetry={loadTicket} />
       </div>
@@ -177,7 +177,7 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
     : '—';
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
+    <div className="flex-1 flex flex-col bg-[#FFFCFA] overflow-y-auto">
       <ScreenHeader
         title={ticket.ticket_number || ticket.id}
         subtitle={`${ticket.category} · ${ticket.location_name}`}
@@ -188,10 +188,10 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
       <div className="p-4 space-y-4 pb-28">
         {/* Reported by you banner when assigned to another tech */}
         {isReportedByMe && !isAssignedToMe && (
-          <div className="bg-[#EEF3FF] border border-[#C2D4FF] p-3.5 rounded-2xl flex items-center gap-2.5 text-xs text-[#2B5DD8]">
+          <div className="bg-[#EAF1FB] border border-[#C2D4FF] p-3.5 rounded-2xl flex items-center gap-2.5 text-xs text-[#3478D4]">
             <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
             <div>
-              <span className="font-bold block font-['Space_Grotesk']">{t('maintenance.reportedByYou')}</span>
+              <span className="font-bold block font-['Satoshi']">{t('maintenance.reportedByYou')}</span>
               <span>
                 {t('maintenance.reportedByYouDesc', { name: ticket.assigned_to_name || t('maintenance.defaultTech') })}
               </span>
@@ -200,16 +200,16 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
         )}
 
         {actionError && (
-          <div className="bg-[#FCEBEA] border border-[#F8C8C6] p-3 rounded-xl text-xs text-[#D9534F] flex items-center justify-between">
+          <div className="bg-[#FAEBEB] border border-[#F0C8C8] p-3 rounded-xl text-xs text-[#D64545] flex items-center justify-between">
             <span>{actionError}</span>
             <button onClick={() => setActionError(null)}><X className="w-4 h-4" /></button>
           </div>
         )}
 
         {/* Ticket Header Card */}
-        <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm space-y-3">
+        <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#667174]">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-[#667085]">
               {ticket.category}
             </span>
             <div className="flex items-center gap-1">
@@ -218,35 +218,35 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
             </div>
           </div>
 
-          <h2 className="text-[17px] font-bold text-[#20292C] font-['Space_Grotesk'] leading-tight">
+          <h2 className="text-[13px] font-bold text-[#0D1C42] font-['Satoshi'] leading-tight">
             {ticket.issue}
           </h2>
 
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#F0F2F1] text-xs">
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#F6F4F2] text-xs">
             <div>
-              <span className="text-[11px] text-[#8D999C] uppercase tracking-wider block mb-0.5">{t('maintenance.location')}</span>
-              <div className="flex items-center gap-1 text-[#20292C] font-medium">
-                <MapPin className="w-3.5 h-3.5 text-[#8D999C]" />
+              <span className="text-[9px] text-[#98A2B3] uppercase tracking-wider block mb-0.5">{t('maintenance.location')}</span>
+              <div className="flex items-center gap-1 text-[#0D1C42] font-medium">
+                <MapPin className="w-3.5 h-3.5 text-[#98A2B3]" />
                 <span className="truncate">{ticket.location_name}</span>
               </div>
-              <span className="text-[11px] text-[#667174] pl-4">{ticket.zone_name}</span>
+              <span className="text-[9px] text-[#667085] pl-4">{ticket.zone_name}</span>
             </div>
 
             <div>
-              <span className="text-[11px] text-[#8D999C] uppercase tracking-wider block mb-0.5">{t('maintenance.reported')}</span>
-              <div className="flex items-center gap-1 font-medium text-[#20292C]">
-                <Calendar className="w-3.5 h-3.5 text-[#8D999C]" />
+              <span className="text-[9px] text-[#98A2B3] uppercase tracking-wider block mb-0.5">{t('maintenance.reported')}</span>
+              <div className="flex items-center gap-1 font-medium text-[#0D1C42]">
+                <Calendar className="w-3.5 h-3.5 text-[#98A2B3]" />
                 <span>{createdFormatted}</span>
               </div>
-              <span className="text-[11px] text-[#667174] pl-4">{t('common.by')} {ticket.reported_by_name}</span>
+              <span className="text-[9px] text-[#667085] pl-4">{t('common.by')} {ticket.reported_by_name}</span>
             </div>
           </div>
 
-          <div className="pt-2 border-t border-[#F0F2F1] text-xs text-[#667174] flex items-center gap-1.5">
-            <User className="w-3.5 h-3.5 text-[#8D999C]" />
+          <div className="pt-2 border-t border-[#F6F4F2] text-xs text-[#667085] flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5 text-[#98A2B3]" />
             <span>
               {t('maintenance.assignedTechLabel')}{' '}
-              <strong className="text-[#20292C]">
+              <strong className="text-[#0D1C42]">
                 {ticket.assigned_to_name ? (isAssignedToMe ? t('maintenance.youAssigned') : ticket.assigned_to_name) : t('maintenance.unassigned')}
               </strong>
             </span>
@@ -255,11 +255,11 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
 
         {/* Issue Description */}
         {ticket.description && (
-          <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
-            <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider mb-2 font-['Space_Grotesk']">
+          <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
+            <h3 className="text-xs font-bold text-[#0D1C42] uppercase tracking-wider mb-2 font-['Satoshi']">
               {t('maintenance.issueDescription')}
             </h3>
-            <p className="text-xs text-[#20292C] leading-relaxed bg-[#F7F8F6] p-3 rounded-xl border border-[#E4E8E6]">
+            <p className="text-xs text-[#0D1C42] leading-relaxed bg-[#FFFCFA] p-3 rounded-xl border border-[#E7E5E4]">
               {ticket.description}
             </p>
           </div>
@@ -267,13 +267,13 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
 
         {/* Initial Issue Photos */}
         {ticket.photos.length > 0 && (
-          <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
-            <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider mb-2 font-['Space_Grotesk']">
+          <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
+            <h3 className="text-xs font-bold text-[#0D1C42] uppercase tracking-wider mb-2 font-['Satoshi']">
               {t('maintenance.reportedPhotos', { count: ticket.photos.length })}
             </h3>
             <div className="grid grid-cols-2 gap-3">
               {ticket.photos.map((url, i) => (
-                <div key={i} className="aspect-video rounded-xl overflow-hidden border border-[#E4E8E6]">
+                <div key={i} className="aspect-video rounded-xl overflow-hidden border border-[#E7E5E4]">
                   <img src={mediaUrl(url)} alt={t('maintenance.reportedProblemAlt')} className="w-full h-full object-cover" />
                 </div>
               ))}
@@ -283,26 +283,26 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
 
         {/* Resolution Details if Resolved */}
         {ticket.status === 'resolved' && (
-          <div className="bg-[#E8F7ED] border border-[#BBECCC] rounded-2xl p-4 shadow-sm space-y-2">
-            <div className="flex items-center gap-2 text-[#278B46]">
+          <div className="bg-[#F7E9EE] border border-[#EAD3DB] rounded-2xl p-4 shadow-sm space-y-2">
+            <div className="flex items-center gap-2 text-[#0D1C42]">
               <FileCheck className="w-5 h-5" />
-              <h3 className="text-sm font-bold font-['Space_Grotesk']">
+              <h3 className="text-sm font-bold font-['Satoshi']">
                 {t('maintenance.resolvedByTech')}
               </h3>
             </div>
-            <p className="text-xs text-[#20292C] font-medium leading-relaxed bg-white p-3 rounded-xl border border-[#BBECCC]">
+            <p className="text-xs text-[#0D1C42] font-medium leading-relaxed bg-white p-3 rounded-xl border border-[#EAD3DB]">
               {ticket.resolution_notes}
             </p>
             {ticket.resolution_photos && ticket.resolution_photos.length > 0 && (
               <div className="grid grid-cols-2 gap-2 pt-2">
                 {ticket.resolution_photos.map((url, i) => (
-                  <div key={i} className="aspect-video rounded-xl overflow-hidden border border-[#BBECCC]">
+                  <div key={i} className="aspect-video rounded-xl overflow-hidden border border-[#EAD3DB]">
                     <img src={mediaUrl(url)} alt={t('maintenance.resolutionAlt')} className="w-full h-full object-cover" />
                   </div>
                 ))}
               </div>
             )}
-            <p className="text-[11px] text-[#667174] pt-1">
+            <p className="text-[9px] text-[#667085] pt-1">
               {t('maintenance.pendingAudit')}
             </p>
           </div>
@@ -310,28 +310,28 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
 
         {/* Activity Timeline */}
         {ticket.history && ticket.history.length > 0 && (
-          <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
+          <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
             <div className="flex items-center gap-2 mb-3">
-              <History className="w-4 h-4 text-[#33B059]" />
-              <h3 className="text-sm font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+              <History className="w-4 h-4 text-[#800020]" />
+              <h3 className="text-sm font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
                 {t('maintenance.activity')}
               </h3>
             </div>
-            <div className="space-y-3 relative pl-4 before:content-[''] before:absolute before:top-2 before:bottom-2 before:left-1.5 before:w-0.5 before:bg-[#E4E8E6]">
+            <div className="space-y-3 relative pl-4 before:content-[''] before:absolute before:top-2 before:bottom-2 before:left-1.5 before:w-0.5 before:bg-[#E7E5E4]">
               {ticket.history.map((h, i) => (
                 <div key={i} className="relative">
-                  <span className="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-[#33B059] ring-4 ring-white" />
+                  <span className="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-[#800020] ring-4 ring-white" />
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[#20292C] capitalize">
+                    <span className="font-semibold text-[#0D1C42] capitalize">
                       {h.status.replace('_', ' ')}
                     </span>
-                    <span className="text-[11px] text-[#8D999C]">
+                    <span className="text-[9px] text-[#98A2B3]">
                       {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <span className="text-[11px] text-[#667174]">{t('common.by')} {h.actor_name}</span>
+                  <span className="text-[9px] text-[#667085]">{t('common.by')} {h.actor_name}</span>
                   {h.notes && (
-                    <p className="text-[11px] text-[#20292C] mt-1 bg-[#F7F8F6] p-2 rounded-lg border border-[#E4E8E6]">
+                    <p className="text-[9px] text-[#0D1C42] mt-1 bg-[#FFFCFA] p-2 rounded-lg border border-[#E7E5E4]">
                       {h.notes}
                     </p>
                   )}
@@ -344,7 +344,7 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
 
       {/* Action Footer for Assigned Employee */}
       {isAssignedToMe && (
-        <div className="fixed md:absolute bottom-0 inset-x-0 p-4 bg-white/95 backdrop-blur border-t border-[#E4E8E6] shadow-lg z-20">
+        <div className="fixed md:absolute bottom-0 inset-x-0 px-[var(--app-px)] pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] bg-white/95 backdrop-blur border-t border-[#E7E5E4] shadow-lg z-20">
           {ticket.status === 'assigned' && (
             <PrimaryButton
               size="lg"
@@ -368,7 +368,7 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
 
           {ticket.status === 'resolved' && (
             <div className="text-center py-1">
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#278B46] bg-[#E8F7ED] px-4 py-2 rounded-full border border-[#BBECCC]">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0D1C42] bg-[#F7E9EE] px-4 py-2 rounded-full border border-[#EAD3DB]">
                 <CheckCircle2 className="w-4 h-4" />
                 {t('maintenance.workResolvedReview')}
               </span>
@@ -380,26 +380,26 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
       {/* Resolution Sheet / Modal */}
       {isResolving && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-end md:items-center justify-center p-0 md:p-4">
-          <div className="bg-white w-full max-w-md rounded-t-3xl md:rounded-3xl p-5 space-y-4 animate-in slide-in-from-bottom duration-200">
-            <div className="flex items-center justify-between border-b border-[#F0F2F1] pb-3">
+          <div className="bg-white w-full max-w-md rounded-t-3xl md:rounded-3xl p-5 pb-[max(1.25rem,calc(env(safe-area-inset-bottom,0px)+1rem))] space-y-4 animate-in slide-in-from-bottom duration-200">
+            <div className="flex items-center justify-between border-b border-[#F6F4F2] pb-3">
               <div>
-                <h3 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
+                <h3 className="text-base font-bold text-[#0D1C42] font-['Satoshi']">
                   {t('maintenance.resolveTitle')}
                 </h3>
-                <p className="text-xs text-[#667174]">
+                <p className="text-xs text-[#667085]">
                   {t('maintenance.resolveSubtitle')}
                 </p>
               </div>
               <button
                 onClick={() => setIsResolving(false)}
-                className="p-1.5 rounded-full text-[#8D999C] hover:bg-[#F0F2F1]"
+                className="p-1.5 rounded-full text-[#98A2B3] hover:bg-[#F6F4F2]"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider mb-1 font-['Space_Grotesk']">
+              <label className="block text-xs font-bold text-[#0D1C42] uppercase tracking-wider mb-1 font-['Satoshi']">
                 {t('maintenance.resolutionNotes')}
               </label>
               <textarea
@@ -407,17 +407,17 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
                 onChange={(e) => setResolutionNotes(e.target.value)}
                 placeholder={t('maintenance.resolutionPlaceholder')}
                 rows={3}
-                className="w-full p-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-xs text-[#20292C] focus:bg-white focus:outline-none focus:border-[#33B059]"
+                className="w-full p-3 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-xs text-[#0D1C42] focus:bg-white focus:outline-none focus:border-[#800020]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider mb-2 font-['Space_Grotesk']">
+              <label className="block text-xs font-bold text-[#0D1C42] uppercase tracking-wider mb-2 font-['Satoshi']">
                 {t('maintenance.resolutionPhotos')}
               </label>
               <div className="grid grid-cols-2 gap-2 mb-2">
                 {resolutionPhotos.map((url, i) => (
-                  <div key={i} className="aspect-video rounded-xl overflow-hidden border border-[#E4E8E6] relative">
+                  <div key={i} className="aspect-video rounded-xl overflow-hidden border border-[#E7E5E4] relative">
                     <img src={mediaUrl(url)} alt={t('maintenance.proofAlt')} className="w-full h-full object-cover" />
                     <button
                       onClick={() => setResolutionPhotos((p) => p.filter((_, idx) => idx !== i))}
@@ -427,7 +427,7 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
                     </button>
                   </div>
                 ))}
-                <label className="aspect-video rounded-xl border-2 border-dashed border-[#D2D8D6] bg-[#F7F8F6] flex flex-col items-center justify-center cursor-pointer p-2 text-center">
+                <label className="aspect-video rounded-xl border-2 border-dashed border-[#D6D3D1] bg-[#FFFCFA] flex flex-col items-center justify-center cursor-pointer p-2 text-center">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -436,11 +436,11 @@ export const MaintenanceDetailScreen: React.FC<MaintenanceDetailScreenProps> = (
                     className="hidden"
                   />
                   {uploadingPhoto ? (
-                    <Upload className="w-4 h-4 text-[#33B059] animate-bounce" />
+                    <Upload className="w-4 h-4 text-[#800020] animate-bounce" />
                   ) : (
                     <>
-                      <Camera className="w-4 h-4 text-[#667174] mb-1" />
-                      <span className="text-[11px] font-semibold text-[#20292C]">{t('common.addPhoto')}</span>
+                      <Camera className="w-4 h-4 text-[#667085] mb-1" />
+                      <span className="text-[9px] font-semibold text-[#0D1C42]">{t('common.addPhoto')}</span>
                     </>
                   )}
                 </label>

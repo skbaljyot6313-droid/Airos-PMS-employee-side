@@ -26,6 +26,7 @@ vi.mock('../updateInstaller', () => ({
     canRequestPackageInstalls: vi.fn(),
     openInstallPermissionSettings: vi.fn(),
     deletePendingApk: vi.fn(),
+    installedSignerSha256: vi.fn(),
     addListener: vi.fn().mockResolvedValue({ remove: vi.fn() }),
   },
 }));
@@ -44,7 +45,9 @@ import {
   reconcilePending,
   resetUpdateFlow,
   resetUpdateState,
+  retryUpdate,
   shouldCheckNow,
+  updateBlocked,
 } from '../updateService';
 
 const release = (over: Partial<MobileVersionInfo> = {}): MobileVersionInfo => ({
@@ -75,6 +78,7 @@ beforeEach(() => {
   vi.mocked(NativeUpdate.downloadApk).mockResolvedValue({
     versionCode: 3, versionName: '1.0.2', sizeBytes: 6_000_000,
   });
+  vi.mocked(NativeUpdate.installedSignerSha256).mockResolvedValue({ sha256: null });
 });
 
 describe('evaluateUpdate — versionCode is the authority', () => {
@@ -102,6 +106,29 @@ describe('evaluateUpdate — versionCode is the authority', () => {
     );
   });
 
+  it('signer-incompatible release is blocked, never required', () => {
+    const s = evaluateUpdate(
+      1,
+      release({ update_compatible: false, minimum_version_code: 2 }),
+    );
+    // Even below the minimum gate, an update Android cannot install must
+    // not soft-lock the app.
+    expect(s.kind).toBe('blocked');
+  });
+
+  it('a recorded WRONG_SIGNATURE rejection blocks that release', () => {
+    localStorage.setItem('airos_update_sigblock_2', '1');
+    expect(evaluateUpdate(1, release()).kind).toBe('blocked');
+    expect(updateBlocked(release())).toBe(true);
+  });
+
+  it('blocked only applies when an update actually exists', () => {
+    localStorage.setItem('airos_update_sigblock_2', '1');
+    expect(
+      evaluateUpdate(2, release({ update_compatible: false })).kind,
+    ).toBe('none');
+  });
+
   it('integer compare — code 10 beats code 9 (1.0.10 > 1.0.9)', () => {
     const s = evaluateUpdate(
       9,
@@ -118,6 +145,61 @@ describe('evaluateUpdate — versionCode is the authority', () => {
 });
 
 describe('checkForUpdates', () => {
+  it('sends the installed versionCode for the server compat verdict', async () => {
+    installed(20);
+    vi.mocked(getMobileVersion).mockResolvedValue(release());
+    await checkForUpdates(true);
+    expect(getMobileVersion).toHaveBeenCalledWith('android', 20);
+  });
+
+  it('a server-declared incompatible release becomes blocked', async () => {
+    installed(20);
+    vi.mocked(getMobileVersion).mockResolvedValue(
+      release({
+        latest_version_code: 21,
+        update_available: false,
+        update_compatible: false,
+        incompatibility_reason: 'SIGNER_MISMATCH',
+      }),
+    );
+    const s = await checkForUpdates(true);
+    expect(s.kind).toBe('blocked');
+    expect(getUpdateState().installed?.versionCode).toBe(20);
+  });
+
+  it('falls back to the native signer fingerprint when the server cannot tell', async () => {
+    installed(20);
+    vi.mocked(getMobileVersion).mockResolvedValue(
+      release({
+        latest_version_code: 21,
+        update_compatible: null,
+        signer_sha256: 'abc123',
+      }),
+    );
+    vi.mocked(NativeUpdate.installedSignerSha256).mockResolvedValue({
+      sha256: 'different-cert',
+    });
+    const s = await checkForUpdates(true);
+    expect(s.kind).toBe('blocked');
+    expect(NativeUpdate.downloadApk).not.toHaveBeenCalled();
+  });
+
+  it('matching native signer keeps the update offerable', async () => {
+    installed(20);
+    vi.mocked(getMobileVersion).mockResolvedValue(
+      release({
+        latest_version_code: 21,
+        update_compatible: null,
+        signer_sha256: 'same-cert',
+      }),
+    );
+    vi.mocked(NativeUpdate.installedSignerSha256).mockResolvedValue({
+      sha256: 'same-cert',
+    });
+    const s = await checkForUpdates(true);
+    expect(s.kind).toBe('optional');
+  });
+
   it('emits optional update for an older install', async () => {
     installed(1);
     vi.mocked(getMobileVersion).mockResolvedValue(release());
@@ -220,6 +302,38 @@ describe('download/install flow', () => {
     expect(getUpdateFlow().phase).toBe('error');
     expect(getUpdateFlow().error).toContain('HTTP_404');
     expect(NativeUpdate.installApk).not.toHaveBeenCalled();
+  });
+
+  it('never downloads a release already flagged incompatible', async () => {
+    const blocked = release({ latest_version_code: 21, update_compatible: false });
+    await beginUpdate(blocked);
+    expect(NativeUpdate.downloadApk).not.toHaveBeenCalled();
+    expect(getUpdateState().kind).toBe('blocked');
+  });
+
+  it('a WRONG_SIGNATURE rejection marks the release blocked and never retries', async () => {
+    vi.mocked(NativeUpdate.downloadApk).mockRejectedValue(
+      new Error('WRONG_SIGNATURE'),
+    );
+    await beginUpdate(info);
+    expect(getUpdateFlow().phase).toBe('error');
+    expect(getUpdateFlow().error).toBe('WRONG_SIGNATURE');
+    expect(getUpdateState().kind).toBe('blocked');
+    // The flag survives restarts — this release is never re-downloaded.
+    expect(localStorage.getItem('airos_update_sigblock_3')).toBe('1');
+    retryUpdate();
+    await vi.waitFor(() =>
+      expect(NativeUpdate.downloadApk).toHaveBeenCalledTimes(1),
+    );
+  });
+
+  it('a SIGNATURE_MISMATCH at install is treated identically', async () => {
+    vi.mocked(NativeUpdate.installApk).mockRejectedValue(
+      new Error('SIGNATURE_MISMATCH'),
+    );
+    await beginUpdate(info);
+    expect(getUpdateFlow().error).toBe('WRONG_SIGNATURE');
+    expect(getUpdateState().kind).toBe('blocked');
   });
 
   it('routes to needs_permission when unknown-sources is blocked', async () => {

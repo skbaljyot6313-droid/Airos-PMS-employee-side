@@ -52,10 +52,20 @@ export const mr: Messages = {
   nav: {
     label: 'खालचे नेव्हिगेशन',
     tasks: 'कामे',
+    calendar: 'कॅलेंडर',
     maintenance: 'देखभाल',
     attendance: 'उपस्थिती',
     salary: 'पगार',
     profile: 'प्रोफाइल',
+  },
+  calendar: {
+    title: 'माझे कॅलेंडर',
+    month: 'महिना',
+    week: 'आठवडा',
+    agenda: 'एजेंडा',
+    today: 'आज',
+    nothingScheduled: 'कोणतेही काम निर्धारित नाही',
+    overdue: 'उशीरा',
   },
   auth: {
     brand: 'Airco PMS',
@@ -481,7 +491,11 @@ export const mr: Messages = {
     requiredText: 'Airco PMS Employee चे तुमचे आवृत्ती आता समर्थित नाही. पुढे जाण्यासाठी अपडेट करा.',
     availableTitle: 'अपडेट उपलब्ध',
     availableText: 'Airco PMS Employee ची नवीन आवृत्ती उपलब्ध आहे.',
+    blockedTitle: 'अपडेट इन्स्टॉल होऊ शकत नाही',
+    blockedText:
+      'Airco PMS Employee ची ही आवृत्ती वेगळ्या प्रमाणपत्राने साइन केली गेल्यामुळे Android हे अपडेट तिच्यावर इन्स्टॉल करू शकत नाही. तुमचे अ‍ॅप आणि डेटा सुरक्षित आहे — नवीन इन्स्टॉलरसाठी तुमच्या प्रशासकाशी संपर्क साधा.',
     version: 'आवृत्ती {{version}}',
+    versionChange: '{{installed}} → {{latest}}',
     updateNow: 'आता अपडेट करा',
     openSettings: 'सेटिंग्ज उघडा',
     later: 'नंतर',

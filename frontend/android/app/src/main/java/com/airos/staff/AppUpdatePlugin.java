@@ -48,6 +48,20 @@ public class AppUpdatePlugin extends Plugin {
     private static final String KEY_SHA = "pending_apk_sha256";
     private static final String KEY_SIZE = "pending_apk_size_bytes";
 
+    /** SHA-256 (lowercase hex) of raw bytes — null on failure. */
+    private static String sha256Bytes(byte[] data) {
+        try {
+            java.security.MessageDigest md =
+                    java.security.MessageDigest.getInstance("SHA-256");
+            StringBuilder sb = new StringBuilder();
+            for (byte b : md.digest(data))
+                sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** Whole-file SHA-256, lowercase hex — null on read failure. */
     private static String sha256Of(File f) {
         try {
@@ -200,6 +214,40 @@ public class AppUpdatePlugin extends Plugin {
             new File(path).delete();
         }
         prefs().edit().remove(KEY_PATH).remove(KEY_CODE).remove(KEY_NAME).apply();
+    }
+
+    /** SHA-256 fingerprint of the installed app's own signing certificate —
+     *  lets the version check decide compatibility BEFORE downloading an
+     *  APK that Android would refuse (WRONG_SIGNATURE). Null when the
+     *  signature can't be read. */
+    @PluginMethod
+    public void installedSignerSha256(PluginCall call) {
+        JSObject out = new JSObject();
+        String sha = null;
+        try {
+            android.content.pm.Signature[] sigs = null;
+            PackageInfo installed;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                installed = getContext().getPackageManager().getPackageInfo(
+                        getContext().getPackageName(),
+                        PackageManager.GET_SIGNING_CERTIFICATES);
+                if (installed.signingInfo != null) {
+                    sigs = installed.signingInfo.getApkContentsSigners();
+                }
+            } else {
+                installed = getContext().getPackageManager().getPackageInfo(
+                        getContext().getPackageName(),
+                        PackageManager.GET_SIGNATURES);
+                sigs = installed.signatures;
+            }
+            if (sigs != null && sigs.length > 0) {
+                sha = sha256Bytes(sigs[0].toByteArray());
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "installed signer read failed", e);
+        }
+        out.put("sha256", sha);
+        call.resolve(out);
     }
 
     @PluginMethod

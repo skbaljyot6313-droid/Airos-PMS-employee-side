@@ -6,28 +6,33 @@
  * bg-warnsoft, text-ok, text-info / bg-infosoft, bg-soft. */
 @theme {
   /* Fortify-inspired: white canvas, near-black ink, lime signature accent */
-  --color-app: #F4F5F3;
+  --color-app: #FFFCFA;
   --color-surface: #FFFFFF;
-  --color-soft: #F7F8F6;
-  --color-ink: #202522;
-  --color-sub: #858B88;
-  --color-mute: #8B918C;
-  --color-line: #E7EAE7;
-  --color-grid: #F0F1EE;
+  --color-soft: #FFFCFA;
+  --color-ink: #0D1C42;
+  --color-sub: #667085;
+  --color-mute: #98A2B3;
+  --color-line: #E7E5E4;
+  --color-grid: #F6F4F2;
 
-  --color-lime: #B8E957;
-  --color-acc: #278447;
-  --color-accsoft: #EAF4ED;
+  --color-lime: #EAD3DB;
+  --color-acc: #800020;
+  --color-accsoft: #F7E9EE;
 
-  --color-dng: #D94B55;
-  --color-dngsoft: #FFF0F0;
+  --color-dng: #D64545;
+  --color-dngsoft: #FAEBEB;
 
-  --color-warn: #A86A12;
-  --color-warnsoft: #FBF3E4;
+  --color-warn: #A56514;
+  --color-warnsoft: #FDF3E2;
 
-  --color-ok: #32865B;
-  --color-info: #2B5DD8;
-  --color-infosoft: #EEF3FF;
+  --color-ok: #16865B;
+  --color-info: #3478D4;
+  --color-infosoft: #EAF1FB;
+}
+
+html {
+  /* Denser reading scale — every rem-based font size shrinks ~6%. */
+  font-size: 87.5%;
 }
 
 html,
@@ -41,4 +46,20 @@ body,
 @keyframes speakbar {
   0%, 100% { transform: scaleY(0.4); }
   50% { transform: scaleY(1); }
+}
+
+body {
+  font-family: 'Satoshi', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  /* Centralized mobile spacing system — every screen inherits from the app
+     shell; don't override per-screen. ~5–6% side margins; vertical breathing
+     (~15% total) is distributed across the status-bar gap, section rhythm
+     and bottom-nav float rather than one dead margin. */
+  --app-px: clamp(1rem, 5.5vw, 2rem);
+  --app-top-gap: calc(env(safe-area-inset-top, 0px) + clamp(1.25rem, 4.5vh, 3rem));
+  --app-bottom-gap: calc(env(safe-area-inset-bottom, 0px) + clamp(1rem, 4vh, 2.75rem));
+  --app-section-gap: clamp(0.875rem, 3vh, 1.75rem);
+  --app-card-pad: clamp(0.875rem, 3.5vw, 1.25rem);
 }

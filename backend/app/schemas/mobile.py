@@ -28,6 +28,15 @@ class MobileVersionResponse(BaseModel):
     installed_version_code: int | None = None
     update_available: bool | None = None
     mandatory_update: bool | None = None
+    # Signer compatibility — Android refuses an update whose certificate
+    # differs from the installed app (WRONG_SIGNATURE). True/False when both
+    # signers could be resolved, None when either side is unknown (external
+    # release URLs carry no signer stamp) — the device's native signer
+    # check remains the fallback gate.
+    update_compatible: bool | None = None
+    incompatibility_reason: str | None = None
+    signer_sha256: str | None = None
+    installed_signer_sha256: str | None = None
 
 
 class MobileReleaseCreate(BaseModel):

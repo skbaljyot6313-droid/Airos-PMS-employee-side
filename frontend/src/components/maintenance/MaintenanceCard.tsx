@@ -33,15 +33,15 @@ export const MaintenanceCard: React.FC<MaintenanceCardProps> = ({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onClick()}
-      className="bg-white rounded-2xl p-3 border border-[#E4E8E6] hover:border-[#D2D8D6] transition-all active:scale-[0.99] cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.03)]"
+      className="bg-white rounded-2xl p-3 border border-[#E7E5E4] hover:border-[#D6D3D1] transition-all active:scale-[0.99] cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.03)]"
     >
       {/* Top Header: ID & Badges */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-semibold text-[#667174] bg-[#F0F2F1] px-2 py-0.5 rounded-md">
+          <span className="font-mono text-xs font-semibold text-[#667085] bg-[#F6F4F2] px-2 py-0.5 rounded-md">
             {ticket.ticket_number || ticket.id}
           </span>
-          <span className="text-[11px] font-semibold text-[#8D999C] uppercase tracking-wide">
+          <span className="text-[9px] font-semibold text-[#98A2B3] uppercase tracking-wide">
             {ticket.category}
           </span>
         </div>
@@ -52,23 +52,23 @@ export const MaintenanceCard: React.FC<MaintenanceCardProps> = ({
       </div>
 
       {/* Issue title */}
-      <h3 className="text-[15px] font-semibold text-[#20292C] leading-snug mb-1.5 font-['Space_Grotesk']">
+      <h3 className="text-[12px] font-semibold text-[#0D1C42] leading-snug mb-1.5 font-['Satoshi']">
         {ticket.issue}
       </h3>
 
       {/* Location */}
-      <div className="flex items-center gap-1.5 text-xs text-[#667174] mb-3">
-        <MapPin className="w-3.5 h-3.5 text-[#8D999C] flex-shrink-0" />
-        <span className="font-medium text-[#20292C]">{ticket.location_name}</span>
-        <span className="text-[#8D999C]">·</span>
+      <div className="flex items-center gap-1.5 text-xs text-[#667085] mb-3">
+        <MapPin className="w-3.5 h-3.5 text-[#98A2B3] flex-shrink-0" />
+        <span className="font-medium text-[#0D1C42]">{ticket.location_name}</span>
+        <span className="text-[#98A2B3]">·</span>
         <span>{ticket.zone_name}</span>
       </div>
 
       {/* Assignment pill & photos */}
-      <div className="flex items-center justify-between text-xs py-1.5 border-t border-[#F0F2F1] mb-2">
+      <div className="flex items-center justify-between text-xs py-1.5 border-t border-[#F6F4F2] mb-2">
         <div className="flex items-center gap-1.5">
-          <User className="w-3.5 h-3.5 text-[#8D999C]" />
-          <span className="text-[#667174]">
+          <User className="w-3.5 h-3.5 text-[#98A2B3]" />
+          <span className="text-[#667085]">
             {isAssignedToMe
               ? t('maintenance.assignedToYou')
               : ticket.assigned_to_name
@@ -76,15 +76,15 @@ export const MaintenanceCard: React.FC<MaintenanceCardProps> = ({
               : t('maintenance.unassigned')}
           </span>
           {isReportedByMe && (
-            <span className="ml-1 text-[10px] font-medium bg-[#E8F7ED] text-[#278B46] px-1.5 py-0.5 rounded">
+            <span className="ml-1 text-[9px] font-medium bg-[#F7E9EE] text-[#0D1C42] px-1.5 py-0.5 rounded">
               {t('maintenance.reportedByYou')}
             </span>
           )}
         </div>
 
         {(ticket.photo_count ?? ticket.photos.length) > 0 && (
-          <div className="flex items-center gap-1 text-[11px] text-[#667174]">
-            <ImageIcon className="w-3 h-3 text-[#8D999C]" />
+          <div className="flex items-center gap-1 text-[9px] text-[#667085]">
+            <ImageIcon className="w-3 h-3 text-[#98A2B3]" />
             <span>{ticket.photo_count ?? ticket.photos.length}</span>
           </div>
         )}
@@ -92,7 +92,7 @@ export const MaintenanceCard: React.FC<MaintenanceCardProps> = ({
 
       {/* Bottom: Date & Status */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 text-[11px] text-[#8D999C]">
+        <div className="flex items-center gap-1.5 text-[9px] text-[#98A2B3]">
           <Calendar className="w-3.5 h-3.5" />
           <span>{dateFormatted}</span>
         </div>

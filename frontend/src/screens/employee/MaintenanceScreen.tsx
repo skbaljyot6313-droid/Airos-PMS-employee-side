@@ -65,27 +65,27 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
   );
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
+    <div className="flex-1 flex flex-col bg-[#FFFCFA] overflow-y-auto">
       {/* Sticky Top Header */}
-      <div className="bg-white border-b border-[#E4E8E6] px-4 pt-3 pb-2.5 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+      <div className="bg-white border-b border-[#E7E5E4] px-4 pt-3 pb-2.5 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <span className="text-[10px] font-semibold text-[#667174] uppercase tracking-wider block">
+            <span className="text-[9px] font-semibold text-[#667085] uppercase tracking-wider block">
               {t('maintenance.eyebrow')}
             </span>
-            <h1 className="text-[21px] font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
+            <h1 className="text-[16px] font-bold tracking-tight text-[#0D1C42] font-['Satoshi']">
               {t('maintenance.title')}
             </h1>
-            <p className="text-xs text-[#8D999C] mt-0.5">{t('maintenance.selectZoneHint')}</p>
+            <p className="text-xs text-[#98A2B3] mt-0.5">{t('maintenance.selectZoneHint')}</p>
           </div>
 
           <button
             onClick={() => loadData(true)}
             disabled={refreshing}
-            className="p-2 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-[#20292C] hover:bg-[#EFEFEF] transition-all"
+            className="p-2 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-[#0D1C42] hover:bg-[#F6F4F2] transition-all"
             aria-label={t('maintenance.refresh')}
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#33B059]' : 'text-[#667174]'}`} />
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#800020]' : 'text-[#667085]'}`} />
           </button>
         </div>
       </div>
@@ -106,7 +106,7 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
           />
         ) : (
           <div className="space-y-3 pb-8">
-            <span className="block text-[10px] font-bold text-[#8D999C] uppercase tracking-wider px-1">
+            <span className="block text-[9px] font-bold text-[#98A2B3] uppercase tracking-wider px-1">
               {t('maintenance.yourZones')}
             </span>
             {zones.map((zone) => (

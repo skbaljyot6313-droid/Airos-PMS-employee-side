@@ -69,12 +69,12 @@ export const SpeakButton: React.FC<{ task: Task; className?: string }> = ({
     }
       className={`w-10 h-10 -m-1.5 flex items-center justify-center rounded-xl transition-colors flex-shrink-0 ${
         speakingThis
-          ? 'text-[#33B059] bg-[#E8F7ED]'
+          ? 'text-[#800020] bg-[#F7E9EE]'
           : completed
-            ? 'text-[#278B46] bg-[#E8F7ED]'
+            ? 'text-[#0D1C42] bg-[#F7E9EE]'
             : missingVoice
-              ? 'text-[#D9534F] hover:bg-[#FCEBEA]'
-              : 'text-[#8D999C] hover:bg-[#F0F2F1] hover:text-[#667174]'
+              ? 'text-[#D64545] hover:bg-[#FAEBEB]'
+              : 'text-[#98A2B3] hover:bg-[#F6F4F2] hover:text-[#667085]'
       } ${className}`}
     >
       {preparing ? (

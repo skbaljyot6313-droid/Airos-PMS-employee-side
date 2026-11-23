@@ -81,8 +81,8 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
           <div
             className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${
               required && flow.phase === 'idle'
-                ? 'bg-[#FCEBEA] text-[#D9534F]'
-                : 'bg-[#E8F7ED] text-[#33B059]'
+                ? 'bg-[#FAEBEB] text-[#D64545]'
+                : 'bg-[#F7E9EE] text-[#800020]'
             }`}
           >
             {flow.phase === 'downloading' ? (
@@ -94,15 +94,15 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
             )}
           </div>
 
-          <h2 className="text-lg font-semibold text-[#20292C] font-['Space_Grotesk']">
+          <h2 className="text-lg font-semibold text-[#0D1C42] font-['Satoshi']">
             {body.title}
           </h2>
-          <p className="mt-1 text-sm text-[#667174]">{body.text}</p>
-          <p className="mt-3 text-xs font-medium text-[#8D999C]">
+          <p className="mt-1 text-sm text-[#667085]">{body.text}</p>
+          <p className="mt-3 text-xs font-medium text-[#98A2B3]">
             {t('update.version', { version: info.latest_version })}
           </p>
           {flow.phase === 'error' && flow.error && (
-            <p className="mt-1 text-[11px] font-mono text-[#B3BABC]">
+            <p className="mt-1 text-[9px] font-mono text-[#B3BABC]">
               {/failed to fetch|network|timeout|econn|socket|resolve|refused|abort/i.test(
                 flow.error
               )
@@ -113,18 +113,18 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({ state, flow, onLater
 
           {flow.phase === 'downloading' && (
             <div className="w-full mt-4">
-              <div className="h-2 w-full rounded-full bg-[#F0F2F1] overflow-hidden">
+              <div className="h-2 w-full rounded-full bg-[#F6F4F2] overflow-hidden">
                 {flow.progress === null ? (
-                  <div className="h-full w-1/3 rounded-full bg-[#33B059] animate-pulse" />
+                  <div className="h-full w-1/3 rounded-full bg-[#800020] animate-pulse" />
                 ) : (
                   <div
-                    className="h-full rounded-full bg-[#33B059] transition-all duration-300"
+                    className="h-full rounded-full bg-[#800020] transition-all duration-300"
                     style={{ width: `${flow.progress}%` }}
                   />
                 )}
               </div>
               {flow.progress !== null && (
-                <p className="mt-2 text-xs text-[#8D999C]">{flow.progress}%</p>
+                <p className="mt-2 text-xs text-[#98A2B3]">{flow.progress}%</p>
               )}
             </div>
           )}

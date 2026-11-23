@@ -33,14 +33,14 @@ export const ResourceChips: React.FC<ResourceChipsProps> = ({
 
   return (
     <div className="mb-1.5" onClick={(e) => e.stopPropagation()}>
-      <div className="text-[10px] font-medium text-mute mb-1">
+      <div className="text-[9px] font-medium text-mute mb-1">
         {t(`tasks.resources.${kind}`, { count: unique.length })}
       </div>
       <div className="flex flex-wrap gap-1">
         {shown.map((r) => (
           <span
             key={`${r.kind}-${r.id || r.label}`}
-            className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-soft border border-line text-[11px] font-medium text-ink/80 whitespace-nowrap"
+            className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-soft border border-line text-[9px] font-medium text-ink/80 whitespace-nowrap"
           >
             {r.label}
           </span>
@@ -53,7 +53,7 @@ export const ResourceChips: React.FC<ResourceChipsProps> = ({
               setExpanded(true);
             }}
             aria-expanded="false"
-            className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-[#E8F7ED] text-[11px] font-semibold text-[#33B059]"
+            className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-[#F7E9EE] text-[9px] font-semibold text-[#800020]"
           >
             +{overflow} {t('tasks.resources.more')}
           </button>
@@ -66,7 +66,7 @@ export const ResourceChips: React.FC<ResourceChipsProps> = ({
               setExpanded(false);
             }}
             aria-expanded="true"
-            className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-medium text-mute hover:text-sub"
+            className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-medium text-mute hover:text-sub"
           >
             {t('tasks.resources.less')}
           </button>

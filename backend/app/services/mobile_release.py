@@ -42,6 +42,18 @@ async def get_active_release(
     return result.scalar_one_or_none()
 
 
+async def get_release_by_code(
+    session: AsyncSession, platform: str, version_code: int
+) -> MobileRelease | None:
+    result = await session.execute(
+        select(MobileRelease).where(
+            MobileRelease.platform == platform,
+            MobileRelease.version_code == version_code,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def list_releases(
     session: AsyncSession, platform: str
 ) -> list[MobileRelease]:

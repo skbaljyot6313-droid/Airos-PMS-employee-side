@@ -53,17 +53,17 @@ import {
 // ---------------------------------------------------------------------------
 
 const STATE_CHIP: Record<WorkdayState, string> = {
-  not_started: 'bg-[#F0F2F1] text-[#667174] border-[#E4E8E6]',
-  working: 'bg-[#E8F7ED] text-[#278B46] border-[#BBECCC]',
-  on_break: 'bg-[#F5DEAB]/40 text-[#B87C10] border-[#F5DEAB]',
-  completed: 'bg-[#E8F7ED] text-[#278B46] border-[#BBECCC]',
+  not_started: 'bg-[#F6F4F2] text-[#667085] border-[#E7E5E4]',
+  working: 'bg-[#F7E9EE] text-[#0D1C42] border-[#EAD3DB]',
+  on_break: 'bg-[#FDF3E2]/40 text-[#A56514] border-[#FDF3E2]',
+  completed: 'bg-[#F7E9EE] text-[#0D1C42] border-[#EAD3DB]',
 };
 
 const DAY_STATUS_META: Record<AttendanceDayStatus, { dot: string; cell: string }> = {
-  present: { dot: 'bg-[#33B059]', cell: 'bg-[#E8F7ED] text-[#278B46]' },
-  week_off: { dot: 'bg-[#8D999C]', cell: 'bg-[#F0F2F1] text-[#667174]' },
-  leave: { dot: 'bg-[#2B5DD8]', cell: 'bg-[#EEF3FF] text-[#2B5DD8]' },
-  absent: { dot: 'bg-[#D9534F]', cell: 'bg-[#FCEBEA] text-[#D9534F]' },
+  present: { dot: 'bg-[#16865B]', cell: 'bg-[#E3F3EC] text-[#0E6B47]' },
+  week_off: { dot: 'bg-[#98A2B3]', cell: 'bg-[#F6F4F2] text-[#667085]' },
+  leave: { dot: 'bg-[#3478D4]', cell: 'bg-[#EAF1FB] text-[#3478D4]' },
+  absent: { dot: 'bg-[#D64545]', cell: 'bg-[#FAEBEB] text-[#D64545]' },
 };
 
 const LEAVE_TYPES = Object.keys(LEAVE_TYPE_LABELS) as LeaveType[];
@@ -71,10 +71,10 @@ const LEAVE_TYPES = Object.keys(LEAVE_TYPE_LABELS) as LeaveType[];
 /** Status chip styling for the requests table — same palette as
  *  STATE_CHIP / StatusBadge. */
 const REQUEST_STATUS_CHIP: Record<RequestStatus, string> = {
-  pending: 'bg-[#FDF6E8] text-[#B87C10] border-[#F5DEAB]',
-  approved: 'bg-[#E8F7ED] text-[#278B46] border-[#BBECCC]',
-  rejected: 'bg-[#FCEBEA] text-[#D9534F] border-[#F8C8C6]',
-  cancelled: 'bg-[#F5F5F5] text-[#8D999C] border-[#E4E8E6]',
+  pending: 'bg-[#FDF6E8] text-[#A56514] border-[#FDF3E2]',
+  approved: 'bg-[#F7E9EE] text-[#0D1C42] border-[#EAD3DB]',
+  rejected: 'bg-[#FAEBEB] text-[#D64545] border-[#F0C8C8]',
+  cancelled: 'bg-[#F5F5F5] text-[#98A2B3] border-[#E7E5E4]',
 };
 
 const MONTH_KEYS = [
@@ -124,7 +124,7 @@ const DateField: React.FC<{
       className="absolute inset-0 w-full opacity-0"
       aria-label={ariaLabel}
     />
-    <div className="w-full p-2.5 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-xs text-[#20292C] pointer-events-none">
+    <div className="w-full p-2.5 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-xs text-[#0D1C42] pointer-events-none">
       {value ? formatDateShort(value) : 'DD/MM/YYYY'}
     </div>
   </div>
@@ -422,18 +422,18 @@ export const AttendanceScreen: React.FC = () => {
     : [];
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
+    <div className="flex-1 flex flex-col bg-[#FFFCFA] overflow-y-auto">
       {/* Sticky Top Header */}
-      <div className="bg-white border-b border-[#E4E8E6] px-4 pt-3 pb-2.5 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+      <div className="bg-white border-b border-[#E7E5E4] px-4 pt-3 pb-2.5 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <span className="text-[10px] font-semibold text-[#667174] uppercase tracking-wider block">
+            <span className="text-[9px] font-semibold text-[#667085] uppercase tracking-wider block">
               {t('attendance.eyebrow')}
             </span>
-            <h1 className="text-[21px] font-bold tracking-tight text-[#20292C] font-['Space_Grotesk']">
+            <h1 className="text-[16px] font-bold tracking-tight text-[#0D1C42] font-['Satoshi']">
               {t('attendance.title')}
             </h1>
-            <p className="text-xs text-[#8D999C] mt-0.5">
+            <p className="text-xs text-[#98A2B3] mt-0.5">
               {t('attendance.subtitle')}
             </p>
           </div>
@@ -441,11 +441,11 @@ export const AttendanceScreen: React.FC = () => {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="p-2 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-[#20292C] hover:bg-[#EFEFEF] transition-all"
+            className="p-2 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-[#0D1C42] hover:bg-[#F6F4F2] transition-all"
             aria-label={t('attendance.refresh')}
           >
             <RefreshCw
-              className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#33B059]' : 'text-[#667174]'}`}
+              className={`w-4 h-4 ${refreshing ? 'animate-spin text-[#800020]' : 'text-[#667085]'}`}
             />
           </button>
         </div>
@@ -459,34 +459,34 @@ export const AttendanceScreen: React.FC = () => {
         ) : workday ? (
           <div className="space-y-4 pb-8">
             {/* Workday Card */}
-            <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm space-y-3">
+            <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-[#33B059]" />
-                  <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+                  <Clock className="w-4 h-4 text-[#800020]" />
+                  <h3 className="text-xs font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
                     {t('attendance.todayWorkday')}
                   </h3>
                 </div>
                 <span
-                  className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${chipCls}`}
+                  className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full border ${chipCls}`}
                 >
                   {t(`attendance.state.${workday?.state ?? 'not_started'}`)}
                 </span>
               </div>
 
-              <p className="text-xs text-[#667174]">
+              <p className="text-xs text-[#667085]">
                 {weekdayName(workday.date, t)} · {formatDateLong(workday.date, t)}
               </p>
 
               {timeRows.length > 0 && (
-                <div className="divide-y divide-[#F0F2F1] text-xs border-t border-[#F0F2F1]">
+                <div className="divide-y divide-[#F6F4F2] text-xs border-t border-[#F6F4F2]">
                   {timeRows.map((r) => (
                     <div
                       key={r.label}
                       className="py-2 flex items-center justify-between"
                     >
-                      <span className="text-[#8D999C]">{r.label}</span>
-                      <span className="font-semibold text-[#20292C]">
+                      <span className="text-[#98A2B3]">{r.label}</span>
+                      <span className="font-semibold text-[#0D1C42]">
                         {formatTime(r.at)}
                       </span>
                     </div>
@@ -495,13 +495,13 @@ export const AttendanceScreen: React.FC = () => {
               )}
 
               {actionError && (
-                <div className="p-3 bg-[#FCEBEA] text-xs text-[#D9534F] rounded-xl">
+                <div className="p-3 bg-[#FAEBEB] text-xs text-[#D64545] rounded-xl">
                   {actionError}
                 </div>
               )}
 
               {!synced && (
-                <div className="flex items-start gap-1.5 text-[11px] text-[#8D999C] leading-snug">
+                <div className="flex items-start gap-1.5 text-[9px] text-[#98A2B3] leading-snug">
                   <Info className="w-3.5 h-3.5 mt-px flex-shrink-0" />
                   <span>
                     {t('attendance.offlineNote')}
@@ -511,7 +511,7 @@ export const AttendanceScreen: React.FC = () => {
 
               {workday.state === 'completed' && (
                 <div className="text-center py-1">
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#278B46] bg-[#E8F7ED] px-4 py-2 rounded-full border border-[#BBECCC]">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0D1C42] bg-[#F7E9EE] px-4 py-2 rounded-full border border-[#EAD3DB]">
                     <CheckCircle2 className="w-4 h-4" />
                     {t('attendance.dayCompletedMsg')}
                   </span>
@@ -559,11 +559,11 @@ export const AttendanceScreen: React.FC = () => {
             </div>
 
             {/* Calendar Card */}
-            <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
+            <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
-                  <CalendarCheck className="w-4 h-4 text-[#33B059]" />
-                  <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+                  <CalendarCheck className="w-4 h-4 text-[#800020]" />
+                  <h3 className="text-xs font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
                     {t('attendance.yourAttendance')}
                   </h3>
                 </div>
@@ -571,17 +571,17 @@ export const AttendanceScreen: React.FC = () => {
                   <button
                     onClick={() => shiftMonth(-1)}
                     aria-label={t('attendance.prevMonth')}
-                    className="p-1.5 rounded-lg border border-[#E4E8E6] text-[#667174] hover:bg-[#F7F8F6] active:bg-[#EFEFEF] transition-colors"
+                    className="p-1.5 rounded-lg border border-[#E7E5E4] text-[#667085] hover:bg-[#FFFCFA] active:bg-[#F6F4F2] transition-colors"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <span className="text-xs font-semibold text-[#20292C] min-w-[110px] text-center font-['Space_Grotesk']">
+                  <span className="text-xs font-semibold text-[#0D1C42] min-w-[110px] text-center font-['Satoshi']">
                     {monthLabel}
                   </span>
                   <button
                     onClick={() => shiftMonth(1)}
                     aria-label={t('attendance.nextMonth')}
-                    className="p-1.5 rounded-lg border border-[#E4E8E6] text-[#667174] hover:bg-[#F7F8F6] active:bg-[#EFEFEF] transition-colors"
+                    className="p-1.5 rounded-lg border border-[#E7E5E4] text-[#667085] hover:bg-[#FFFCFA] active:bg-[#F6F4F2] transition-colors"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -592,7 +592,7 @@ export const AttendanceScreen: React.FC = () => {
                 {WEEKDAY_KEYS.map((d) => (
                   <span
                     key={d}
-                    className="text-center text-[10px] font-bold text-[#8D999C] uppercase tracking-wider"
+                    className="text-center text-[9px] font-bold text-[#98A2B3] uppercase tracking-wider"
                   >
                     {t(`attendance.weekdays.${d}`)}
                   </span>
@@ -621,11 +621,11 @@ export const AttendanceScreen: React.FC = () => {
                       aria-label={`${formatDateLong(date, t)}${meta ? ` — ${status ? t(`attendance.dayStatus.${status}`) : ''}` : ''}`}
                       className={`aspect-square rounded-xl flex flex-col items-center justify-center text-xs relative select-none transition-all ${
                         isToday
-                          ? 'bg-[#33B059] text-white font-bold shadow-sm'
-                          : `${meta ? meta.cell : 'text-[#20292C]'} ${
+                          ? 'bg-[#800020] text-white font-bold shadow-sm'
+                          : `${meta ? meta.cell : 'text-[#0D1C42]'} ${
                               isPast
                                 ? 'opacity-45 cursor-default'
-                                : 'cursor-pointer hover:bg-[#F0F2F1] active:scale-95'
+                                : 'cursor-pointer hover:bg-[#F6F4F2] active:scale-95'
                             }`
                       }`}
                     >
@@ -643,26 +643,26 @@ export const AttendanceScreen: React.FC = () => {
               </div>
 
               {monthError && (
-                <div className="p-3 mt-3 bg-[#FCEBEA] text-xs text-[#D9534F] rounded-xl">
+                <div className="p-3 mt-3 bg-[#FAEBEB] text-xs text-[#D64545] rounded-xl">
                   {monthError}
                 </div>
               )}
 
               {!monthError && !monthLoading && monthData.days.length === 0 && (
-                <p className="text-[11px] text-[#8D999C] mt-3 text-center">
+                <p className="text-[9px] text-[#98A2B3] mt-3 text-center">
                   {t('attendance.noRecords')}
                 </p>
               )}
 
               {/* Legend — real day statuses only; requests are listed
                   in the table below, never painted on the grid. */}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3 pt-3 border-t border-[#F0F2F1]">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-3 pt-3 border-t border-[#F6F4F2]">
                 {(
                   ['present', 'week_off', 'leave', 'absent'] as const
                 ).map((s) => (
                   <span
                     key={s}
-                    className="inline-flex items-center gap-1 text-[10px] font-medium text-[#667174]"
+                    className="inline-flex items-center gap-1 text-[9px] font-medium text-[#667085]"
                   >
                     <span
                       className={`w-1.5 h-1.5 rounded-full ${DAY_STATUS_META[s].dot}`}
@@ -675,23 +675,23 @@ export const AttendanceScreen: React.FC = () => {
 
             {/* Requests — the month's filings as a table (same calendar
                 response; pending items live here, not on the grid). */}
-            <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
+            <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
               <div className="flex items-center gap-2 mb-3">
-                <ClipboardList className="w-4 h-4 text-[#33B059]" />
-                <h3 className="text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+                <ClipboardList className="w-4 h-4 text-[#800020]" />
+                <h3 className="text-xs font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
                   {t('attendance.requests')}
                 </h3>
               </div>
 
               {monthData.requests.length === 0 ? (
-                <p className="text-[11px] text-[#8D999C] text-center py-2">
+                <p className="text-[9px] text-[#98A2B3] text-center py-2">
                   {t('attendance.noRequests')}
                 </p>
               ) : (
                 <div className="overflow-x-auto -mx-1 px-1">
-                  <table className="w-full text-[11px] leading-snug">
+                  <table className="w-full text-[9px] leading-snug">
                     <thead>
-                      <tr className="text-left text-[10px] font-bold text-[#8D999C] uppercase tracking-wider border-b border-[#F0F2F1]">
+                      <tr className="text-left text-[9px] font-bold text-[#98A2B3] uppercase tracking-wider border-b border-[#F6F4F2]">
                         <th className="py-1.5 pr-2 font-bold">{t('attendance.from')}</th>
                         <th className="py-1.5 pr-2 font-bold">{t('attendance.to')}</th>
                         <th className="py-1.5 pr-2 font-bold">{t('attendance.type')}</th>
@@ -700,9 +700,9 @@ export const AttendanceScreen: React.FC = () => {
                         <th className="py-1.5 font-bold text-right">{t('attendance.status')}</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#F0F2F1]">
+                    <tbody className="divide-y divide-[#F6F4F2]">
                       {monthData.requests.map((r) => (
-                        <tr key={r.id} className="text-[#20292C]">
+                        <tr key={r.id} className="text-[#0D1C42]">
                           <td className="py-2 pr-2 whitespace-nowrap font-medium">
                             {formatDateShort(r.from_date)}
                           </td>
@@ -716,14 +716,14 @@ export const AttendanceScreen: React.FC = () => {
                             {r.requested_days}
                           </td>
                           <td
-                            className="py-2 pr-2 max-w-[90px] truncate text-[#667174]"
+                            className="py-2 pr-2 max-w-[90px] truncate text-[#667085]"
                             title={r.reason ?? undefined}
                           >
                             {r.reason || '—'}
                           </td>
                           <td className="py-2 text-right">
                             <span
-                              className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${REQUEST_STATUS_CHIP[r.status]}`}
+                              className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${REQUEST_STATUS_CHIP[r.status]}`}
                             >
                               {t(`attendance.requestStatus.${r.status}`)}
                             </span>
@@ -746,30 +746,30 @@ export const AttendanceScreen: React.FC = () => {
           onClick={() => setSelectedDate(null)}
         >
           <div
-            className="w-full max-w-[420px] bg-white rounded-t-3xl p-5 pb-8 space-y-3"
+            className="w-full max-w-[420px] bg-white rounded-t-3xl p-5 pb-[max(2rem,calc(env(safe-area-inset-bottom,0px)+1rem))] space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-10 h-1 bg-[#E4E8E6] rounded-full mx-auto mb-1" />
-            <h4 className="text-sm font-bold text-[#20292C] font-['Space_Grotesk']">
+            <div className="w-10 h-1 bg-[#E7E5E4] rounded-full mx-auto mb-1" />
+            <h4 className="text-sm font-bold text-[#0D1C42] font-['Satoshi']">
               {formatDateLong(selectedDate, t)}
             </h4>
-            <p className="text-[11px] text-[#8D999C] -mt-1">
+            <p className="text-[9px] text-[#98A2B3] -mt-1">
               {t('attendance.sheetSub')}
             </p>
 
             {existingRequest ? (
-              <div className="rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] p-3.5 space-y-2">
+              <div className="rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] p-3.5 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-[#20292C]">
+                  <span className="text-xs font-semibold text-[#0D1C42]">
                     {requestTypeLabelT(existingRequest, t)} {t('attendance.requestSuffix')}
                   </span>
                   <span
-                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${REQUEST_STATUS_CHIP[existingRequest.status]}`}
+                    className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full border ${REQUEST_STATUS_CHIP[existingRequest.status]}`}
                   >
                     {t(`attendance.requestStatus.${existingRequest.status}`)}
                   </span>
                 </div>
-                <p className="text-[11px] text-[#667174] leading-snug">
+                <p className="text-[9px] text-[#667085] leading-snug">
                   {formatDateLong(existingRequest.from_date, t)}
                   {existingRequest.to_date !== existingRequest.from_date &&
                     ` — ${formatDateLong(existingRequest.to_date, t)}`}{' '}
@@ -777,7 +777,7 @@ export const AttendanceScreen: React.FC = () => {
                   {t(existingRequest.requested_days === 1 ? 'common.day' : 'common.days')}
                 </p>
                 {existingRequest.reason && (
-                  <p className="text-[11px] text-[#667174] leading-snug">
+                  <p className="text-[9px] text-[#667085] leading-snug">
                     {existingRequest.reason}
                   </p>
                 )}
@@ -791,14 +791,14 @@ export const AttendanceScreen: React.FC = () => {
             ) : (
               <>
                 {rejectedRequest && (
-                  <div className="p-3 bg-[#FCEBEA]/60 text-[11px] text-[#D9534F] rounded-xl">
+                  <div className="p-3 bg-[#FAEBEB]/60 text-[9px] text-[#D64545] rounded-xl">
                     {t('attendance.rejectedNote')}
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-[10px] font-bold text-[#8D999C] uppercase tracking-wider mb-1">
+                    <label className="block text-[9px] font-bold text-[#98A2B3] uppercase tracking-wider mb-1">
                       {t('attendance.from')}
                     </label>
                     <DateField
@@ -812,7 +812,7 @@ export const AttendanceScreen: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-[#8D999C] uppercase tracking-wider mb-1">
+                    <label className="block text-[9px] font-bold text-[#98A2B3] uppercase tracking-wider mb-1">
                       {t('attendance.to')}
                     </label>
                     <DateField
@@ -824,7 +824,7 @@ export const AttendanceScreen: React.FC = () => {
                   </div>
                 </div>
 
-                <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+                <label className="block text-xs font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
                   {t('attendance.type')}
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -835,8 +835,8 @@ export const AttendanceScreen: React.FC = () => {
                       onClick={() => setReqType(rt)}
                       className={`p-3 rounded-xl border text-xs font-semibold transition-all ${
                         reqType === rt
-                          ? 'border-[#33B059] bg-[#E8F7ED] text-[#278B46]'
-                          : 'border-[#E4E8E6] text-[#667174] hover:bg-[#F7F8F6]'
+                          ? 'border-[#800020] bg-[#F7E9EE] text-[#0D1C42]'
+                          : 'border-[#E7E5E4] text-[#667085] hover:bg-[#FFFCFA]'
                       }`}
                     >
                       {rt === 'leave' ? t('attendance.leave') : t('attendance.weekOff')}
@@ -846,7 +846,7 @@ export const AttendanceScreen: React.FC = () => {
 
                 {reqType === 'leave' && (
                   <div>
-                    <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider mb-1.5 font-['Space_Grotesk']">
+                    <label className="block text-xs font-bold text-[#0D1C42] uppercase tracking-wider mb-1.5 font-['Satoshi']">
                       {t('attendance.leaveType')}
                     </label>
                     <div className="flex flex-wrap gap-1.5">
@@ -855,10 +855,10 @@ export const AttendanceScreen: React.FC = () => {
                           key={lt}
                           type="button"
                           onClick={() => setReqLeaveType(lt)}
-                          className={`px-3 py-2 rounded-xl border text-[11px] font-semibold transition-all ${
+                          className={`px-3 py-2 rounded-xl border text-[9px] font-semibold transition-all ${
                             reqLeaveType === lt
-                              ? 'border-[#33B059] bg-[#E8F7ED] text-[#278B46]'
-                              : 'border-[#E4E8E6] text-[#667174] hover:bg-[#F7F8F6]'
+                              ? 'border-[#800020] bg-[#F7E9EE] text-[#0D1C42]'
+                              : 'border-[#E7E5E4] text-[#667085] hover:bg-[#FFFCFA]'
                           }`}
                         >
                           {t(`attendance.leaveTypeLabels.${lt}`)}
@@ -869,7 +869,7 @@ export const AttendanceScreen: React.FC = () => {
                 )}
 
                 <div>
-                  <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider mb-1.5 font-['Space_Grotesk']">
+                  <label className="block text-xs font-bold text-[#0D1C42] uppercase tracking-wider mb-1.5 font-['Satoshi']">
                     {reqType === 'leave'
                       ? t('attendance.reasonRequired')
                       : t('attendance.reasonOptional')}
@@ -879,12 +879,12 @@ export const AttendanceScreen: React.FC = () => {
                     onChange={(e) => setReqReason(e.target.value)}
                     placeholder={t('attendance.reasonPlaceholder')}
                     rows={2}
-                    className="w-full p-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-xs text-[#20292C] placeholder-[#8D999C] focus:bg-white focus:outline-none focus:border-[#33B059]"
+                    className="w-full p-3 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-xs text-[#0D1C42] placeholder-[#98A2B3] focus:bg-white focus:outline-none focus:border-[#800020]"
                   />
                 </div>
 
                 {reqError && (
-                  <div className="p-3 bg-[#FCEBEA] text-xs text-[#D9534F] rounded-xl">
+                  <div className="p-3 bg-[#FAEBEB] text-xs text-[#D64545] rounded-xl">
                     {reqError}
                   </div>
                 )}

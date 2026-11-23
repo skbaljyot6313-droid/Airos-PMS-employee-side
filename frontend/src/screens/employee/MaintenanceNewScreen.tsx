@@ -302,7 +302,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
 
   if (loadingLocations) {
     return (
-      <div className="flex-1 flex flex-col bg-[#F7F8F6]">
+      <div className="flex-1 flex flex-col bg-[#FFFCFA]">
         <ScreenHeader title={t('maintenance.raiseTitle')} onBack={onBack} />
         <LoadingState message={t('maintenance.loadingLocations')} />
       </div>
@@ -313,7 +313,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   // banner above an empty picker.
   if (locationsLoadFailed && !target) {
     return (
-      <div className="flex-1 flex flex-col bg-[#F7F8F6]">
+      <div className="flex-1 flex flex-col bg-[#FFFCFA]">
         <ScreenHeader title={t('maintenance.raiseTitle')} onBack={onBack} />
         <ErrorState
           message={error || t('maintenance.loadingLocationsError')}
@@ -326,42 +326,42 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   // Success view
   if (submissionResult) {
     return (
-      <div className="flex-1 flex flex-col bg-[#F7F8F6]">
+      <div className="flex-1 flex flex-col bg-[#FFFCFA]">
         <ScreenHeader title={t('maintenance.ticketRecorded')} onBack={() => onSuccess(submissionResult.id)} />
         <div className="flex-1 p-4 flex flex-col justify-center items-center text-center">
-          <div className="w-16 h-16 rounded-full bg-[#E8F7ED] border border-[#BBECCC] text-[#33B059] flex items-center justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-[#F7E9EE] border border-[#EAD3DB] text-[#800020] flex items-center justify-center mb-4">
             <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
           </div>
 
-          <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk'] mb-1">
+          <h2 className="text-base font-bold text-[#0D1C42] font-['Satoshi'] mb-1">
             {t('maintenance.successTitle')}
           </h2>
-          <p className="text-xs text-[#667174] max-w-xs mb-6">
+          <p className="text-xs text-[#667085] max-w-xs mb-6">
             {t('maintenance.successDesc')}
           </p>
 
-          <div className="w-full max-w-sm bg-white rounded-2xl p-4 border border-[#E4E8E6] text-left space-y-3 mb-6 shadow-sm">
-            <div className="flex items-center justify-between border-b border-[#F0F2F1] pb-2">
-              <span className="text-xs text-[#8D999C]">{t('maintenance.ticketId')}</span>
-              <span className="font-mono text-xs font-bold text-[#20292C] bg-[#F0F2F1] px-2 py-0.5 rounded">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-4 border border-[#E7E5E4] text-left space-y-3 mb-6 shadow-sm">
+            <div className="flex items-center justify-between border-b border-[#F6F4F2] pb-2">
+              <span className="text-xs text-[#98A2B3]">{t('maintenance.ticketId')}</span>
+              <span className="font-mono text-xs font-bold text-[#0D1C42] bg-[#F6F4F2] px-2 py-0.5 rounded">
                 {submissionResult.ticket_number || submissionResult.id}
               </span>
             </div>
-            <div className="flex items-center justify-between border-b border-[#F0F2F1] pb-2">
-              <span className="text-xs text-[#8D999C]">{t('maintenance.issue')}</span>
-              <span className="text-xs font-medium text-[#20292C] truncate max-w-[200px]">
+            <div className="flex items-center justify-between border-b border-[#F6F4F2] pb-2">
+              <span className="text-xs text-[#98A2B3]">{t('maintenance.issue')}</span>
+              <span className="text-xs font-medium text-[#0D1C42] truncate max-w-[200px]">
                 {submissionResult.issue}
               </span>
             </div>
-            <div className="flex items-center justify-between border-b border-[#F0F2F1] pb-2">
-              <span className="text-xs text-[#8D999C]">{t('maintenance.location')}</span>
-              <span className="text-xs font-medium text-[#20292C]">
+            <div className="flex items-center justify-between border-b border-[#F6F4F2] pb-2">
+              <span className="text-xs text-[#98A2B3]">{t('maintenance.location')}</span>
+              <span className="text-xs font-medium text-[#0D1C42]">
                 {submissionResult.location_name}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-[#8D999C]">{t('maintenance.assignedTech')}</span>
-              <span className="text-xs font-bold text-[#278B46]">
+              <span className="text-xs text-[#98A2B3]">{t('maintenance.assignedTech')}</span>
+              <span className="text-xs font-bold text-[#0D1C42]">
                 {submissionResult.assigned_to_name || t('maintenance.queuedUnassigned')}
               </span>
             </div>
@@ -385,14 +385,14 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   // Shared photo card — rendered on the issue step (capture early) and the
   // review step; `photos` state is shared between both.
   const photoSection = (
-    <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
-      <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider mb-2 font-['Space_Grotesk']">
+    <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
+      <label className="block text-xs font-bold text-[#0D1C42] uppercase tracking-wider mb-2 font-['Satoshi']">
         {t('maintenance.attachPhotos')}
       </label>
 
       <div className="grid grid-cols-2 gap-3 mb-2">
         {photos.map((url, i) => (
-          <div key={i} className="relative aspect-video rounded-xl overflow-hidden border border-[#E4E8E6]">
+          <div key={i} className="relative aspect-video rounded-xl overflow-hidden border border-[#E7E5E4]">
             <img src={mediaUrl(url)} alt={t('maintenance.evidenceAlt')} className="w-full h-full object-cover" />
             <button
               onClick={() => handleRemovePhoto(i)}
@@ -407,15 +407,15 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
           type="button"
           onClick={() => setShowPhotoOptions(true)}
           disabled={uploadingPhoto}
-          className="aspect-video rounded-xl border-2 border-dashed border-[#D2D8D6] bg-[#F7F8F6] hover:bg-[#F0F2F1] flex flex-col items-center justify-center cursor-pointer p-2 text-center transition-colors"
+          className="aspect-video rounded-xl border-2 border-dashed border-[#D6D3D1] bg-[#FFFCFA] hover:bg-[#F6F4F2] flex flex-col items-center justify-center cursor-pointer p-2 text-center transition-colors"
         >
           {uploadingPhoto ? (
-            <Upload className="w-5 h-5 text-[#33B059] animate-bounce" />
+            <Upload className="w-5 h-5 text-[#800020] animate-bounce" />
           ) : (
             <>
-              <Camera className="w-5 h-5 text-[#667174] mb-1" />
-              <span className="text-[11px] font-semibold text-[#20292C]">{t('common.addPhoto')}</span>
-              <span className="text-[10px] text-[#8D999C]">{t('common.cameraOrGallery')}</span>
+              <Camera className="w-5 h-5 text-[#667085] mb-1" />
+              <span className="text-[9px] font-semibold text-[#0D1C42]">{t('common.addPhoto')}</span>
+              <span className="text-[9px] text-[#98A2B3]">{t('common.cameraOrGallery')}</span>
             </>
           )}
         </button>
@@ -424,7 +424,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
   );
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
+    <div className="flex-1 flex flex-col bg-[#FFFCFA] overflow-y-auto">
       <ScreenHeader
         title={t('maintenance.raiseTitle')}
         subtitle={target ? target.path.join(' · ') : t('maintenance.guidedRequest', { step: stepNumber, total: totalSteps })}
@@ -433,7 +433,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
 
       <div className="p-4 space-y-4 pb-28">
         {error && (
-          <div className="bg-[#FCEBEA] border border-[#F8C8C6] p-3 rounded-xl text-xs text-[#D9534F] flex items-center justify-between">
+          <div className="bg-[#FAEBEB] border border-[#F0C8C8] p-3 rounded-xl text-xs text-[#D64545] flex items-center justify-between">
             <span>{error}</span>
             <button onClick={() => setError(null)}><X className="w-4 h-4" /></button>
           </div>
@@ -441,15 +441,15 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
 
         {/* Locked target banner — unit was selected in the zone workspace */}
         {target && (
-          <div className="bg-white rounded-2xl p-3.5 border border-[#E4E8E6] flex items-center gap-3 shadow-sm">
-            <div className="p-2 rounded-xl bg-[#E8F7ED] text-[#33B059] flex-shrink-0">
+          <div className="bg-white rounded-2xl p-3.5 border border-[#E7E5E4] flex items-center gap-3 shadow-sm">
+            <div className="p-2 rounded-xl bg-[#F7E9EE] text-[#800020] flex-shrink-0">
               <MapPin className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] font-bold text-[#8D999C] uppercase tracking-wider block">
+              <span className="text-[9px] font-bold text-[#98A2B3] uppercase tracking-wider block">
                 {t('maintenance.location')}
               </span>
-              <span className="text-xs font-semibold text-[#20292C] block truncate">
+              <span className="text-xs font-semibold text-[#0D1C42] block truncate">
                 {target.path.join(' · ')}
               </span>
             </div>
@@ -460,10 +460,10 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
         {!target && step === 1 && (
           <div className="space-y-3">
             <div>
-              <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
+              <h2 className="text-base font-bold text-[#0D1C42] font-['Satoshi']">
                 {t('maintenance.whereProblem')}
               </h2>
-              <p className="text-xs text-[#667174]">
+              <p className="text-xs text-[#667085]">
                 {drillParent
                   ? t('maintenance.insideUnit', { name: drillParent.name })
                   : t('maintenance.selectAreaHint')}
@@ -474,7 +474,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setDrillParent(null)}
-                className="text-xs font-semibold text-[#278B46]"
+                className="text-xs font-semibold text-[#0D1C42]"
               >
                 {t('maintenance.allLocations')}
               </button>
@@ -514,24 +514,24 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                     }}
                     className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all active:scale-[0.99] ${
                       isSelected
-                        ? 'border-[#33B059] bg-[#E8F7ED]'
-                        : 'border-[#E4E8E6] bg-white hover:border-[#D2D8D6]'
+                        ? 'border-[#800020] bg-[#F7E9EE]'
+                        : 'border-[#E7E5E4] bg-white hover:border-[#D6D3D1]'
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-xl ${isSelected ? 'bg-[#33B059] text-white' : 'bg-[#F0F2F1] text-[#667174]'}`}>
+                      <div className={`p-2 rounded-xl ${isSelected ? 'bg-[#800020] text-white' : 'bg-[#F6F4F2] text-[#667085]'}`}>
                         <Icon className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="text-sm font-semibold text-[#20292C] block">
+                        <span className="text-sm font-semibold text-[#0D1C42] block">
                           {isWholeUnit ? t('maintenance.wholeUnit', { name: loc.name }) : loc.name}
                         </span>
-                        <span className="text-xs text-[#667174]">{context}</span>
+                        <span className="text-xs text-[#667085]">{context}</span>
                       </div>
                     </div>
                     {drillsIn
-                      ? <ArrowRight className="w-4 h-4 text-[#8D999C]" />
-                      : isSelected && <Check className="w-4 h-4 text-[#33B059] stroke-[3]" />}
+                      ? <ArrowRight className="w-4 h-4 text-[#98A2B3]" />
+                      : isSelected && <Check className="w-4 h-4 text-[#800020] stroke-[3]" />}
                   </div>
                 );
               })}
@@ -543,10 +543,10 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
         {step === 2 && (
           <div className="space-y-3">
             <div>
-              <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
+              <h2 className="text-base font-bold text-[#0D1C42] font-['Satoshi']">
                 {t('maintenance.whatCategory')}
               </h2>
-              <p className="text-xs text-[#667174]">
+              <p className="text-xs text-[#667085]">
                 {t('maintenance.at', { name: target?.name || selectedLocation?.name })}
               </p>
             </div>
@@ -565,11 +565,11 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                     }}
                     className={`p-3.5 rounded-xl border text-left flex items-center gap-3 transition-all active:scale-[0.98] ${
                       isSelected
-                        ? 'border-[#33B059] bg-[#E8F7ED] text-[#278B46]'
-                        : 'border-[#E4E8E6] bg-white hover:bg-[#F7F8F6] text-[#20292C]'
+                        ? 'border-[#800020] bg-[#F7E9EE] text-[#0D1C42]'
+                        : 'border-[#E7E5E4] bg-white hover:bg-[#FFFCFA] text-[#0D1C42]'
                     }`}
                   >
-                    <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#33B059] text-white' : 'bg-[#F0F2F1] text-[#667174]'}`}>
+                    <div className={`p-2 rounded-lg ${isSelected ? 'bg-[#800020] text-white' : 'bg-[#F6F4F2] text-[#667085]'}`}>
                       {cat.icon}
                     </div>
                     <span className="text-xs font-semibold">{t(`maintenance.cat.${CAT_KEYS[cat.name]}`)}</span>
@@ -584,10 +584,10 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
         {step === 3 && currentCategoryObj && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
+              <h2 className="text-base font-bold text-[#0D1C42] font-['Satoshi']">
                 {t('maintenance.selectIssue')}
               </h2>
-              <p className="text-xs text-[#667174]">
+              <p className="text-xs text-[#667085]">
                 {t(`maintenance.cat.${CAT_KEYS[selectedCategory ?? 'Other']}`)} · {target?.name || selectedLocation?.name}
               </p>
             </div>
@@ -602,14 +602,14 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                     onClick={() => setSelectedIssue(iss)}
                     className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                       isSelected
-                        ? 'border-[#33B059] bg-[#E8F7ED]'
-                        : 'border-[#E4E8E6] bg-white hover:bg-[#F7F8F6]'
+                        ? 'border-[#800020] bg-[#F7E9EE]'
+                        : 'border-[#E7E5E4] bg-white hover:bg-[#FFFCFA]'
                     }`}
                   >
-                    <span className={`text-xs font-medium ${isSelected ? 'text-[#20292C] font-semibold' : 'text-[#667174]'}`}>
+                    <span className={`text-xs font-medium ${isSelected ? 'text-[#0D1C42] font-semibold' : 'text-[#667085]'}`}>
                       {iss}
                     </span>
-                    {isSelected && <Check className="w-4 h-4 text-[#33B059] stroke-[3]" />}
+                    {isSelected && <Check className="w-4 h-4 text-[#800020] stroke-[3]" />}
                   </div>
                 );
               })}
@@ -618,18 +618,18 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                 onClick={() => setSelectedIssue('Other')}
                 className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                   selectedIssue === 'Other'
-                    ? 'border-[#33B059] bg-[#E8F7ED]'
-                    : 'border-[#E4E8E6] bg-white hover:bg-[#F7F8F6]'
+                    ? 'border-[#800020] bg-[#F7E9EE]'
+                    : 'border-[#E7E5E4] bg-white hover:bg-[#FFFCFA]'
                 }`}
               >
-                <span className="text-xs font-medium text-[#20292C]">{t('maintenance.otherCustomIssue')}</span>
-                {selectedIssue === 'Other' && <Check className="w-4 h-4 text-[#33B059] stroke-[3]" />}
+                <span className="text-xs font-medium text-[#0D1C42]">{t('maintenance.otherCustomIssue')}</span>
+                {selectedIssue === 'Other' && <Check className="w-4 h-4 text-[#800020] stroke-[3]" />}
               </div>
             </div>
 
             {/* Free-text description */}
-            <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
-              <label className="block text-xs font-semibold text-[#20292C] uppercase tracking-wider mb-1">
+            <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
+              <label className="block text-xs font-semibold text-[#0D1C42] uppercase tracking-wider mb-1">
                 {t('maintenance.descNotes')}
               </label>
               <textarea
@@ -637,7 +637,7 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                 onChange={(e) => setCustomDescription(e.target.value)}
                 placeholder={t('maintenance.descPlaceholder')}
                 rows={3}
-                className="w-full p-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-xs text-[#20292C] focus:bg-white focus:outline-none focus:border-[#33B059]"
+                className="w-full p-3 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-xs text-[#0D1C42] focus:bg-white focus:outline-none focus:border-[#800020]"
               />
             </div>
 
@@ -658,10 +658,10 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
         {step === 4 && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-base font-bold text-[#20292C] font-['Space_Grotesk']">
+              <h2 className="text-base font-bold text-[#0D1C42] font-['Satoshi']">
                 {t('maintenance.priorityPhotosTitle')}
               </h2>
-              <p className="text-xs text-[#667174]">
+              <p className="text-xs text-[#667085]">
                 {t('maintenance.reviewDispatch')}
               </p>
             </div>
@@ -670,23 +670,23 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
             {photoSection}
 
             {/* Summary Review Card */}
-            <div className="bg-[#F7F8F6] rounded-2xl p-4 border border-[#E4E8E6] space-y-2 text-xs">
+            <div className="bg-[#FFFCFA] rounded-2xl p-4 border border-[#E7E5E4] space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-[#8D999C]">{t('maintenance.locationLabel')}</span>
-                <span className="font-semibold text-[#20292C] text-right">
+                <span className="text-[#98A2B3]">{t('maintenance.locationLabel')}</span>
+                <span className="font-semibold text-[#0D1C42] text-right">
                   {target ? target.path.join(' · ') : selectedLocation?.name}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#8D999C]">{t('maintenance.categoryLabel')}</span>
-                <span className="font-semibold text-[#20292C]">{t(`maintenance.cat.${CAT_KEYS[selectedCategory ?? 'Other']}`)}</span>
+                <span className="text-[#98A2B3]">{t('maintenance.categoryLabel')}</span>
+                <span className="font-semibold text-[#0D1C42]">{t(`maintenance.cat.${CAT_KEYS[selectedCategory ?? 'Other']}`)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#8D999C]">{t('maintenance.issueLabel')}</span>
-                <span className="font-semibold text-[#20292C]">{selectedIssue}</span>
+                <span className="text-[#98A2B3]">{t('maintenance.issueLabel')}</span>
+                <span className="font-semibold text-[#0D1C42]">{selectedIssue}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#8D999C]">{t('maintenance.priorityLabel')}</span>
+                <span className="text-[#98A2B3]">{t('maintenance.priorityLabel')}</span>
                 <PriorityBadge priority={priority} size="sm" />
               </div>
             </div>
@@ -730,8 +730,8 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
             className="w-full max-w-[420px] bg-white rounded-t-3xl p-5 pb-8 space-y-2.5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-10 h-1 bg-[#E4E8E6] rounded-full mx-auto mb-3" />
-            <h4 className="text-sm font-bold text-[#20292C] font-['Space_Grotesk'] mb-3">
+            <div className="w-10 h-1 bg-[#E7E5E4] rounded-full mx-auto mb-3" />
+            <h4 className="text-sm font-bold text-[#0D1C42] font-['Satoshi'] mb-3">
               {t('common.addPhotoEvidence')}
             </h4>
             <button
@@ -744,14 +744,14 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                   cameraInputRef.current?.click();
                 }
               }}
-              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-[#E4E8E6] hover:bg-[#F7F8F6] active:bg-[#F0F2F1] transition-colors text-left"
+              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-[#E7E5E4] hover:bg-[#FFFCFA] active:bg-[#F6F4F2] transition-colors text-left"
             >
-              <div className="p-2 bg-[#E8F7ED] rounded-lg text-[#33B059]">
+              <div className="p-2 bg-[#F7E9EE] rounded-lg text-[#800020]">
                 <Camera className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-sm font-semibold text-[#20292C] block">{t('common.takePhoto')}</span>
-                <span className="text-[11px] text-[#8D999C]">{t('common.takePhotoSub')}</span>
+                <span className="text-sm font-semibold text-[#0D1C42] block">{t('common.takePhoto')}</span>
+                <span className="text-[9px] text-[#98A2B3]">{t('common.takePhotoSub')}</span>
               </div>
             </button>
             <button
@@ -764,20 +764,20 @@ export const MaintenanceNewScreen: React.FC<MaintenanceNewScreenProps> = ({
                   galleryInputRef.current?.click();
                 }
               }}
-              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-[#E4E8E6] hover:bg-[#F7F8F6] active:bg-[#F0F2F1] transition-colors text-left"
+              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-[#E7E5E4] hover:bg-[#FFFCFA] active:bg-[#F6F4F2] transition-colors text-left"
             >
-              <div className="p-2 bg-[#EEF3FF] rounded-lg text-[#2B5DD8]">
+              <div className="p-2 bg-[#EAF1FB] rounded-lg text-[#3478D4]">
                 <ImageIcon className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-sm font-semibold text-[#20292C] block">{t('common.chooseGallery')}</span>
-                <span className="text-[11px] text-[#8D999C]">{t('common.chooseGallerySub')}</span>
+                <span className="text-sm font-semibold text-[#0D1C42] block">{t('common.chooseGallery')}</span>
+                <span className="text-[9px] text-[#98A2B3]">{t('common.chooseGallerySub')}</span>
               </div>
             </button>
             <button
               type="button"
               onClick={() => setShowPhotoOptions(false)}
-              className="w-full p-3 rounded-xl text-xs font-semibold text-[#667174] hover:bg-[#F7F8F6] transition-colors"
+              className="w-full p-3 rounded-xl text-xs font-semibold text-[#667085] hover:bg-[#FFFCFA] transition-colors"
             >
               {t('common.cancel')}
             </button>

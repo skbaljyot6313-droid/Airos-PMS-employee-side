@@ -450,6 +450,7 @@ def task_out(t: Task) -> dict:
         "scheduled_for": t.scheduled_for,
         "expires_at": t.expires_at,
         "template_id": str(t.template_id) if t.template_id else None,
+        "department_id": str(t.department_id) if t.department_id else None,
         "abandoned_at": t.abandoned_at,
         "abandoned_reason": t.abandoned_reason,
         "abandoned_from_status": t.abandoned_from_status,
@@ -474,6 +475,6 @@ def task_out(t: Task) -> dict:
         "created_at": t.created_at,
         # Detail-only: template checklist + evidence rules resolved by
         # TaskService.get_task; absent/null on list payloads.
-        "checklist": getattr(t, "_checklist", None),
+        "checklist": getattr(t, "_checklist", None) or t.checklist,
         "verification": getattr(t, "_verification", None),
     }

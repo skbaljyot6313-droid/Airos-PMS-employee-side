@@ -212,7 +212,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col bg-[#F7F8F6]">
+      <div className="flex-1 flex flex-col bg-[#FFFCFA]">
         <ScreenHeader title={t('tasks.detailsTitle')} onBack={onBack} />
         <LoadingState message={t('tasks.loadDetail')} />
       </div>
@@ -221,7 +221,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
   if (error || !task) {
     return (
-      <div className="flex-1 flex flex-col bg-[#F7F8F6]">
+      <div className="flex-1 flex flex-col bg-[#FFFCFA]">
         <ScreenHeader title={t('tasks.detailsTitle')} onBack={onBack} />
         <ErrorState message={error || t('tasks.notFound')} onRetry={loadTask} />
       </div>
@@ -241,10 +241,10 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
   // Submission statuses come from the review workflow (pending/approved/disapproved).
   const submissionStatusChip = (status: string): string => {
-    if (status === 'approved') return 'bg-[#E8F7ED] text-[#278B46] border-[#BBECCC]';
+    if (status === 'approved') return 'bg-[#F7E9EE] text-[#0D1C42] border-[#EAD3DB]';
     if (status === 'disapproved' || status === 'rejected')
-      return 'bg-[#FCEBEA] text-[#D9534F] border-[#F8C8C6]';
-    return 'bg-[#EEF3FF] text-[#2B5DD8] border-[#C2D4FF]';
+      return 'bg-[#FAEBEB] text-[#D64545] border-[#F0C8C8]';
+    return 'bg-[#EAF1FB] text-[#3478D4] border-[#C2D4FF]';
   };
 
   const resolvedText = resolveTaskText(task, currentUiLanguage());
@@ -256,7 +256,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
     : '—';
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F7F8F6] overflow-y-auto">
+    <div className="flex-1 flex flex-col bg-[#FFFCFA] overflow-y-auto">
       <ScreenHeader
         title={task.ticket_number || task.title}
         subtitle={`${task.category} · ${task.location_name}`}
@@ -272,19 +272,19 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
       <div className="p-4 space-y-4 pb-28">
         {/* Reopened / Rework Banner */}
         {task.status === 'reopened' && task.reopen_reason && (
-          <div className="bg-[#FDF6E8] border border-[#F5DEAB] rounded-2xl p-4 shadow-sm">
+          <div className="bg-[#FDF6E8] border border-[#FDF3E2] rounded-2xl p-4 shadow-sm">
             <div className="flex items-start gap-2.5">
-              <div className="p-2 bg-[#F5DEAB]/50 rounded-xl text-[#B87C10]">
+              <div className="p-2 bg-[#FDF3E2]/50 rounded-xl text-[#A56514]">
                 <RotateCcw className="w-5 h-5 stroke-[2.25]" />
               </div>
               <div className="flex-1">
-                <h4 className="text-sm font-bold text-[#B87C10] font-['Space_Grotesk']">
+                <h4 className="text-sm font-bold text-[#A56514] font-['Satoshi']">
                   {t('tasks.returnedTitle')}
                 </h4>
-                <p className="text-xs text-[#20292C] font-medium mt-1 leading-relaxed">
+                <p className="text-xs text-[#0D1C42] font-medium mt-1 leading-relaxed">
                   {task.reopen_reason}
                 </p>
-                <p className="text-[11px] text-[#667174] mt-2 font-medium">
+                <p className="text-[9px] text-[#667085] mt-2 font-medium">
                   {t('tasks.returnedDesc')}
                 </p>
               </div>
@@ -294,7 +294,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
         {/* Expired Banner */}
         {isExpired && (
-          <div className="bg-[#FCEBEA] border border-[#F8C8C6] rounded-2xl p-4 text-xs text-[#D9534F] flex items-center gap-2.5">
+          <div className="bg-[#FAEBEB] border border-[#F0C8C8] rounded-2xl p-4 text-xs text-[#D64545] flex items-center gap-2.5">
             <AlertTriangle className="w-5 h-5 flex-shrink-0" />
             <div>
               <span className="font-bold block">{t('tasks.expiredTitle')}</span>
@@ -305,10 +305,10 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
         {/* Success Confirmation Banner */}
         {submitSuccess && (
-          <div className="bg-[#E8F7ED] border border-[#BBECCC] rounded-2xl p-4 text-xs text-[#278B46] flex items-start gap-3 shadow-sm">
+          <div className="bg-[#F7E9EE] border border-[#EAD3DB] rounded-2xl p-4 text-xs text-[#0D1C42] flex items-start gap-3 shadow-sm">
             <CheckCircle2 className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold text-sm block font-['Space_Grotesk'] mb-0.5">
+              <span className="font-bold text-sm block font-['Satoshi'] mb-0.5">
                 {t('tasks.submittedTitle')}
               </span>
               <span>
@@ -320,25 +320,25 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
         {/* Action Error Banner */}
         {actionError && (
-          <div className="bg-[#FCEBEA] border border-[#F8C8C6] rounded-2xl p-3.5 text-xs text-[#D9534F] flex items-start gap-2.5">
+          <div className="bg-[#FAEBEB] border border-[#F0C8C8] rounded-2xl p-3.5 text-xs text-[#D64545] flex items-start gap-2.5">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <div className="flex-1">{actionError}</div>
-            <button onClick={() => setActionError(null)} className="text-[#D9534F]">
+            <button onClick={() => setActionError(null)} className="text-[#D64545]">
               <X className="w-4 h-4" />
             </button>
           </div>
         )}
 
         {/* Task Title & Meta Card */}
-        <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm space-y-3">
+        <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[#667174]">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-[#667085]">
               {task.category}
             </span>
             <PriorityBadge priority={task.priority} />
           </div>
 
-          <h2 className="text-[17px] font-bold text-[#20292C] font-['Space_Grotesk'] leading-tight">
+          <h2 className="text-[13px] font-bold text-[#0D1C42] font-['Satoshi'] leading-tight">
             {resolvedText.title}
           </h2>
 
@@ -347,68 +347,68 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
             <ResourceChips resources={task.resources} maxVisible={10} />
           )}
 
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#F0F2F1] text-xs">
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[#F6F4F2] text-xs">
             <div>
-              <span className="text-[11px] text-[#8D999C] uppercase tracking-wider block mb-0.5">
+              <span className="text-[9px] text-[#98A2B3] uppercase tracking-wider block mb-0.5">
                 {t('tasks.location')}
               </span>
-              <div className="flex items-center gap-1 text-[#20292C] font-medium">
-                <MapPin className="w-3.5 h-3.5 text-[#8D999C]" />
+              <div className="flex items-center gap-1 text-[#0D1C42] font-medium">
+                <MapPin className="w-3.5 h-3.5 text-[#98A2B3]" />
                 <span className="truncate">{task.location_name}</span>
               </div>
-              <span className="text-[11px] text-[#667174] pl-4">{task.zone_name}</span>
+              <span className="text-[9px] text-[#667085] pl-4">{task.zone_name}</span>
             </div>
 
             <div>
-              <span className="text-[11px] text-[#8D999C] uppercase tracking-wider block mb-0.5">
+              <span className="text-[9px] text-[#98A2B3] uppercase tracking-wider block mb-0.5">
                 {t('tasks.dueTime')}
               </span>
-              <div className="flex items-center gap-1 font-medium text-[#20292C]">
-                <Clock className={`w-3.5 h-3.5 ${isOverdue ? 'text-[#D9534F]' : 'text-[#8D999C]'}`} />
-                <span className={isOverdue ? 'text-[#D9534F] font-bold' : ''}>
+              <div className="flex items-center gap-1 font-medium text-[#0D1C42]">
+                <Clock className={`w-3.5 h-3.5 ${isOverdue ? 'text-[#D64545]' : 'text-[#98A2B3]'}`} />
+                <span className={isOverdue ? 'text-[#D64545] font-bold' : ''}>
                   {dueFormatted}
                 </span>
               </div>
               {task.scheduled_for && (
-                <span className="text-[11px] text-[#667174] pl-4">
+                <span className="text-[9px] text-[#667085] pl-4">
                   {t('tasks.scheduledShift')}
                 </span>
               )}
             </div>
           </div>
 
-          <div className="pt-2 border-t border-[#F0F2F1] flex items-center justify-between text-xs text-[#667174]">
+          <div className="pt-2 border-t border-[#F6F4F2] flex items-center justify-between text-xs text-[#667085]">
             <div className="flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-[#8D999C]" />
-              <span>{t('tasks.assignedTo')}: <strong className="text-[#20292C]">{task.assigned_to_name}</strong></span>
+              <User className="w-3.5 h-3.5 text-[#98A2B3]" />
+              <span>{t('tasks.assignedTo')}: <strong className="text-[#0D1C42]">{task.assigned_to_name}</strong></span>
             </div>
           </div>
         </div>
 
         {/* Instructions */}
-        <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
+        <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
           <div className="flex items-center gap-2 mb-2">
-            <FileText className="w-4 h-4 text-[#33B059]" />
-            <h3 className="text-sm font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+            <FileText className="w-4 h-4 text-[#800020]" />
+            <h3 className="text-sm font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
               {t('tasks.instructions')}
             </h3>
           </div>
-          <p className="text-xs text-[#20292C] leading-relaxed whitespace-pre-line bg-[#F7F8F6] p-3 rounded-xl border border-[#E4E8E6]">
+          <p className="text-xs text-[#0D1C42] leading-relaxed whitespace-pre-line bg-[#FFFCFA] p-3 rounded-xl border border-[#E7E5E4]">
             {resolvedText.instructions ?? task.instructions}
           </p>
         </div>
 
         {/* Interactive Checklist */}
-        <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
+        <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <CheckSquare className="w-4 h-4 text-[#33B059]" />
-              <h3 className="text-sm font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+              <CheckSquare className="w-4 h-4 text-[#800020]" />
+              <h3 className="text-sm font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
                 {t('tasks.checklist')} ({checklist.filter((c) => c.completed).length}/{checklist.length})
               </h3>
             </div>
             {!canWork && (
-              <span className="text-[11px] text-[#8D999C]">
+              <span className="text-[9px] text-[#98A2B3]">
                 {task.status === 'submitted' ? t('tasks.submittedChip') : t('tasks.readOnly')}
               </span>
             )}
@@ -422,35 +422,35 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
                   key={item.id}
                   onClick={() => !isLocked && handleToggleChecklist(item.id)}
                   className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
-                    isLocked ? 'cursor-default' : 'cursor-pointer active:bg-[#F0F2F1]'
+                    isLocked ? 'cursor-default' : 'cursor-pointer active:bg-[#F6F4F2]'
                   } ${
                     item.completed
-                      ? 'bg-[#E8F7ED]/50 border-[#BBECCC]'
-                      : 'bg-[#F7F8F6] border-[#E4E8E6]'
+                      ? 'bg-[#F7E9EE]/50 border-[#EAD3DB]'
+                      : 'bg-[#FFFCFA] border-[#E7E5E4]'
                   }`}
                 >
                   <div className="mt-0.5 flex-shrink-0">
                     {item.completed ? (
-                      <CheckSquare className="w-5 h-5 text-[#33B059] fill-[#E8F7ED]" />
+                      <CheckSquare className="w-5 h-5 text-[#800020] fill-[#F7E9EE]" />
                     ) : (
-                      <Square className="w-5 h-5 text-[#8D999C]" />
+                      <Square className="w-5 h-5 text-[#98A2B3]" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <span
                       className={`text-xs block leading-snug ${
-                        item.completed ? 'line-through text-[#667174]' : 'text-[#20292C] font-medium'
+                        item.completed ? 'line-through text-[#667085]' : 'text-[#0D1C42] font-medium'
                       }`}
                     >
                       {item.label}
                     </span>
                     <div className="flex items-center gap-2 mt-1">
                       {item.required ? (
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#D9534F] bg-[#FCEBEA] px-1.5 py-0.2 rounded">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#D64545] bg-[#FAEBEB] px-1.5 py-0.2 rounded">
                           {t('common.required')}
                         </span>
                       ) : (
-                        <span className="text-[10px] text-[#8D999C] uppercase tracking-wider">
+                        <span className="text-[9px] text-[#98A2B3] uppercase tracking-wider">
                           {t('common.optional')}
                         </span>
                       )}
@@ -464,14 +464,14 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
         {/* Previously Submitted Photos (read-only) — reopened tasks */}
         {isReopened && task.prior_submissions.length > 0 && (
-          <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
+          <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
             <div className="flex items-center gap-2 mb-1.5">
-              <ImageIcon className="w-4 h-4 text-[#B87C10]" />
-              <h3 className="text-sm font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+              <ImageIcon className="w-4 h-4 text-[#A56514]" />
+              <h3 className="text-sm font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
                 {t('tasks.previouslySubmitted')}
               </h3>
             </div>
-            <p className="text-xs text-[#667174] mb-3">
+            <p className="text-xs text-[#667085] mb-3">
               {t('tasks.previouslySubmittedDesc')}
             </p>
 
@@ -484,28 +484,28 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
                 return (
                   <div
                     key={sub.attempt}
-                    className="rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] p-3"
+                    className="rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] p-3"
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-xs font-bold text-[#20292C] font-['Space_Grotesk']">
+                      <span className="text-xs font-bold text-[#0D1C42] font-['Satoshi']">
                         {t('tasks.attempt')} {sub.attempt}
                       </span>
                       <div className="flex items-center gap-2">
                         <span
-                          className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${submissionStatusChip(sub.status)}`}
+                          className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${submissionStatusChip(sub.status)}`}
                         >
                           {sub.status.replaceAll('_', ' ')}
                         </span>
-                        <span className="text-[11px] text-[#8D999C]">{submittedLabel}</span>
+                        <span className="text-[9px] text-[#98A2B3]">{submittedLabel}</span>
                       </div>
                     </div>
 
                     {sub.review_comment && (
-                      <div className="mb-2 bg-white rounded-lg border border-[#E4E8E6] border-l-2 border-l-[#B87C10] p-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-[#667174] block mb-0.5">
+                      <div className="mb-2 bg-white rounded-lg border border-[#E7E5E4] border-l-2 border-l-[#A56514] p-2">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#667085] block mb-0.5">
                           {t('tasks.reviewerNote')}{sub.reviewed_by_name ? ` · ${sub.reviewed_by_name}` : ''}
                         </span>
-                        <p className="text-xs text-[#20292C] italic leading-relaxed">
+                        <p className="text-xs text-[#0D1C42] italic leading-relaxed">
                           "{sub.review_comment}"
                         </p>
                       </div>
@@ -515,7 +515,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
                       {sub.photos.map((photo) => (
                         <div
                           key={photo.id}
-                          className="relative aspect-video rounded-xl overflow-hidden border border-[#E4E8E6] bg-black/5"
+                          className="relative aspect-video rounded-xl overflow-hidden border border-[#E7E5E4] bg-black/5"
                         >
                           <img
                             src={mediaUrl(photo.url)}
@@ -523,7 +523,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
                             className="w-full h-full object-cover"
                           />
                           <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-1.5">
-                            <span className="text-[10px] text-white/90 truncate block">
+                            <span className="text-[9px] text-white/90 truncate block">
                               {photo.filename}
                             </span>
                           </div>
@@ -538,22 +538,22 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
         )}
 
         {/* Photo Evidence Section */}
-        <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
+        <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <Camera className="w-4 h-4 text-[#33B059]" />
-              <h3 className="text-sm font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+              <Camera className="w-4 h-4 text-[#800020]" />
+              <h3 className="text-sm font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
                 {isReopened ? t('tasks.newPhotoEvidence') : t('tasks.photoEvidence')} ({evidenceList.length}/{task.verification_config.max_photos})
               </h3>
             </div>
             {task.verification_config.photo_required && (
-              <span className="text-[11px] font-bold text-[#33B059] bg-[#E8F7ED] px-2 py-0.5 rounded-full">
+              <span className="text-[9px] font-bold text-[#800020] bg-[#F7E9EE] px-2 py-0.5 rounded-full">
                 {t('tasks.minPhotosRequired', { count: task.verification_config.min_photos })}
               </span>
             )}
           </div>
 
-          <p className="text-xs text-[#667174] mb-3">
+          <p className="text-xs text-[#667085] mb-3">
             {isReopened
               ? t('tasks.capturePhotosNew')
               : t('tasks.capturePhotos')}
@@ -564,7 +564,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
             {evidenceList.map((photo) => (
               <div
                 key={photo.id}
-                className="relative aspect-video rounded-xl overflow-hidden border border-[#E4E8E6] bg-black/5 group"
+                className="relative aspect-video rounded-xl overflow-hidden border border-[#E7E5E4] bg-black/5 group"
               >
                 <img
                   src={mediaUrl(photo.url)}
@@ -581,7 +581,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
                   </button>
                 )}
                 <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-1.5">
-                  <span className="text-[10px] text-white/90 truncate block">
+                  <span className="text-[9px] text-white/90 truncate block">
                     {photo.filename}
                   </span>
                 </div>
@@ -594,22 +594,22 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
                 type="button"
                 onClick={() => setShowPhotoOptions(true)}
                 disabled={uploadingPhoto}
-                className={`aspect-video rounded-xl border-2 border-dashed border-[#D2D8D6] bg-[#F7F8F6] hover:bg-[#F0F2F1] transition-all flex flex-col items-center justify-center cursor-pointer p-2 ${
+                className={`aspect-video rounded-xl border-2 border-dashed border-[#D6D3D1] bg-[#FFFCFA] hover:bg-[#F6F4F2] transition-all flex flex-col items-center justify-center cursor-pointer p-2 ${
                   uploadingPhoto ? 'opacity-50 pointer-events-none' : ''
                 }`}
               >
                 {uploadingPhoto ? (
                   <div className="text-center">
-                    <Upload className="w-5 h-5 text-[#33B059] animate-bounce mx-auto mb-1" />
-                    <span className="text-[11px] text-[#667174] font-medium">{t('common.uploading')}</span>
+                    <Upload className="w-5 h-5 text-[#800020] animate-bounce mx-auto mb-1" />
+                    <span className="text-[9px] text-[#667085] font-medium">{t('common.uploading')}</span>
                   </div>
                 ) : (
                   <div className="text-center">
-                    <Camera className="w-5 h-5 text-[#667174] mx-auto mb-1" />
-                    <span className="text-[11px] font-semibold text-[#20292C] block">
+                    <Camera className="w-5 h-5 text-[#667085] mx-auto mb-1" />
+                    <span className="text-[9px] font-semibold text-[#0D1C42] block">
                       {t('common.addPhoto')}
                     </span>
-                    <span className="text-[10px] text-[#8D999C]">{t('common.cameraOrGallery')}</span>
+                    <span className="text-[9px] text-[#98A2B3]">{t('common.cameraOrGallery')}</span>
                   </div>
                 )}
               </button>
@@ -619,8 +619,8 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
         {/* Task Notes for Submission */}
         {canWork && (
-          <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
-            <label className="block text-xs font-bold text-[#20292C] uppercase tracking-wider mb-1.5 font-['Space_Grotesk']">
+          <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
+            <label className="block text-xs font-bold text-[#0D1C42] uppercase tracking-wider mb-1.5 font-['Satoshi']">
               {t('tasks.completionNotes')}
             </label>
             <textarea
@@ -628,21 +628,21 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
               onChange={(e) => setNotes(e.target.value)}
               placeholder={t('tasks.completionNotesPlaceholder')}
               rows={2}
-              className="w-full p-3 rounded-xl border border-[#E4E8E6] bg-[#F7F8F6] text-xs text-[#20292C] placeholder-[#8D999C] focus:bg-white focus:outline-none focus:border-[#33B059]"
+              className="w-full p-3 rounded-xl border border-[#E7E5E4] bg-[#FFFCFA] text-xs text-[#0D1C42] placeholder-[#98A2B3] focus:bg-white focus:outline-none focus:border-[#800020]"
             />
           </div>
         )}
 
         {/* Task Timeline */}
-        <div className="bg-white rounded-2xl p-4 border border-[#E4E8E6] shadow-sm">
+        <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm">
           <div className="flex items-center gap-2 mb-3">
-            <History className="w-4 h-4 text-[#33B059]" />
-            <h3 className="text-sm font-bold text-[#20292C] uppercase tracking-wider font-['Space_Grotesk']">
+            <History className="w-4 h-4 text-[#800020]" />
+            <h3 className="text-sm font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
               {t('tasks.taskHistory')}
             </h3>
           </div>
 
-          <div className="space-y-3 relative pl-4 before:content-[''] before:absolute before:top-2 before:bottom-2 before:left-1.5 before:w-0.5 before:bg-[#E4E8E6]">
+          <div className="space-y-3 relative pl-4 before:content-[''] before:absolute before:top-2 before:bottom-2 before:left-1.5 before:w-0.5 before:bg-[#E7E5E4]">
             {task.history.map((hist) => {
               const eventDate = new Date(hist.timestamp);
               const eventTime = `${eventDate.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${eventDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
@@ -658,17 +658,17 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
               return (
                 <div key={hist.id} className="relative">
-                  <span className="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-[#33B059] ring-4 ring-white" />
+                  <span className="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-[#800020] ring-4 ring-white" />
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-[#20292C]">
+                    <span className="font-semibold text-[#0D1C42]">
                       {labels[hist.event_type] || hist.event_type}
                     </span>
-                    <span className="text-[11px] text-[#8D999C]">{eventTime}</span>
+                    <span className="text-[9px] text-[#98A2B3]">{eventTime}</span>
                   </div>
-                  <div className="text-[11px] text-[#667174] mt-0.5">
+                  <div className="text-[9px] text-[#667085] mt-0.5">
                     <span>{t('common.by')} {hist.actor_name}</span>
                     {hist.notes && (
-                      <p className="mt-1 text-[#20292C] bg-[#F7F8F6] p-2 rounded-lg border border-[#E4E8E6]">
+                      <p className="mt-1 text-[#0D1C42] bg-[#FFFCFA] p-2 rounded-lg border border-[#E7E5E4]">
                         {hist.notes}
                       </p>
                     )}
@@ -704,11 +704,11 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
           onClick={() => setShowPhotoOptions(false)}
         >
           <div
-            className="w-full max-w-[420px] bg-white rounded-t-3xl p-5 pb-8 space-y-2.5"
+            className="w-full max-w-[420px] bg-white rounded-t-3xl p-5 pb-[max(2rem,calc(env(safe-area-inset-bottom,0px)+1rem))] space-y-2.5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-10 h-1 bg-[#E4E8E6] rounded-full mx-auto mb-3" />
-            <h4 className="text-sm font-bold text-[#20292C] font-['Space_Grotesk'] mb-3">
+            <div className="w-10 h-1 bg-[#E7E5E4] rounded-full mx-auto mb-3" />
+            <h4 className="text-sm font-bold text-[#0D1C42] font-['Satoshi'] mb-3">
               {t('common.addPhotoEvidence')}
             </h4>
             <button
@@ -721,14 +721,14 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
                   cameraInputRef.current?.click();
                 }
               }}
-              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-[#E4E8E6] hover:bg-[#F7F8F6] active:bg-[#F0F2F1] transition-colors text-left"
+              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-[#E7E5E4] hover:bg-[#FFFCFA] active:bg-[#F6F4F2] transition-colors text-left"
             >
-              <div className="p-2 bg-[#E8F7ED] rounded-lg text-[#33B059]">
+              <div className="p-2 bg-[#F7E9EE] rounded-lg text-[#800020]">
                 <Camera className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-sm font-semibold text-[#20292C] block">{t('common.takePhoto')}</span>
-                <span className="text-[11px] text-[#8D999C]">{t('common.takePhotoSub')}</span>
+                <span className="text-sm font-semibold text-[#0D1C42] block">{t('common.takePhoto')}</span>
+                <span className="text-[9px] text-[#98A2B3]">{t('common.takePhotoSub')}</span>
               </div>
             </button>
             <button
@@ -741,20 +741,20 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
                   galleryInputRef.current?.click();
                 }
               }}
-              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-[#E4E8E6] hover:bg-[#F7F8F6] active:bg-[#F0F2F1] transition-colors text-left"
+              className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-[#E7E5E4] hover:bg-[#FFFCFA] active:bg-[#F6F4F2] transition-colors text-left"
             >
-              <div className="p-2 bg-[#EEF3FF] rounded-lg text-[#2B5DD8]">
+              <div className="p-2 bg-[#EAF1FB] rounded-lg text-[#3478D4]">
                 <ImageIcon className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-sm font-semibold text-[#20292C] block">{t('common.chooseGallery')}</span>
-                <span className="text-[11px] text-[#8D999C]">{t('common.chooseGallerySub')}</span>
+                <span className="text-sm font-semibold text-[#0D1C42] block">{t('common.chooseGallery')}</span>
+                <span className="text-[9px] text-[#98A2B3]">{t('common.chooseGallerySub')}</span>
               </div>
             </button>
             <button
               type="button"
               onClick={() => setShowPhotoOptions(false)}
-              className="w-full p-3 rounded-xl text-xs font-semibold text-[#667174] hover:bg-[#F7F8F6] transition-colors"
+              className="w-full p-3 rounded-xl text-xs font-semibold text-[#667085] hover:bg-[#FFFCFA] transition-colors"
             >
               {t('common.cancel')}
             </button>
@@ -763,7 +763,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
       )}
 
       {/* Sticky Bottom Action Area */}
-      <div className="fixed md:absolute bottom-0 inset-x-0 p-4 bg-white/95 backdrop-blur border-t border-[#E4E8E6] shadow-lg z-20">
+      <div className="fixed md:absolute bottom-0 inset-x-0 px-[var(--app-px)] pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] bg-white/95 backdrop-blur border-t border-[#E7E5E4] shadow-lg z-20">
         {canWork && (
           <PrimaryButton
             size="lg"
@@ -777,7 +777,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
         {isSubmitted && (
           <div className="text-center py-2">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#2B5DD8] bg-[#EEF3FF] px-4 py-2 rounded-full border border-[#C2D4FF]">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#3478D4] bg-[#EAF1FB] px-4 py-2 rounded-full border border-[#C2D4FF]">
               <Clock className="w-4 h-4" />
               {t('tasks.awaitingReview')}
             </span>
@@ -786,7 +786,7 @@ export const TaskDetailScreen: React.FC<TaskDetailScreenProps> = ({
 
         {isCompleted && (
           <div className="text-center py-2">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#278B46] bg-[#E8F7ED] px-4 py-2 rounded-full border border-[#BBECCC]">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0D1C42] bg-[#F7E9EE] px-4 py-2 rounded-full border border-[#EAD3DB]">
               <CheckCircle2 className="w-4 h-4" />
               {t('tasks.taskApproved')}
             </span>

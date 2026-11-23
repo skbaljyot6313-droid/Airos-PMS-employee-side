@@ -25,7 +25,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       <div className="w-11 h-11 rounded-xl bg-soft flex items-center justify-center text-mute mb-3">
         <Icon className="w-5 h-5 stroke-[1.75]" />
       </div>
-      <h3 className="text-sm font-semibold text-ink font-['Space_Grotesk'] mb-1">
+      <h3 className="text-sm font-semibold text-ink font-['Satoshi'] mb-1">
         {title}
       </h3>
       <p className="text-xs text-sub max-w-[260px] leading-relaxed mb-4">
@@ -79,7 +79,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
           <AlertTriangle className="w-5 h-5 stroke-[2]" />
         )}
       </div>
-      <h3 className="text-sm font-semibold text-ink mb-1 font-['Space_Grotesk']">
+      <h3 className="text-sm font-semibold text-ink mb-1 font-['Satoshi']">
         {offline ? t('errors.offlineTitle') : t('errors.syncIssue')}
       </h3>
       <p className="text-xs text-sub max-w-[280px] leading-relaxed mb-4">
