@@ -58,8 +58,8 @@ body {
      (~15% total) is distributed across the status-bar gap, section rhythm
      and bottom-nav float rather than one dead margin. */
   --app-px: clamp(1rem, 5.5vw, 2rem);
-  --app-top-gap: calc(env(safe-area-inset-top, 0px) + clamp(1.25rem, 4.5vh, 3rem));
-  --app-bottom-gap: calc(env(safe-area-inset-bottom, 0px) + clamp(1rem, 4vh, 2.75rem));
+  --app-top-gap: calc(env(safe-area-inset-top, 0px) + clamp(0.75rem, 2vh, 1.25rem));
+  --app-bottom-gap: calc(env(safe-area-inset-bottom, 0px) + clamp(0.5rem, 1.5vh, 1rem));
   --app-section-gap: clamp(0.875rem, 3vh, 1.75rem);
   --app-card-pad: clamp(0.875rem, 3.5vw, 1.25rem);
 }
