@@ -20,6 +20,7 @@ import {
 } from './services/updateService';
 import { UpdateDialog } from './components/common/UpdateDialog';
 import { NotificationToast } from './components/common/NotificationToast';
+import { TapProbe } from './components/common/TapProbe';
 import {
   startNotificationPolling,
   subscribeNotifications,
@@ -377,6 +378,9 @@ const AppNavigator: React.FC = () => {
           onDismiss={dismissPopup}
         />
       )}
+
+      {/* TEMPORARY tap diagnostic — remove after the on-device tap bug is found */}
+      <TapProbe route={route.type === 'tabs' ? `tabs/${route.tab}` : route.type} />
 
       {/* Show Bottom Tabs only when on root tabs */}
       {route.type === 'tabs' && (
