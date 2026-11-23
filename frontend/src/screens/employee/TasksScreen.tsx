@@ -194,8 +194,9 @@ export const TasksScreen: React.FC<TasksScreenProps> = ({ onSelectTask, onTasksC
         </div>
       </div>
 
-      {/* Task List Content — editorial rows separated by hairlines */}
-      <div className="flex-1">
+      {/* Task List Content — top-anchored column; empty/error/loading states
+          sit directly under the tabs, never centered in the dead space. */}
+      <div className="flex-1 flex flex-col">
         {loading ? (
           <LoadingState message={t('tasks.loading')} />
         ) : error ? (

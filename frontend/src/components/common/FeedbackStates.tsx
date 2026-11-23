@@ -20,15 +20,17 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 }) => {
   const Icon = type === 'maintenance' ? Wrench : ClipboardList;
 
+  // Top-anchored — empty lists should sit just below the screen's header
+  // chrome (tabs/filters), never vertically centered in the viewport.
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-8 text-center">
-      <div className="w-11 h-11 rounded-xl bg-soft flex items-center justify-center text-mute mb-3">
-        <Icon className="w-5 h-5 stroke-[1.75]" />
+    <div className="flex flex-col items-center px-6 pt-10 pb-6 text-center">
+      <div className="w-9 h-9 rounded-lg bg-soft flex items-center justify-center text-mute mb-2">
+        <Icon className="w-4 h-4 stroke-[1.75]" />
       </div>
       <h3 className="text-sm font-semibold text-ink font-['Satoshi'] mb-1">
         {title}
       </h3>
-      <p className="text-xs text-sub max-w-[260px] leading-relaxed mb-4">
+      <p className="text-xs text-sub max-w-[220px] leading-relaxed mb-3">
         {description}
       </p>
       {actionLabel && onAction && (
