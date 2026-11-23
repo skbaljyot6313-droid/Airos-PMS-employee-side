@@ -132,12 +132,13 @@ export const normalizeError = (status: number, body: unknown): ApiError => {
 
   if (typeof detail === 'string' && detail) return { status, code: errCode, message: detail };
   if (detail && typeof detail === 'object' && 'message' in detail) {
-    const d = detail as { message: string; field?: string; code?: string };
+    const d = detail as { message: string; field?: string; code?: string; details?: Record<string, unknown> };
     return {
       status,
       code: d.code ?? errCode,
       message: d.message,
       fieldErrors: d.field ? [{ field: d.field, message: d.message }] : [],
+      details: d.details,
     };
   }
 

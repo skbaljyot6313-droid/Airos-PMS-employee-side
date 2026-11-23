@@ -74,6 +74,8 @@ export interface ApiError {
   code?: string;
   message: string;
   fieldErrors?: ApiFieldError[];
+  /** Opaque server payload (e.g. schedule-conflict lists on HTTP 409). */
+  details?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +175,12 @@ export interface Task {
   due_date: string | null;
   due_time: string | null;
   scheduled_for?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  break_start_time?: string | null;
+  break_end_time?: string | null;
+  estimated_minutes?: number | null;
+  department_name?: string | null;
   expires_at?: string | null;
   /** ISO timestamp when the task reached a terminal (done-bucket) state. */
   completed_at?: string | null;

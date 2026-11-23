@@ -34,6 +34,7 @@ class AppError(Exception):
     code: str = "INTERNAL_ERROR"
     message: str = "An unexpected error occurred."
     field: str | None = None
+    details: dict | None = None
 
     def __init__(
         self,
@@ -41,6 +42,7 @@ class AppError(Exception):
         *,
         code: str | None = None,
         field: str | None = None,
+        details: dict | None = None,
     ):
         if message:
             self.message = message
@@ -48,6 +50,8 @@ class AppError(Exception):
             self.code = code
         if field:
             self.field = field
+        if details is not None:
+            self.details = details
         super().__init__(self.message)
 
 
@@ -77,6 +81,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         detail = {"message": exc.message, "code": exc.code}
         if exc.field:
             detail["field"] = exc.field
+        if exc.details:
+            detail.update(exc.details)
+            content["error"].update(exc.details)
         content["detail"] = detail
         return JSONResponse(status_code=exc.status_code, content=content)
 

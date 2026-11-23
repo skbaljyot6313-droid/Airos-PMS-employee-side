@@ -39,11 +39,10 @@ import {
   Shield,
   Clock,
   Sparkles,
-  Wallet,
   ChevronRight,
 } from 'lucide-react';
 
-export const ProfileScreen: React.FC<{ onOpenSalary?: () => void }> = ({ onOpenSalary }) => {
+export const ProfileScreen: React.FC = () => {
   const { user, company, employee, logout, updateProfile } = useAuth();
   const { t } = useTranslation();
 
@@ -290,20 +289,6 @@ export const ProfileScreen: React.FC<{ onOpenSalary?: () => void }> = ({ onOpenS
             </p>
           )}
         </div>
-
-        {/* Salary */}
-        {onOpenSalary && (
-          <button
-            onClick={onOpenSalary}
-            className="w-full bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm flex items-center gap-3 text-left active:bg-gray-50"
-          >
-            <Wallet className="w-4 h-4 text-[#800020]" />
-            <span className="flex-1 text-xs font-bold text-[#0D1C42] uppercase tracking-wider font-['Satoshi']">
-              {t('nav.salary')}
-            </span>
-            <ChevronRight className="w-4 h-4 text-[#98A2B3]" />
-          </button>
-        )}
 
         {/* Personal Contact Details */}
         <div className="bg-white rounded-2xl p-4 border border-[#E7E5E4] shadow-sm space-y-3">

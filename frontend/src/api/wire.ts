@@ -172,6 +172,12 @@ export interface TaskWire {
   due_date: string | null;
   due_time: string | null;
   start_time: string | null;
+  end_time: string | null;
+  break_start_time: string | null;
+  break_end_time: string | null;
+  estimated_minutes: number | null;
+  department_id: string | null;
+  department_name: string | null;
   recurrence_start_date: string | null;
   recurrence_end_date: string | null;
   recurrence_window_end: string | null;

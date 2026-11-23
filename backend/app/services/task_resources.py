@@ -17,6 +17,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.department import Department
 from app.models.structure import Bed
 from app.models.task import Task
 
@@ -48,28 +49,35 @@ async def attach_task_resources(
                 wanted.add(uuid.UUID(str(raw)))
             except (ValueError, TypeError, AttributeError):
                 continue
-    if not wanted:
-        return
+    if wanted:
+        res = await session.execute(select(Bed).where(Bed.id.in_(wanted)))
+        by_id = {str(b.id): b for b in res.scalars()}
 
-    res = await session.execute(select(Bed).where(Bed.id.in_(wanted)))
-    by_id = {str(b.id): b for b in res.scalars()}
-
-    for task in tasks:
-        if not task.bed_ids:
-            continue
-        seen: set[uuid.UUID] = set()
-        infos: list[dict] = []
-        for raw in task.bed_ids:
-            bed = by_id.get(str(raw))
-            if bed is None or bed.id in seen:
+        for task in tasks:
+            if not task.bed_ids:
                 continue
-            seen.add(bed.id)
-            infos.append(
-                {
-                    "bed_uid": str(bed.id),
-                    "bed_number": bed.bed_number,
-                    "status": bed.status,
-                }
-            )
-        infos.sort(key=lambda i: natural_label_key(i["bed_number"]))
-        task._bed_infos = infos
+            seen: set[uuid.UUID] = set()
+            infos: list[dict] = []
+            for raw in task.bed_ids:
+                bed = by_id.get(str(raw))
+                if bed is None or bed.id in seen:
+                    continue
+                seen.add(bed.id)
+                infos.append(
+                    {
+                        "bed_uid": str(bed.id),
+                        "bed_number": bed.bed_number,
+                        "status": bed.status,
+                    }
+                )
+            infos.sort(key=lambda i: natural_label_key(i["bed_number"]))
+            task._bed_infos = infos
+
+    dept_ids = {t.department_id for t in tasks if t.department_id}
+    if dept_ids:
+        res = await session.execute(
+            select(Department.id, Department.name).where(Department.id.in_(dept_ids)))
+        names = {row[0]: row[1] for row in res.all()}
+        for task in tasks:
+            if task.department_id:
+                task._department_name = names.get(task.department_id)

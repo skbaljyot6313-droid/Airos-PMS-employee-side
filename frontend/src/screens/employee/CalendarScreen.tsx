@@ -1,7 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, RefreshCw, Wrench } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, RefreshCw, Wrench } from 'lucide-react';
 import { fetchTasksApi } from '../../api/tasks';
+import { teamApi, TeamDepartment } from '../../api/team';
+import { getZonesCached } from '../../api/directory';
+import { ZoneWire } from '../../api/wire';
+import { useAuth } from '../../context/AuthContext';
+import { AssignSheet } from './MyTeamScreen';
 import { businessDate } from '../../api/attendance';
 import type { Task } from '../../types';
 
@@ -14,7 +19,29 @@ const taskDay = (t: Task): string | null =>
   t.scheduled_for?.slice(0, 10) ?? t.due_date?.slice(0, 10) ?? null;
 
 const taskTime = (t: Task): string | null =>
-  t.scheduled_for?.slice(11, 16) ?? t.due_time?.slice(0, 5) ?? null;
+  t.scheduled_for?.slice(11, 16) ?? t.start_time ?? t.due_time?.slice(0, 5) ?? null;
+
+const hm = (v?: string | null): string | null => (v ? v.slice(0, 5) : null);
+
+/** 'HH:MM–HH:MM' window when the schedule carries an end time. */
+const taskWindow = (t: Task): string | null => {
+  const start = hm(t.start_time) ?? taskTime(t);
+  const end = hm(t.end_time);
+  if (start && end) return `${start}–${end}`;
+  return start;
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'Scheduled', assigned: 'Scheduled', scheduled: 'Scheduled',
+  in_progress: 'In Progress', completed: 'Completed', submitted: 'Submitted',
+  overdue: 'Overdue', cancelled: 'Cancelled', reopened: 'Reopened',
+};
+
+const statusLabel = (t: Task, today: string): string => {
+  const day = taskDay(t);
+  if (UPCOMING.has(t.status) && day && day < today) return 'Overdue';
+  return STATUS_LABEL[t.status] ?? t.status;
+};
 
 const UPCOMING = new Set(['pending', 'assigned', 'in_progress', 'reopened', 'scheduled']);
 
@@ -41,7 +68,17 @@ export const CalendarScreen: React.FC<Props> = ({ onOpenTask }) => {
   const [loading, setLoading] = useState(true);
   const [anchor, setAnchor] = useState(() => today);
   const [selected, setSelected] = useState(today);
-  const [view, setView] = useState<'month' | 'agenda'>('month');
+  const [view, setView] = useState<'month' | 'week' | 'day' | 'agenda'>('week');
+  const { user } = useAuth();
+  const isManager = user?.role === 'department_manager';
+  const [depts, setDepts] = useState<TeamDepartment[]>([]);
+  const [zones, setZones] = useState<ZoneWire[]>([]);
+  const [assignOpen, setAssignOpen] = useState(false);
+  useEffect(() => {
+    if (!isManager) return;
+    void teamApi.overview().then((r) => setDepts(r.items)).catch(() => undefined);
+    void getZonesCached().then(setZones);
+  }, [isManager]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,14 +119,30 @@ export const CalendarScreen: React.FC<Props> = ({ onOpenTask }) => {
     setAnchor(isoDay(d));
   };
 
-  const agendaDays = useMemo(() => {
+  const viewDays = useMemo(() => {
+    const sel = new Date(`${selected}T00:00:00`);
+    if (view === 'day') return [selected];
     if (view === 'month') return [selected];
-    const start = new Date(`${selected}T00:00:00`);
+    if (view === 'week') {
+      const monday = new Date(sel);
+      monday.setDate(sel.getDate() - ((sel.getDay() + 6) % 7));
+      return Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(monday); d.setDate(monday.getDate() + i);
+        return isoDay(d);
+      });
+    }
     return Array.from({ length: 14 }, (_, i) => {
-      const d = new Date(start); d.setDate(d.getDate() + i);
+      const d = new Date(sel); d.setDate(d.getDate() + i);
       return isoDay(d);
     });
   }, [view, selected]);
+
+  const shiftAnchor = (n: number) => {
+    const d = new Date(`${selected}T00:00:00`);
+    d.setDate(d.getDate() + (view === 'day' ? n : view === 'week' ? n * 7 : n * 14));
+    setSelected(isoDay(d));
+    setAnchor(isoDay(d));
+  };
 
   const monthLabel = new Date(ay, am - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 
@@ -114,16 +167,23 @@ export const CalendarScreen: React.FC<Props> = ({ onOpenTask }) => {
             )}
           </div>
           <div className="text-[9px] text-mute truncate">
-            {task.location_name || task.zone_name || ''}
-            {taskTime(task) ? ` · ${taskTime(task)}` : ''}
+            {taskWindow(task) ? `${taskWindow(task)}` : ''}
+            {task.break_start_time ? ` · break ${hm(task.break_start_time)}–${hm(task.break_end_time) ?? ''}` : ''}
+            {task.location_name || task.zone_name ? ` · ${task.location_name || task.zone_name}` : ''}
+            {task.department_name ? ` · ${task.department_name}` : ''}
             {task.checklist.length > 0
               ? ` · ☑ ${task.checklist.filter((c) => c.completed).length}/${task.checklist.length}`
               : ''}
           </div>
         </div>
-        <span className="text-[9px] uppercase tracking-wide text-mute shrink-0">
-          {task.priority}
-        </span>
+        <div className="flex flex-col items-end gap-0.5 shrink-0">
+          <span className="text-[9px] uppercase tracking-wide text-mute">
+            {task.priority}
+          </span>
+          <span className="text-[8px] font-semibold uppercase tracking-wide text-sub">
+            {statusLabel(task, today)}
+          </span>
+        </div>
       </button>
     );
   };
@@ -135,7 +195,7 @@ export const CalendarScreen: React.FC<Props> = ({ onOpenTask }) => {
         <h1 className="text-[15px] font-bold text-ink">{t('calendar.title')}</h1>
         <div className="flex items-center gap-1.5">
           <div className="flex bg-surface border border-line rounded-lg overflow-hidden">
-            {(['month', 'agenda'] as const).map((v) => (
+            {(['month', 'week', 'day', 'agenda'] as const).map((v) => (
               <button key={v} onClick={() => setView(v)}
                 className={`px-2.5 py-1 text-[9px] font-semibold ${
                   view === v ? 'bg-ink text-white' : 'text-mute'}`}>
@@ -143,6 +203,12 @@ export const CalendarScreen: React.FC<Props> = ({ onOpenTask }) => {
               </button>
             ))}
           </div>
+          {isManager && depts.length > 0 && (
+            <button onClick={() => setAssignOpen(true)}
+              className="flex items-center gap-1 bg-acc text-white rounded-lg px-2.5 py-1.5 text-[10px] font-bold min-h-[32px]">
+              <Plus className="w-3.5 h-3.5" /> {t('team.assign')}
+            </button>
+          )}
           <button onClick={() => void load()} className="p-1.5 text-mute">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -194,9 +260,26 @@ export const CalendarScreen: React.FC<Props> = ({ onOpenTask }) => {
         </div>
       )}
 
-      {/* Agenda list */}
+      {view !== 'month' && (
+        <div className="px-4 pb-1 flex items-center justify-between">
+          <button onClick={() => shiftAnchor(-1)} className="p-1.5 text-mute">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button onClick={() => { setAnchor(today); setSelected(today); }}
+            className="text-[10px] font-semibold text-ink">
+            {view === 'day'
+              ? new Date(`${selected}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+              : `${new Date(`${viewDays[0]}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${new Date(`${viewDays[viewDays.length - 1]}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}
+          </button>
+          <button onClick={() => shiftAnchor(1)} className="p-1.5 text-mute">
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Agenda-style list for week/day/agenda and the month's selected day */}
       <div className="flex-1 px-4 pb-6 space-y-3">
-        {agendaDays.map((d) => {
+        {viewDays.map((d) => {
           const items = byDay.get(d) ?? [];
           return (
             <div key={d}>
@@ -208,7 +291,7 @@ export const CalendarScreen: React.FC<Props> = ({ onOpenTask }) => {
                 {d === today ? ` · ${t('calendar.today')}` : ''}
               </p>
               {items.length === 0 ? (
-                view === 'agenda' && (
+                (view === 'agenda' || view === 'day' || view === 'week') && (
                   <p className="text-[10px] text-mute pl-1">{t('calendar.nothingScheduled')}</p>
                 )
               ) : (
@@ -217,10 +300,16 @@ export const CalendarScreen: React.FC<Props> = ({ onOpenTask }) => {
             </div>
           );
         })}
-        {!loading && agendaDays.every((d) => !(byDay.get(d)?.length)) && view === 'month' && (
+        {!loading && viewDays.every((d) => !(byDay.get(d)?.length)) && view === 'month' && (
           <p className="text-[10px] text-mute text-center py-6">{t('calendar.nothingScheduled')}</p>
         )}
       </div>
+
+      {assignOpen && depts[0] && (
+        <AssignSheet dept={depts[0]} zones={zones}
+          onClose={() => setAssignOpen(false)}
+          onSaved={() => { setAssignOpen(false); void load(); }} />
+      )}
     </div>
   );
 };

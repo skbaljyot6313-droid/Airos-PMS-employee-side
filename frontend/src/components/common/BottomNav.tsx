@@ -1,14 +1,15 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ClipboardList, Wrench, CalendarCheck, CalendarDays, User } from 'lucide-react';
+import { ClipboardList, Wrench, CalendarCheck, CalendarDays, User, Users } from 'lucide-react';
 
-export type TabType = 'tasks' | 'calendar' | 'maintenance' | 'attendance' | 'salary' | 'profile';
+export type TabType = 'tasks' | 'calendar' | 'team' | 'maintenance' | 'attendance' | 'profile';
 
 interface BottomNavProps {
   currentTab: TabType;
   onChangeTab: (tab: TabType) => void;
   tasksCount?: number;
   maintenanceCount?: number;
+  isManager?: boolean;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -16,6 +17,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onChangeTab,
   tasksCount,
   maintenanceCount,
+  isManager = false,
 }) => {
   const { t } = useTranslation();
   const tabs = [
@@ -31,6 +33,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       icon: CalendarDays,
       badge: null,
     },
+    ...(isManager ? [{
+      id: 'team' as TabType,
+      label: t('nav.team'),
+      icon: Users,
+      badge: null,
+    }] : []),
     {
       id: 'maintenance' as TabType,
       label: t('nav.maintenance'),

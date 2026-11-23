@@ -118,6 +118,13 @@ class Task(Base):
     due_time: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # HH:MM — anchor time a repetitive schedule starts from each cycle
     start_time: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # HH:MM daily window + break — set by department-head allocation so the
+    # employee calendar shows the full shift shape; NULL on classic tasks.
+    end_time: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    break_start_time: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    break_end_time: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Net working estimate in minutes (window minus break), when supplied
+    estimated_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Repetition window — from date to end date (None = runs forever), and
     # an optional daily time window for multi-per-day recurrences
     recurrence_start_date: Mapped[str | None] = mapped_column(String(64), nullable=True)

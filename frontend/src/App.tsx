@@ -45,8 +45,8 @@ import { TasksScreen } from './screens/employee/TasksScreen';
 import { TaskDetailScreen } from './screens/employee/TaskDetailScreen';
 import { MaintenanceScreen } from './screens/employee/MaintenanceScreen';
 import { AttendanceScreen } from './screens/employee/AttendanceScreen';
+import { MyTeamScreen } from './screens/employee/MyTeamScreen';
 import { CalendarScreen } from './screens/employee/CalendarScreen';
-import { SalaryScreen } from './screens/employee/SalaryScreen';
 import { ZoneWorkspaceScreen } from './screens/employee/ZoneWorkspaceScreen';
 import { MaintenanceNewScreen } from './screens/employee/MaintenanceNewScreen';
 import { MaintenanceDetailScreen } from './screens/employee/MaintenanceDetailScreen';
@@ -359,13 +359,13 @@ const AppNavigator: React.FC = () => {
                 }
               />
             )}
-            {route.tab === 'attendance' && <AttendanceScreen />}
-            {route.tab === 'salary' && <SalaryScreen />}
-            {route.tab === 'profile' && (
-              <ProfileScreen
-                onOpenSalary={() => setRoute({ type: 'tabs', tab: 'salary' })}
+            {route.tab === 'team' && user?.role === 'department_manager' && (
+              <MyTeamScreen
+                onOpenTask={(taskId) => navigate({ type: 'task-detail', taskId })}
               />
             )}
+            {route.tab === 'attendance' && <AttendanceScreen />}
+            {route.tab === 'profile' && <ProfileScreen />}
           </>
         )}
       </div>
@@ -385,6 +385,7 @@ const AppNavigator: React.FC = () => {
           onChangeTab={(tab) => setRoute({ type: 'tabs', tab })}
           tasksCount={todoCount}
           maintenanceCount={maintenanceCount}
+          isManager={user?.role === 'department_manager'}
         />
       )}
     </div>
