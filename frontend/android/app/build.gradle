@@ -1,16 +1,5 @@
 apply plugin: 'com.android.application'
 
-// Release signing — credentials live in android/keystore.properties (gitignored,
-// never committed). If the file is absent the release build stays unsigned and
-// Gradle prints a warning instead of failing developer builds.
-def keystorePropertiesFile = rootProject.file("keystore.properties")
-def keystoreProperties = new Properties()
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-} else {
-    logger.warn("keystore.properties missing — release builds will be unsigned")
-}
-
 // Single authoritative version source: frontend/app.json
 //   expo.version            -> versionName
 //   expo.android.versionCode -> versionCode (monotonically increasing)
@@ -21,7 +10,7 @@ def appJson = new groovy.json.JsonSlurper()
 def appVersionName = appJson.expo.version
 def appVersionCode = appJson.expo.android.versionCode as Integer
 
-// Dev/debug signing identity — PINNED. Every installed build only accepts
+// Signing identity for EVERY installable build (debug and release) — PINNED. Every installed build only accepts
 // updates signed by the same certificate (AppUpdatePlugin rejects others
 // with WRONG_SIGNATURE, and Android refuses them anyway). Gradle's default
 // ~/.android/debug.keystore is generated per machine/container/CI runner,
@@ -57,30 +46,20 @@ android {
                 keyPassword "android"
             }
         }
-        release {
-            if (keystorePropertiesFile.exists()) {
-                storeFile file(keystoreProperties['storeFile'])
-                storePassword keystoreProperties['storePassword']
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-            }
-        }
     }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            if (keystorePropertiesFile.exists()) {
-                signingConfig signingConfigs.release
-            }
+            signingConfig signingConfigs.debug
         }
     }
 }
 
-// Fail closed: a debug APK signed by a random per-machine key can never
-// update installed devices. Refuse to package one instead of shipping it.
+// Fail closed: a debug or release APK signed by a random per-machine key can
+// never update installed devices. Refuse to package one instead of shipping it.
 gradle.taskGraph.whenReady { graph ->
-    def packagesDebug = graph.allTasks.any { it.project == project && it.name == "packageDebug" }
+    def packagesDebug = graph.allTasks.any { it.project == project && it.name in ["packageDebug", "packageRelease"] }
     if (packagesDebug && !devKeystoreFile.exists()) {
         throw new GradleException(
                 "Pinned dev signing key missing: ${devKeystoreFile}. " +
