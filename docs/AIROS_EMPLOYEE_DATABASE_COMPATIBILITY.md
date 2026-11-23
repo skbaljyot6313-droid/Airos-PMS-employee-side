@@ -43,8 +43,8 @@ revisions. In both cases:
 |---|---|
 | Employee startup auto-migrates | **NO** — confirmed absent |
 | Employee migrations could alter SA tables | Only if NEW revisions are written; none exist now. Shared read-only tables (`shifts`, `employee_shift_assignments`) are mapped read-only in `models/shift.py` — employee code does not mutate them |
-| Overlapping table ownership | Employee writes its own domain tables; SA writes shifts/templates/allocations → `work_allocation_history` ledger is the documented sharing point (employee reads it for notification synthesis; SA writes it) |
-| `airos_eb_app` permissions | To be created — least-privilege: `CONNECT` + `USAGE(schema public)` + `SELECT,INSERT,UPDATE,DELETE` on employee-domain tables + `USAGE` on sequences; `SELECT`-only on `shifts`, `employee_shift_assignments`, `work_templates*`, `properties/areas/zones` reference reads it needs; **NO** superuser, **NO** DDL/ownership, **NO** `GRANT` |
+| Overlapping table ownership | Employee writes its own domain tables; SA writes shifts/templates → `work_allocation_*` + `allocation_events` are **shared write**: the employee allocation engine (`services/work_allocation.py`) inserts batches/history/state and bumps the round-robin pointer on ticket create, task accept, start-of-day sweep, and end-day handover |
+| `airos_eb_app` permissions | Created 2026-11-02, corrected 2026-11-23 (maintenance-ticket 42501 incident). Required grants: `CONNECT` + `USAGE(schema public)` + `SELECT,INSERT,UPDATE,DELETE` on employee-domain tables + `USAGE` on sequences; `SELECT`-only on `shifts`, `employee_shift_assignments`, `work_templates*`, `properties/areas/zones` reference reads **plus** `INSERT` on `work_allocation_batches`, `work_allocation_history`, `allocation_events`; `INSERT,UPDATE` on `zone_allocation_state`, `area_allocation_state`; `UPDATE (id)` column-grant on `properties`, `areas` (satisfies the `SELECT … FOR UPDATE` serialization locks in `_locked_property`/`_locked_area` without opening general writes); **NO** superuser, **NO** DDL/ownership, **NO** `GRANT` |
 
 ## 5. Required actions before deploy (approval-gated)
 
