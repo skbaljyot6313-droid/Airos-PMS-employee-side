@@ -637,6 +637,9 @@ def main() -> int:
         if probe.returncode != 0:
             fail(f"uvicorn not importable via {py} - run: {py} -m pip install -r backend/requirements.txt")
         env = dict(os.environ, PYTHONUNBUFFERED="1")
+        # The spawned frontend talks to THIS backend, so the API must accept
+        # the actual frontend port — an inherited CORS_ORIGINS wins over this.
+        env.setdefault("CORS_ORIGINS", f"http://localhost:{fport},http://127.0.0.1:{fport}")
         if args.local:
             # Local-only SQLite: overrides backend/.env's remote DATABASE_URL
             # for the child process — the .env file itself is not touched.
@@ -656,6 +659,11 @@ def main() -> int:
         free_port(fport, "Frontend")
         check_port_free("0.0.0.0", fport, "Frontend")
         fe_env = dict(os.environ, PORT=str(fport))
+        if run_backend:
+            # Process env beats Vite's .env files — without this the dev
+            # bundle targets .env.development's Cloud Run API and the local
+            # backend just started above is silently ignored.
+            fe_env["VITE_API_URL"] = f"http://{host}:{bport}/api/v1"
         if port_open("127.0.0.1", HMR_PORT):
             print(f"WARNING: HMR websocket port {HMR_PORT} is in use - starting frontend with DISABLE_HMR=true")
             fe_env["DISABLE_HMR"] = "true"

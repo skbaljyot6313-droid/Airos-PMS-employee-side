@@ -142,7 +142,10 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.APP_ENV != "production" else None,
     lifespan=lifespan,
 )
-app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# allow_origin_regex covers localhost/127.0.0.1 on ANY port — dev servers
+# pick arbitrary ports (5173, 5199, …) and a fixed CORS_ORIGINS list makes
+# "unable to connect" appear every time Vite bumps the port.
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?", allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(AccessLogMiddleware)
