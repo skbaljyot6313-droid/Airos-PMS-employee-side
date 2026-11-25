@@ -149,7 +149,7 @@ export const en = {
     errDate: 'Use YYYY-MM-DD',
     errSalary: 'Enter a valid amount',
     errPassword: 'Password must be at least 8 characters',
-    errPasswordWeak: 'Use at least one letter and one number',
+
     errConfirm: 'Passwords do not match',
     errCode: 'Enter a valid 12-character organization code',
     errGeneric: 'Something went wrong. Please try again.',
@@ -192,7 +192,7 @@ export const en = {
     passwordPh: 'Create a password',
     confirmPassword: 'Confirm Password',
     confirmPasswordPh: 'Re-enter password',
-    passwordHint: 'At least 8 characters with one letter and one number.',
+    passwordHint: 'At least 8 characters.',
     codeHint:
       'Have an organization code? Enter the 12-character code shared by your organization\'s administrator.',
     code: 'Organization Code',

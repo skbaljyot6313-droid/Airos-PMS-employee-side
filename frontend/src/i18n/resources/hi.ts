@@ -149,7 +149,7 @@ export const hi: Messages = {
     errDate: 'YYYY-MM-DD का उपयोग करें',
     errSalary: 'एक मान्य राशि डालें',
     errPassword: 'पासवर्ड कम से कम 8 अक्षरों का होना चाहिए',
-    errPasswordWeak: 'कम से कम एक अक्षर और एक संख्या का उपयोग करें',
+
     errConfirm: 'पासवर्ड मेल नहीं खाते',
     errCode: 'एक मान्य 12-अंकीय संगठन कोड डालें',
     errGeneric: 'कुछ गड़बड़ हुई। कृपया फिर प्रयास करें।',
@@ -192,7 +192,7 @@ export const hi: Messages = {
     passwordPh: 'पासवर्ड बनाएँ',
     confirmPassword: 'पासवर्ड की पुष्टि करें',
     confirmPasswordPh: 'पासवर्ड फिर डालें',
-    passwordHint: 'कम से कम 8 अक्षर, एक अक्षर और एक संख्या सहित।',
+    passwordHint: 'कम से कम 8 अक्षर।',
     codeHint:
       'क्या आपके पास संगठन कोड है? अपने संगठन के प्रशासक द्वारा साझा किया गया 12-अंकीय कोड डालें।',
     code: 'संगठन कोड',

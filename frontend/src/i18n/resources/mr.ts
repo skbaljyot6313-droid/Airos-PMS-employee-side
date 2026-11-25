@@ -149,7 +149,7 @@ export const mr: Messages = {
     errDate: 'YYYY-MM-DD वापरा',
     errSalary: 'वैध रक्कम टाका',
     errPassword: 'पासवर्ड किमान 8 अक्षरांचा असावा',
-    errPasswordWeak: 'किमान एक अक्षर आणि एक अंक वापरा',
+
     errConfirm: 'पासवर्ड जुळत नाहीत',
     errCode: 'वैध 12-अंकी संस्था कोड टाका',
     errGeneric: 'काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.',
@@ -192,7 +192,7 @@ export const mr: Messages = {
     passwordPh: 'पासवर्ड तयार करा',
     confirmPassword: 'पासवर्डची पुष्टी करा',
     confirmPasswordPh: 'पासवर्ड पुन्हा टाका',
-    passwordHint: 'किमान 8 अक्षरे, एक अक्षर आणि एक अंक.',
+    passwordHint: 'किमान 8 अक्षरे.',
     codeHint:
       'तुमच्याकडे संस्था कोड आहे का? तुमच्या संस्थेच्या प्रशासकाने दिलेला 12-अंकी कोड टाका.',
     code: 'संस्था कोड',

@@ -153,8 +153,6 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
     }
     if (s === 'account') {
       if (form.password.length < 8) e.password = t('register.errPassword');
-      else if (!/[A-Za-z]/.test(form.password) || !/[0-9]/.test(form.password))
-        e.password = t('register.errPasswordWeak');
       if (form.confirm_password !== form.password)
         e.confirm_password = t('register.errConfirm');
     }

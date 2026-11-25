@@ -182,12 +182,6 @@ class RegistrationSubmitRequest(BaseModel):
             and self.confirm_password != self.password
         ):
             raise ValueError("Passwords do not match.")
-        if not any(c.isalpha() for c in self.password) or not any(
-            c.isdigit() for c in self.password
-        ):
-            raise ValueError(
-                "Password must contain at least one letter and one number."
-            )
         if self.salary and not self.salary_frequency:
             raise ValueError(
                 "Select a salary frequency when a salary is provided."
