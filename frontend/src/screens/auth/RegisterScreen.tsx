@@ -6,18 +6,27 @@ import {
   Eye,
   EyeOff,
   Building2,
+  ShieldCheck,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton, SecondaryButton } from '../../components/common/Buttons';
 import {
   submitRegistrationApi,
   verifyCodeApi,
+  DepartmentOption,
   RegistrationPayload,
 } from '../../api/registration';
 import { ApiError } from '../../types';
 
-type Step = 'personal' | 'employment' | 'account' | 'organization';
-const STEPS: Step[] = ['personal', 'employment', 'account', 'organization'];
+type Step = 'organization' | 'personal' | 'employment' | 'account';
+const STEPS: Step[] = ['organization', 'personal', 'employment', 'account'];
+const DEPT_OTHER = '__other__';
+
+interface VerifiedOrg {
+  org: string;
+  property: string | null;
+  departments: DepartmentOption[];
+}
 
 interface FormState {
   full_name: string;
@@ -73,11 +82,14 @@ const Field: React.FC<FieldProps> = ({ label, error, required, children }) => (
 
 export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { t } = useTranslation();
-  const [step, setStep] = useState<Step>('personal');
+  const [step, setStep] = useState<Step>('organization');
   const [form, setForm] = useState<FormState>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verified, setVerified] = useState<VerifiedOrg | null>(null);
+  const [deptOther, setDeptOther] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [done, setDone] = useState<string | null>(null); // org name on success
 
@@ -94,12 +106,31 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
     setServerError(null);
   };
 
+  const setCode = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const code = e.target.value.toUpperCase().slice(0, 12);
+    setForm((f) => ({ ...f, organization_code: code }));
+    // Editing the code invalidates the previous verification — the org
+    // card and department options belong to the OLD code.
+    setVerified(null);
+    setDeptOther(false);
+    setErrors((p) => {
+      const n = { ...p };
+      delete n.organization_code;
+      return n;
+    });
+    setServerError(null);
+  };
+
   // ------------------------- validation -----------------------------
   const validate = (s: Step): boolean => {
     const e: Record<string, string> = {};
     const req = (k: keyof FormState) => {
       if (!form[k].trim()) e[k] = t('register.required');
     };
+    if (s === 'organization') {
+      if (!/^[A-Za-z0-9]{12}$/.test(form.organization_code.trim()))
+        e.organization_code = t('register.errCode');
+    }
     if (s === 'personal') {
       req('full_name');
       req('username');
@@ -127,12 +158,32 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
       if (form.confirm_password !== form.password)
         e.confirm_password = t('register.errConfirm');
     }
-    if (s === 'organization') {
-      if (!/^[A-Za-z0-9]{12}$/.test(form.organization_code.trim()))
-        e.organization_code = t('register.errCode');
-    }
     setErrors(e);
     return Object.keys(e).length === 0;
+  };
+
+  // -------------------- code verification ---------------------------
+  const verify = async () => {
+    if (!validate('organization') || verifying) return;
+    setVerifying(true);
+    setServerError(null);
+    try {
+      const res = await verifyCodeApi(form.organization_code.trim());
+      if (!res.valid) {
+        setErrors({ organization_code: t('register.errCode') });
+        return;
+      }
+      setVerified({
+        org: res.organization_name ?? '',
+        property: res.property_name,
+        departments: res.departments ?? [],
+      });
+      setStep('personal');
+    } catch (err) {
+      setServerError((err as ApiError).message || t('register.errGeneric'));
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const next = () => {
@@ -147,15 +198,10 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
 
   // ------------------------- submit ---------------------------------
   const submit = async () => {
-    if (!validate('organization') || submitting) return;
+    if (!validate('account') || submitting) return;
     setSubmitting(true);
     setServerError(null);
     try {
-      const verify = await verifyCodeApi(form.organization_code.trim());
-      if (!verify.valid) {
-        setErrors({ organization_code: t('register.errCode') });
-        return;
-      }
       const payload: RegistrationPayload = {
         organization_code: form.organization_code.trim().toUpperCase(),
         full_name: form.full_name.trim(),
@@ -163,6 +209,7 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
         email: form.email.trim(),
         designation: form.designation.trim(),
         password: form.password,
+        confirm_password: form.confirm_password,
         ...(form.phone.trim() && { phone: form.phone.trim() }),
         ...(form.date_of_birth && { date_of_birth: form.date_of_birth }),
         ...(form.gender && { gender: form.gender }),
@@ -178,10 +225,15 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
         }),
       };
       const res = await submitRegistrationApi(payload);
-      setDone(res.organization_name || verify.organization_name || '');
+      const org = res.organization_name || verified?.org || '';
+      const prop = res.property_name || verified?.property || '';
+      setDone(prop ? `${org} · ${prop}` : org);
     } catch (err) {
       const apiErr = err as ApiError;
       if (apiErr.code === 'INVALID_ORGANIZATION_CODE') {
+        // Code rotated/invalidated after the initial verify — restart.
+        setVerified(null);
+        setStep('organization');
         setErrors({ organization_code: apiErr.message });
       } else if (apiErr.fieldErrors?.length) {
         // Server-side field errors jump back to the step owning them.
@@ -190,7 +242,12 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
           if (fe.field) mapped[fe.field] = fe.message;
         }
         setErrors(mapped);
-        if (mapped.full_name || mapped.username || mapped.email || mapped.phone)
+        if (mapped.organization_code) {
+          setVerified(null);
+          setStep('organization');
+        } else if (
+          mapped.full_name || mapped.username || mapped.email || mapped.phone
+        )
           setStep('personal');
         else if (
           mapped.designation || mapped.department || mapped.salary ||
@@ -275,7 +332,41 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
           </div>
         )}
 
+        {/* Verified-org ribbon on every step after the code check */}
+        {verified && step !== 'organization' && (
+          <div className="mb-4 p-3 rounded-xl bg-[#EDF7EE] border border-[#C8E6CE] flex items-center gap-2.5">
+            <ShieldCheck className="w-4 h-4 text-[#386641] flex-shrink-0" />
+            <p className="text-[11px] font-semibold text-[#386641] leading-snug">
+              {t('register.joining')}{' '}
+              {verified.property
+                ? `${verified.org} · ${verified.property}`
+                : verified.org}
+            </p>
+          </div>
+        )}
+
         {/* --------------------- Steps --------------------- */}
+        {step === 'organization' && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-xl bg-[#F7E9EE] border border-[#EAD3DB] flex items-start gap-3">
+              <Building2 className="w-5 h-5 text-[#800020] flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-[#0D1C42] leading-relaxed">
+                {t('register.codeHint')}
+              </p>
+            </div>
+            <Field label={t('register.code')} required error={errors.organization_code}>
+              <input
+                className={`${INPUT} text-center tracking-[0.3em] font-mono uppercase`}
+                value={form.organization_code}
+                onChange={setCode}
+                placeholder={t('register.codePh')}
+                autoCapitalize="characters"
+                maxLength={12}
+              />
+            </Field>
+          </div>
+        )}
+
         {step === 'personal' && (
           <div className="space-y-4">
             <Field label={t('register.fullName')} required error={errors.full_name}>
@@ -307,6 +398,7 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                   <option value="male">{t('register.genderMale')}</option>
                   <option value="female">{t('register.genderFemale')}</option>
                   <option value="other">{t('register.genderOther')}</option>
+                  <option value="prefer_not_to_say">{t('register.genderPreferNot')}</option>
                 </select>
               </Field>
             </div>
@@ -320,8 +412,40 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                 placeholder={t('register.designationPh')} />
             </Field>
             <Field label={t('register.department')} error={errors.department}>
-              <input className={INPUT} value={form.department} onChange={set('department')}
-                placeholder={t('register.departmentPh')} />
+              {verified && verified.departments.length > 0 ? (
+                <>
+                  <select
+                    className={INPUT}
+                    value={deptOther ? DEPT_OTHER : form.department}
+                    onChange={(e) => {
+                      if (e.target.value === DEPT_OTHER) {
+                        setDeptOther(true);
+                        setForm((f) => ({ ...f, department: '' }));
+                      } else {
+                        setDeptOther(false);
+                        set('department')(e);
+                      }
+                    }}
+                  >
+                    <option value="">{t('register.departmentSelect')}</option>
+                    {verified.departments.map((d) => (
+                      <option key={d.uid} value={d.name}>{d.name}</option>
+                    ))}
+                    <option value={DEPT_OTHER}>{t('register.departmentOther')}</option>
+                  </select>
+                  {deptOther && (
+                    <input
+                      className={`${INPUT} mt-2`}
+                      value={form.department}
+                      onChange={set('department')}
+                      placeholder={t('register.departmentPh')}
+                    />
+                  )}
+                </>
+              ) : (
+                <input className={INPUT} value={form.department} onChange={set('department')}
+                  placeholder={t('register.departmentPh')} />
+              )}
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={t('register.employmentType')}>
@@ -331,6 +455,8 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
                   <option value="full_time">{t('register.etFull')}</option>
                   <option value="part_time">{t('register.etPart')}</option>
                   <option value="contract">{t('register.etContract')}</option>
+                  <option value="intern">{t('register.etIntern')}</option>
+                  <option value="temporary">{t('register.etTemporary')}</option>
                 </select>
               </Field>
               <Field label={t('register.joiningDate')} error={errors.joining_date}>
@@ -386,41 +512,14 @@ export const RegisterScreen: React.FC<{ onBack: () => void }> = ({ onBack }) => 
           </div>
         )}
 
-        {step === 'organization' && (
-          <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-[#F7E9EE] border border-[#EAD3DB] flex items-start gap-3">
-              <Building2 className="w-5 h-5 text-[#800020] flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-[#0D1C42] leading-relaxed">
-                {t('register.codeHint')}
-              </p>
-            </div>
-            <Field label={t('register.code')} required error={errors.organization_code}>
-              <input
-                className={`${INPUT} text-center tracking-[0.3em] font-mono uppercase`}
-                value={form.organization_code}
-                onChange={(e) => {
-                  setForm((f) => ({
-                    ...f,
-                    organization_code: e.target.value.toUpperCase().slice(0, 12),
-                  }));
-                  setErrors((p) => {
-                    const n = { ...p };
-                    delete n.organization_code;
-                    return n;
-                  });
-                  setServerError(null);
-                }}
-                placeholder={t('register.codePh')}
-                autoCapitalize="characters"
-                maxLength={12}
-              />
-            </Field>
-          </div>
-        )}
-
         {/* Footer */}
         <div className="mt-8">
           {step === 'organization' ? (
+            <PrimaryButton onClick={() => void verify()} loading={verifying}
+              size="lg" icon={<ArrowRight className="w-4 h-4" />}>
+              {t('register.verify')}
+            </PrimaryButton>
+          ) : step === 'account' ? (
             <PrimaryButton onClick={() => void submit()} loading={submitting}
               size="lg" icon={<ArrowRight className="w-4 h-4" />}>
               {t('register.submit')}

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit
 from app.schemas.v1.registration import (
+    DepartmentOption,
     RegistrationSubmitRequest,
     RegistrationSubmitResponse,
     VerifyCodeRequest,
@@ -34,12 +35,22 @@ async def verify_code(
     payload: VerifyCodeRequest,
     session: AsyncSession = Depends(get_db),
 ):
-    """Check a 12-char organization code — returns the organization name
-    on success so the app can confirm "you're joining X" before submit."""
-    valid, name = await RegistrationService(session).verify_code(
-        payload.code
+    """Check a 12-char organization code — returns the organization and
+    property name on success so the app can confirm "you're joining X at
+    Y" before submit, plus the property's active departments so the
+    form can offer a real dropdown instead of free text."""
+    valid, org_name, prop_name, departments = await RegistrationService(
+        session
+    ).verify_code(payload.code)
+    return VerifyCodeResponse(
+        valid=valid,
+        organization_name=org_name,
+        property_name=prop_name,
+        departments=[
+            DepartmentOption(uid=str(d.id), name=d.name)
+            for d in departments
+        ],
     )
-    return VerifyCodeResponse(valid=valid, organization_name=name)
 
 
 @router.post(
@@ -59,9 +70,12 @@ async def submit_registration(
 ):
     """Create a PENDING registration request. Never creates a user,
     never issues tokens — approval happens in the Super Admin app."""
-    req, org_name = await RegistrationService(session).submit(payload)
+    req, org_name, prop_name = await RegistrationService(session).submit(
+        payload
+    )
     return RegistrationSubmitResponse(
         request_uid=str(req.id),
         status=req.status,
         organization_name=org_name,
+        property_name=prop_name,
     )

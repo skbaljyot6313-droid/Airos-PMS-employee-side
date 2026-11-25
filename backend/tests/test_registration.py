@@ -18,7 +18,6 @@ from app.services.registration import (
     RegistrationPending,
     RegistrationRejected,
     RegistrationService,
-    unique_organization_code,
 )
 
 
@@ -37,37 +36,67 @@ def _payload(code: str, **over) -> RegistrationSubmitRequest:
 
 async def test_verify_code_valid(session, seed):
     svc = RegistrationService(session)
-    code = seed["company"].organization_code
+    code = seed["prop"].organization_code
     assert code and len(code) == 12  # model default generated it
-    valid, name = await svc.verify_code(code)
+    valid, org_name, prop_name, departments = await svc.verify_code(code)
     assert valid is True
-    assert name == "Acme"
+    assert org_name == "Acme" and prop_name == "HQ"
+    assert departments == []
+
+
+async def test_verify_code_returns_active_departments(session, seed):
+    from app.models.department import Department
+
+    prop = seed["prop"]
+    session.add_all([
+        Department(
+            company_id=prop.company_id, property_id=prop.id,
+            name="Housekeeping",
+        ),
+        Department(
+            company_id=prop.company_id, property_id=prop.id,
+            name="Maintenance",
+        ),
+        Department(
+            company_id=prop.company_id, property_id=prop.id,
+            name="Old Dept", status="inactive",
+        ),
+    ])
+    await session.commit()
+
+    valid, _, _, departments = await RegistrationService(
+        session
+    ).verify_code(prop.organization_code)
+    assert valid is True
+    assert [d.name for d in departments] == ["Housekeeping", "Maintenance"]
 
 
 async def test_verify_code_case_insensitive(session, seed):
     svc = RegistrationService(session)
-    valid, _ = await svc.verify_code(
-        seed["company"].organization_code.lower()
+    valid, _, _, _ = await svc.verify_code(
+        seed["prop"].organization_code.lower()
     )
     assert valid is True
 
 
 async def test_verify_code_invalid(session, seed):
-    valid, name = await RegistrationService(session).verify_code(
-        "ZZZZZZZZZZZZ"
-    )
+    valid, org_name, prop_name, departments = await RegistrationService(
+        session
+    ).verify_code("ZZZZZZZZZZZZ")
     assert valid is False
-    assert name is None
+    assert org_name is None and prop_name is None
+    assert departments == []
 
 
 async def test_submit_creates_pending_request_only(session, seed):
-    code = seed["company"].organization_code
-    req, org_name = await RegistrationService(session).submit(
+    code = seed["prop"].organization_code
+    req, org_name, prop_name = await RegistrationService(session).submit(
         _payload(code)
     )
-    assert org_name == "Acme"
+    assert org_name == "Acme" and prop_name == "HQ"
     assert req.status == "pending"
     assert req.company_id == seed["company"].id
+    assert req.property_id == seed["prop"].id
     assert req.password_hash.startswith("$argon2")
     assert "Passw0rd1" not in req.password_hash
     # No account artifacts — the request row is all that exists.
@@ -87,7 +116,7 @@ async def test_submit_invalid_code_rejected(session, seed):
 
 
 async def test_submit_duplicate_pending_blocked(session, seed):
-    code = seed["company"].organization_code
+    code = seed["prop"].organization_code
     svc = RegistrationService(session)
     await svc.submit(_payload(code))
     with pytest.raises(RegistrationAlreadyPending):
@@ -95,12 +124,12 @@ async def test_submit_duplicate_pending_blocked(session, seed):
 
 
 async def test_submit_after_rejection_allowed(session, seed):
-    code = seed["company"].organization_code
+    code = seed["prop"].organization_code
     svc = RegistrationService(session)
-    req, _ = await svc.submit(_payload(code))
+    req, _, _ = await svc.submit(_payload(code))
     req.status = "rejected"
     await session.commit()
-    req2, _ = await svc.submit(_payload(code))
+    req2, _, _ = await svc.submit(_payload(code))
     assert req2.status == "pending" and req2.id != req.id
 
 
@@ -108,7 +137,7 @@ async def test_submit_existing_account_email_blocked(session, seed):
     with pytest.raises(EmailAlreadyExists):
         await RegistrationService(session).submit(
             _payload(
-                seed["company"].organization_code, email="admin@acme.test"
+                seed["prop"].organization_code, email="admin@acme.test"
             )
         )
 
@@ -116,13 +145,13 @@ async def test_submit_existing_account_email_blocked(session, seed):
 async def test_submit_existing_username_blocked(session, seed):
     with pytest.raises(UsernameTaken):
         await RegistrationService(session).submit(
-            _payload(seed["company"].organization_code, username="admin")
+            _payload(seed["prop"].organization_code, username="admin")
         )
 
 
 async def test_login_status_pending_with_correct_password(session, seed):
     svc = RegistrationService(session)
-    await svc.submit(_payload(seed["company"].organization_code))
+    await svc.submit(_payload(seed["prop"].organization_code))
     err = await svc.login_status("joiner@acme.test", "Passw0rd1")
     assert isinstance(err, RegistrationPending)
     # Same lookup by username works too.
@@ -132,7 +161,7 @@ async def test_login_status_pending_with_correct_password(session, seed):
 
 async def test_login_status_wrong_password_leaks_nothing(session, seed):
     svc = RegistrationService(session)
-    await svc.submit(_payload(seed["company"].organization_code))
+    await svc.submit(_payload(seed["prop"].organization_code))
     assert await svc.login_status("joiner@acme.test", "wrong-pass") is None
     # Unknown identifier entirely → same nothing.
     assert await svc.login_status("nobody@x.test", "Passw0rd1") is None
@@ -140,7 +169,7 @@ async def test_login_status_wrong_password_leaks_nothing(session, seed):
 
 async def test_login_status_rejected_includes_reason(session, seed):
     svc = RegistrationService(session)
-    req, _ = await svc.submit(_payload(seed["company"].organization_code))
+    req, _, _ = await svc.submit(_payload(seed["prop"].organization_code))
     req.status = "rejected"
     req.rejection_reason = "Position filled"
     await session.commit()
@@ -151,13 +180,21 @@ async def test_login_status_rejected_includes_reason(session, seed):
 
 async def test_login_status_approved_returns_none(session, seed):
     svc = RegistrationService(session)
-    req, _ = await svc.submit(_payload(seed["company"].organization_code))
+    req, _, _ = await svc.submit(_payload(seed["prop"].organization_code))
     req.status = "approved"
     await session.commit()
     assert await svc.login_status("joiner@acme.test", "Passw0rd1") is None
 
 
-async def test_unique_organization_code_never_collides(session, seed):
-    c1 = await unique_organization_code(session)
-    c2 = await unique_organization_code(session)
-    assert c1 != c2 and c1 != seed["company"].organization_code
+async def test_property_codes_unique_per_property(session, seed):
+    from app.models.property import Property
+
+    p2 = Property(
+        company_id=seed["company"].id, name="Branch", code="BR1",
+        location="L", city="C", state="S",
+        manager_name="M", manager_email="m2@x.test",
+    )
+    session.add(p2)
+    await session.flush()
+    assert p2.organization_code != seed["prop"].organization_code
+    assert len(p2.organization_code) == 12

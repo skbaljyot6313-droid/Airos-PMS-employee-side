@@ -1,9 +1,9 @@
 """EmployeeRegistrationRequest — pending self-service employee sign-ups.
 
-Written by the employee backend's public registration endpoint (org code
-verified server-side — the client never supplies a company id) and decided
-by the super-admin backend's approval surface. The row IS the audit trail:
-decided requests are never deleted.
+Written by the employee backend's public registration endpoint (property
+org code verified server-side — the client never supplies a company or
+property id) and decided by the super-admin backend's approval surface.
+The row IS the audit trail: decided requests are never deleted.
 
 ``password_hash`` is Argon2id — computed at submission so a plaintext
 password never touches the database or the request row. On approval the
@@ -45,12 +45,14 @@ class EmployeeRegistrationRequest(Base):
         Uuid, primary_key=True, default=uuid.uuid4
     )
     # Resolved server-side from the organization code — never trusted
-    # from the client payload.
+    # from the client payload. The code lives on the PROPERTY, so both
+    # scoping columns are known at submission.
     company_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("companies.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
-    # Set at approval — requests are company-scoped until decided.
+    # Set at submission — the property the applicant's code belongs to.
+    # The admin may still override placement at approval.
     property_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("properties.id", ondelete="SET NULL"),
         nullable=True,
@@ -94,8 +96,9 @@ class EmployeeRegistrationRequest(Base):
 
     # --- Credentials ---------------------------------------------------
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    # Snapshot of the code used — survives later code rotation so the
-    # audit record keeps WHICH code admitted this request.
+    # Snapshot of the property's code used — survives later code
+    # rotation so the audit record keeps WHICH code admitted this
+    # request.
     organization_code: Mapped[str] = mapped_column(
         String(12), nullable=False
     )

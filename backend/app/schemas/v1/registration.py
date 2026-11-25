@@ -34,9 +34,18 @@ class VerifyCodeRequest(BaseModel):
     code: str = Field(min_length=1, max_length=32)
 
 
+class DepartmentOption(BaseModel):
+    uid: str
+    name: str
+
+
 class VerifyCodeResponse(BaseModel):
     valid: bool
     organization_name: str | None = None
+    property_name: str | None = None
+    # Active departments of the resolved property — the registration
+    # form's department dropdown options. Empty when none are defined.
+    departments: list[DepartmentOption] = []
 
 
 class RegistrationSubmitRequest(BaseModel):
@@ -190,3 +199,4 @@ class RegistrationSubmitResponse(BaseModel):
     request_uid: str
     status: str
     organization_name: str
+    property_name: str | None = None

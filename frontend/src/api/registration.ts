@@ -8,9 +8,18 @@
 
 import { apiClient } from './client';
 
+export interface DepartmentOption {
+  uid: string;
+  name: string;
+}
+
 export interface VerifyCodeResponse {
   valid: boolean;
   organization_name: string | null;
+  property_name: string | null;
+  /** Active departments of the resolved property — dropdown options.
+   *  Empty when the org hasn't defined any. */
+  departments: DepartmentOption[];
 }
 
 export interface RegistrationPayload {
@@ -29,12 +38,14 @@ export interface RegistrationPayload {
   salary?: string;
   salary_frequency?: 'monthly' | 'daily' | 'hourly';
   password: string;
+  confirm_password?: string;
 }
 
 export interface RegistrationSubmitResponse {
   request_uid: string;
   status: 'pending';
   organization_name: string;
+  property_name: string | null;
 }
 
 export async function verifyCodeApi(code: string): Promise<VerifyCodeResponse> {

@@ -25,7 +25,6 @@ class CompanyRepository:
         pin_code: str,
         email: str,
         phone_number: str,
-        organization_code: str,
     ) -> Company:
         company = Company(
             company_name=company_name,
@@ -34,7 +33,6 @@ class CompanyRepository:
             pin_code=pin_code,
             email=email,
             phone_number=phone_number,
-            organization_code=organization_code,
         )
         self.session.add(company)
         await self.session.flush()

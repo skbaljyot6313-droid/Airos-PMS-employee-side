@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.security import generate_organization_code
 from app.models import Base
 
 
@@ -20,6 +21,17 @@ class Property(Base):
     city: Mapped[str] = mapped_column(String(100), nullable=False)
     state: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="Setup")
+    # 12-char public code (A-Z2-9, no O/0/I/1) — the employee app's
+    # self-registration flow resolves this property (and transitively
+    # the company) from the code. Rotation invalidates it for new
+    # requests without touching approved employees.
+    organization_code: Mapped[str] = mapped_column(
+        String(12),
+        nullable=False,
+        unique=True,
+        index=True,
+        default=generate_organization_code,
+    )
     manager_employee_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     manager_name: Mapped[str] = mapped_column(String(255), nullable=False)
     manager_email: Mapped[str] = mapped_column(String(255), nullable=False)

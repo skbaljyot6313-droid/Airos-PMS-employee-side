@@ -130,8 +130,6 @@ class AuthService:
 
         # The session autobegins — both creates flush into one transaction
         # and commit atomically. A failure anywhere rolls back both rows.
-        from app.services.registration import unique_organization_code
-
         company = await self.companies.create(
             company_name=payload.company_name.strip(),
             brand_name=payload.brand_name.strip(),
@@ -139,9 +137,6 @@ class AuthService:
             pin_code=payload.pin_code,
             email=payload.email,
             phone_number=payload.phone,
-            # Every organization gets a registration code at birth —
-            # collision-checked; the unique index is the backstop.
-            organization_code=await unique_organization_code(self.session),
         )
         try:
             user = await self.users.create(
