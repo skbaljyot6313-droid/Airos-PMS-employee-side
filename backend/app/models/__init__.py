@@ -44,6 +44,9 @@ from app.models.notifications import (  # noqa: E402, F401
 from app.models.occupancy import Occupancy  # noqa: E402, F401
 from app.models.property import Property  # noqa: E402, F401
 from app.models.refresh_token import RefreshToken  # noqa: E402, F401
+from app.models.registration_request import (  # noqa: E402, F401
+    EmployeeRegistrationRequest,
+)
 from app.models.resource_state_event import ResourceStateEvent  # noqa: E402, F401
 from app.models.shift import (  # noqa: E402, F401
     EmployeeShiftAssignment,

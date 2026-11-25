@@ -87,6 +87,28 @@ def refresh_token_expiry() -> datetime:
 
 
 # ---------------------------------------------------------------------------
+# Organization codes — 12-char public company identifiers (uppercase
+# letters + digits, O/0/I/1 excluded). Cryptographically random.
+# ---------------------------------------------------------------------------
+
+_ORG_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+ORGANIZATION_CODE_LENGTH = 12
+ORGANIZATION_CODE_RE = re.compile(r"^[A-Z2-9]{12}$")
+
+
+def generate_organization_code() -> str:
+    return "".join(
+        secrets.choice(_ORG_CODE_ALPHABET)
+        for _ in range(ORGANIZATION_CODE_LENGTH)
+    )
+
+
+def normalize_organization_code(raw: str) -> str:
+    """Trim + uppercase user input — codes are stored uppercase."""
+    return (raw or "").strip().upper()
+
+
+# ---------------------------------------------------------------------------
 # Username generation — signup has no username field, derive from email
 # ---------------------------------------------------------------------------
 

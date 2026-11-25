@@ -14,6 +14,7 @@ from app.api.v1 import (
     notifications,
     preferences,
     realtime,
+    registration,
     resources,
     tasks,
     team,
@@ -33,4 +34,5 @@ api_router.include_router(location.router)
 api_router.include_router(realtime.router)
 api_router.include_router(mobile.router)
 api_router.include_router(preferences.router)
+api_router.include_router(registration.router)
 api_router.include_router(team.router)

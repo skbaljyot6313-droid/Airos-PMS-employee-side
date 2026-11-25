@@ -47,6 +47,8 @@ NOTIFICATION_TYPES = (
     "submission_disapproved",
     "ticket_assigned",
     "ticket_disapproved",
+    "registration_approved",
+    "registration_rejected",
 )
 
 DEVICE_PLATFORMS = ("android", "ios", "web")

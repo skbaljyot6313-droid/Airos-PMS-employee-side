@@ -41,6 +41,7 @@ import { StaffNotification } from './types';
 import { DeviceFrame } from './components/common/DeviceFrame';
 import { BottomNav, TabType } from './components/common/BottomNav';
 import { LoginScreen } from './screens/auth/LoginScreen';
+import { RegisterScreen } from './screens/auth/RegisterScreen';
 import { TasksScreen } from './screens/employee/TasksScreen';
 import { TaskDetailScreen } from './screens/employee/TaskDetailScreen';
 import { MaintenanceScreen } from './screens/employee/MaintenanceScreen';
@@ -68,6 +69,8 @@ const AppNavigator: React.FC = () => {
   const { isAuthenticated, isLoading, user, connectionError, retrySession, logout } = useAuth();
   const { t } = useTranslation();
   const [route, setRoute] = useState<StackRoute>({ type: 'tabs', tab: 'tasks' });
+  // Pre-auth screen toggle — Login <-> Register (unauthenticated only).
+  const [showRegister, setShowRegister] = useState(false);
   // Centralized navigation history — navigate() pushes the current
   // route, goBack/goForward walk the stack. Tab switches stay root-level
   // replaces (never pushed), so the stack only holds drill-downs.
@@ -262,7 +265,11 @@ const AppNavigator: React.FC = () => {
     }
     return (
       <div className="flex-1 flex flex-col h-full bg-white px-[var(--app-px)] pt-[var(--app-top-gap)] pb-[var(--app-bottom-gap)]">
-        <LoginScreen />
+        {showRegister ? (
+          <RegisterScreen onBack={() => setShowRegister(false)} />
+        ) : (
+          <LoginScreen onNavigateRegister={() => setShowRegister(true)} />
+        )}
       </div>
     );
   }

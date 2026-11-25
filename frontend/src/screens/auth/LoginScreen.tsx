@@ -4,7 +4,9 @@ import { Eye, EyeOff, Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PrimaryButton } from '../../components/common/Buttons';
 
-export const LoginScreen: React.FC = () => {
+export const LoginScreen: React.FC<{ onNavigateRegister?: () => void }> = ({
+  onNavigateRegister,
+}) => {
   const { login, isLoading, authError, clearError } = useAuth();
   const { t } = useTranslation();
   const [username, setUsername] = useState<string>('');
@@ -124,6 +126,18 @@ export const LoginScreen: React.FC = () => {
             </PrimaryButton>
           </div>
         </form>
+
+        {/* Self-registration entry — opens the org-code onboarding flow.
+            The login form itself is untouched. */}
+        {onNavigateRegister && (
+          <button
+            type="button"
+            onClick={onNavigateRegister}
+            className="w-full mt-5 py-3 rounded-xl border border-[#E7E5E4] text-xs font-semibold text-[#0D1C42] hover:border-[#800020] hover:text-[#800020] transition-colors"
+          >
+            {t('register.cta')}
+          </button>
+        )}
 
       </div>
 
