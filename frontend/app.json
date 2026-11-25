@@ -2,10 +2,10 @@
   "expo": {
     "name": "Airos Property Pro",
     "slug": "airos-employee",
-    "version": "1.0.27",
+    "version": "1.0.28",
     "android": {
       "package": "com.theairco.airos.employee",
-      "versionCode": 29
+      "versionCode": 30
     },
     "extra": {
       "eas": {
