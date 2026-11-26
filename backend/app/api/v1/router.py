@@ -18,6 +18,7 @@ from app.api.v1 import (
     resources,
     tasks,
     team,
+    work_calendar,
 )
 
 api_router = APIRouter()
@@ -36,3 +37,4 @@ api_router.include_router(mobile.router)
 api_router.include_router(preferences.router)
 api_router.include_router(registration.router)
 api_router.include_router(team.router)
+api_router.include_router(work_calendar.router)

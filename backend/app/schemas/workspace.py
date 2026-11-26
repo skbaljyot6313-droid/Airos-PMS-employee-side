@@ -440,6 +440,7 @@ def task_out(t: Task) -> dict:
         "priority": t.priority,
         "due_date": t.due_date,
         "due_time": t.due_time,
+        "operational_date": t.operational_date,
         "start_time": t.start_time,
         "recurrence_start_date": t.recurrence_start_date,
         "recurrence_end_date": t.recurrence_end_date,

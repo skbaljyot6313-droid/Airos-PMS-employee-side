@@ -158,7 +158,7 @@ Base: `{VITE_API_URL}` (e.g. `http://host:8000/api/v1`). All authenticated calls
 | `priority` | `priority` | `low|medium|high|critical|urgent` |
 | `status` | `status` | See status vocabulary §7 |
 | `due_date` | `due_date`, `due_at` | `due_at` only set when value contains `T` (a date-only string carries no clock time — `hasClockTime`) |
-| `due_time`, `scheduled_for`, `expires_at` | same | |
+| `due_time`, `scheduled_for`, `operational_date`, `expires_at` | same | `operational_date` is the IST occurrence key for recurring/generated work |
 | `description` | `instructions` | |
 | `checklist[]: {title, required, description}` | `checklist[]: {id=cl-N, label, required, completed=false, description}` | Completion state is local-only |
 | `verification: {photo_required, min_photos, max_photos, checklist_required, supervisor_approval}` | `verification_config` | `min_photos` defaults to 1 when photo_required, `max_photos` defaults 5 |
@@ -169,7 +169,15 @@ Base: `{VITE_API_URL}` (e.g. `http://host:8000/api/v1`). All authenticated calls
 
 **Submit contract notes:** backend lifecycle is start → submit; starting marks `in_progress` and flags the resource for cleaning. The backend accepts `{note, photo_urls}` — **checklist completion is a client-side gate only**; the server validates evidence, not checkboxes.
 
-### 4.3 Maintenance
+### 4.3 Work calendar (`src/api/calendar.ts`)
+
+| Method | Endpoint | Request | Response (wire) | Client fn | Used by |
+|---|---|---|---|---|---|
+| GET | `/work-calendar?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD` | — | `{ days: [{date, attendance}], requests, tasks, maintenance }` | `fetchWorkCalendarApi` | CalendarScreen |
+
+The response is scoped to the caller's linked employee and covers the whole inclusive range. `attendance` is the richer `workday_out` shape (`started_at`, `ended_at`, `breaks[]`), while task/ticket rows include `history[]`/`events[]`. CalendarScreen groups scheduled work by `operational_date` → `scheduled_for` → `due_date`, and renders history events in IST as the actual-work timeline.
+
+### 4.4 Maintenance
 
 | Method | Endpoint | Request | Response (wire) | Client fn | Used by |
 |---|---|---|---|---|---|
@@ -216,7 +224,7 @@ Server enforces zone/area coverage → `403` outside coverage.
 | `created_at`, `resolved_at`, `closed_at`, `resolution_notes` | same | |
 | `events[]: {action, at, actor_name, comment}` | `history[]: {status, timestamp, actor_name, notes}` | |
 
-### 4.4 Directory / Resources (`src/api/directory.ts`)
+### 4.5 Directory / Resources (`src/api/directory.ts`)
 
 | Method | Endpoint | Response | Client fn | Used by |
 |---|---|---|---|---|
@@ -257,7 +265,7 @@ WashroomFixture { fixture_uid, washroom_uid, fixture_type, fixture_number, label
              ...ResourceStateFields }
 ```
 
-### 4.5 Media (`src/api/media.ts`)
+### 4.6 Media (`src/api/media.ts`)
 
 | Method | Endpoint | Request | Response | Client fn | Used by |
 |---|---|---|---|---|---|
@@ -398,6 +406,12 @@ EligibleLocation { id, kind: 'room'|'dorm', name, zone_name }
 | `startTaskApi(id)` | POST `/tasks/{id}/start` | Marks in_progress; flags resource for cleaning |
 | `submitTaskApi(id, {note?, photo_urls})` | POST `/tasks/{id}/submit` | Status → `submitted` (awaits supervisor review) |
 | `hasClockTime(v)` | — | `v.includes('T')` — date-only dues get no fabricated hour |
+
+### `src/api/calendar.ts`
+
+| Function | Endpoint(s) | Notes |
+|---|---|---|
+| `fetchWorkCalendarApi(dateFrom, dateTo)` | GET `/work-calendar` + GET `/zones` | Returns `{days, requests, tasks}`; maintenance tickets are normalized to calendar `Task` rows with `kind='maintenance'` |
 
 ### `src/api/maintenance.ts`
 

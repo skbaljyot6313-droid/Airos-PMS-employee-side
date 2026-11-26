@@ -3,7 +3,7 @@
 Wire shape follows the *_uid convention; instants serialize as ISO via
 FastAPI's encoder (raw datetimes, same as workspace.py serializers).
 The WorkdayWire contract the frontend consumes:
-    { state, date, started_at, break_started_at, ended_at }
+    { state, date, started_at, break_started_at, ended_at, breaks[] }
 plus the richer backend fields (status, break_seconds, work_seconds,
 open_break) it ignores harmlessly.
 """
@@ -67,6 +67,14 @@ def workday_out(
         "open_break": (
             {"started_at": open_break.started_at} if open_break else None
         ),
+        "breaks": [
+            {
+                "started_at": b.started_at,
+                "ended_at": b.ended_at,
+                "duration_seconds": b.duration_seconds,
+            }
+            for b in day.breaks
+        ] if day else [],
         "request": request_out(request) if request else None,
     }
 

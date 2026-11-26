@@ -18,6 +18,7 @@ def test_mobile_routes_are_registered():
         ("/api/v1/tasks/{task_id}", "GET"),
         ("/api/v1/tasks/{task_id}/start", "POST"),
         ("/api/v1/tasks/{task_id}/submit", "POST"),
+        ("/api/v1/work-calendar", "GET"),
         ("/api/v1/zones", "GET"),
         ("/api/v1/maintenance", "GET"),
         ("/api/v1/maintenance", "POST"),

@@ -13,6 +13,7 @@ Mobile base URL appends `/api/v1`. All paths below match exactly.
 | Task detail | GET `/tasks/{uid}` | GET `/api/v1/tasks/{task_id}` | UUID path | task/history/submissions/evidence | PASS |
 | Task detail | POST `/tasks/{uid}/start` | matching | UUID path | task | PASS |
 | Task detail | POST `/tasks/{uid}/submit` | matching | `TaskSubmitRequest` | task | PASS |
+| Work calendar | GET `/work-calendar?date_from&date_to` | matching | inclusive `YYYY-MM-DD` range, ≤92 days | days/requests/tasks+history/assigned tickets+events | PASS |
 | Task filters | GET `/zones` | GET `/api/v1/zones` | Bearer token | zone list | PASS |
 | Maintenance tab | GET `/maintenance` | GET `/api/v1/maintenance` | Bearer token | ticket list | PASS |
 | Maintenance detail | GET `/maintenance/{uid}` | matching | UUID path | ticket/events/attachments | PASS |

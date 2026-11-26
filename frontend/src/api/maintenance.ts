@@ -118,6 +118,7 @@ export const mapTicket = (
     zone_name: t.zone_uid ? zoneNames.get(t.zone_uid) ?? null : null,
     priority: t.priority as MaintenanceTicket['priority'],
     status: wireToDisplayStatus(t.status),
+    due_date: t.due_date ?? null,
     description: t.description ?? null,
     photos: issuePhotos,
     // List summaries carry photo_count only; detail rows compute from URLs.

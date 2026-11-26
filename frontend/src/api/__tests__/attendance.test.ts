@@ -35,6 +35,10 @@ describe('mapWorkday', () => {
       started_at: '2026-10-12T04:00:00Z',
       break_started_at: '2026-10-12T08:00:00Z',
       ended_at: null,
+      status: null,
+      work_seconds: null,
+      break_seconds: 0,
+      breaks: [],
     });
   });
 

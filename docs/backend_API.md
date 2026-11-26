@@ -17,6 +17,7 @@ app/
 │   ├── router.py              # aggregates: auth, tasks, maintenance, resources, media
 │   ├── auth.py                # /auth/login /refresh /logout /me (GET+PATCH)
 │   ├── tasks.py               # /tasks list/detail/start/submit
+│   ├── work_calendar.py       # /work-calendar scoped day/timeline feed
 │   ├── maintenance.py         # /maintenance list/detail/create/start/resolve + eligible-locations
 │   ├── resources.py           # /zones only
 │   └── media.py               # /media/uploads
@@ -205,7 +206,30 @@ Assignee-only. **Body** `TaskSubmitRequest`: `{ note?: str (≤4000), photo_urls
 
 ---
 
-### 5.3 Maintenance — `/api/v1/maintenance` (all require Bearer)
+### 5.3 Work Calendar — `/api/v1/work-calendar` (Bearer required)
+
+#### `GET /work-calendar?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
+Inclusive IST business-date range, capped at 92 days. This is the Calendar tab's consolidated timeline feed: callers should not stitch `/tasks`, `/maintenance`, and `/attendance/calendar` together for this view.
+
+**Scope:** `employee_id == caller's linked employee`. Users with no employee link receive a valid empty feed (`days` still covers the requested range).
+**Selection:** tasks are included when `operational_date`/`due_date`/`scheduled_for`, `created_at`, completion timestamps, or any history event falls in the range. Assigned maintenance tickets use `due_date`, `created_at`, `resolved_at`/`closed_at`, or ticket events in the range.
+**200**
+```jsonc
+{
+  "date_from": "2026-11-26",
+  "date_to": "2026-11-26",
+  "days": [ { "date": "…", "attendance": "workday_out incl. breaks[]" } ],
+  "requests": [ "request_out…" ],
+  "tasks": [ "task_out incl. history[]" ],
+  "maintenance": [ "ticket_out incl. events[] + attachments[]" ]
+}
+```
+`workday_out.breaks[] = {started_at, ended_at, duration_seconds}` so the UI can draw exact break blocks; tasks/tickets carry their audit timelines for actual-work events.
+**Errors:** `422 VALIDATION_ERROR` for malformed, reversed, or >92-day ranges.
+
+---
+
+### 5.4 Maintenance — `/api/v1/maintenance` (all require Bearer)
 
 #### `GET /maintenance`
 **Scope:** employees → `assigned_to == me OR reported_by == me`; staff → property/company scope. Ordered `created_at` desc, `events`+`attachments` eager-loaded.
@@ -255,7 +279,7 @@ Assignee-only. **Body** `MaintenanceResolveRequest`: `{ resolution_notes: str (3
 
 ---
 
-### 5.4 Resources — `/api/v1`
+### 5.5 Resources — `/api/v1`
 
 #### `GET /zones`
 Auth required; scoped to caller's property (or company for super_admin). Ordered `created_at`.
@@ -269,7 +293,7 @@ Auth required; scoped to caller's property (or company for super_admin). Ordered
 
 ---
 
-### 5.5 Media — `/api/v1/media`
+### 5.6 Media — `/api/v1/media`
 
 #### `POST /media/uploads` — 201, auth, rate-limited 30/min/IP
 `multipart/form-data`, field **`file`**.
@@ -426,6 +450,7 @@ Canonical status sets: room `{available, occupied, cleaning, maintenance}` · do
 |---|---|---|
 | `POST /auth/login` `POST /auth/refresh` `POST /auth/logout` `GET/PATCH /auth/me` | same | ✅ implemented |
 | `GET /tasks?limit=200` · `GET/POST /tasks/{id}[/start|/submit]` | same | ✅ implemented |
+| `GET /work-calendar?date_from&date_to` | same | ✅ implemented — CalendarScreen timeline feed |
 | `GET /maintenance` · `GET/POST /maintenance/{id}[/start|/resolve]` · `GET /maintenance/eligible-locations` · `POST /maintenance` | same | ✅ implemented |
 | `GET /zones` | `GET /zones` | ✅ implemented (`limit` param ignored by route — returns scoped set) |
 | `POST /media/uploads` | same | ✅ implemented |

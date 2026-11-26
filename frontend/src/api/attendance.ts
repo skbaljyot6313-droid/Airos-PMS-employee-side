@@ -71,9 +71,13 @@ export const isNotImplemented = (err: unknown): boolean => {
 export const mapWorkday = (w: WorkdayWire): Workday => ({
   state: w.state,
   date: w.date,
+  status: w.status ?? null,
   started_at: w.started_at ?? null,
   break_started_at: w.break_started_at ?? null,
   ended_at: w.ended_at ?? null,
+  work_seconds: w.work_seconds ?? null,
+  break_seconds: w.break_seconds ?? 0,
+  breaks: w.breaks ?? [],
 });
 
 export const mapAttendanceDay = (d: AttendanceDayWire): AttendanceDay => ({

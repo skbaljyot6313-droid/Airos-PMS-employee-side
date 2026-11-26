@@ -174,6 +174,8 @@ export interface Task {
   due_at: string | null;
   due_date: string | null;
   due_time: string | null;
+  /** IST occurrence date for recurring/generated work. */
+  operational_date?: string | null;
   scheduled_for?: string | null;
   start_time?: string | null;
   end_time?: string | null;
@@ -187,8 +189,12 @@ export interface Task {
   /** Which side created the assignment ('super_admin' | 'department_manager' …). */
   created_by_role?: string | null;
   expires_at?: string | null;
+  /** ISO timestamp when the employee sent work for review. */
+  submitted_at?: string | null;
   /** ISO timestamp when the task reached a terminal (done-bucket) state. */
   completed_at?: string | null;
+  abandoned_at?: string | null;
+  created_at?: string | null;
   instructions: string | null;
   checklist: ChecklistItem[];
   verification_config: VerificationConfig;
@@ -243,6 +249,8 @@ export interface MaintenanceTicket {
   zone_name: string | null;
   priority: MaintenancePriority;
   status: MaintenanceStatus;
+  /** 'YYYY-MM-DD' or backend due string for scheduled ticket work. */
+  due_date?: string | null;
   description?: string | null;
   /** Issue photos (attachments kind='issue'). */
   photos: string[];
@@ -390,14 +398,24 @@ export type LeaveType =
 
 export type RequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
 
+export interface BreakSegment {
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number | null;
+}
+
 /** One business day of work — start/break/end stamps are ISO datetimes. */
 export interface Workday {
   state: WorkdayState;
   /** Business date 'YYYY-MM-DD' (local calendar day). */
   date: string;
+  status?: AttendanceDayStatus | null;
   started_at: string | null;
   break_started_at: string | null;
   ended_at: string | null;
+  work_seconds?: number | null;
+  break_seconds?: number;
+  breaks?: BreakSegment[];
 }
 
 export interface AttendanceDay {

@@ -61,8 +61,9 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 
 - `main.py` — app factory, middleware (RequestID → AccessLog →
   SecurityHeaders → GZip → CORS), `/health` `/health/db` `/ready`.
-- `api/v1/router.py` — mounts: `auth`, `tasks`, `attendance`, `maintenance`,
-  `resources` (`/zones` only), `media`, `notifications` (+`/devices/*`),
+- `api/v1/router.py` — mounts: `auth`, `tasks`, `attendance`,
+  `work_calendar`, `maintenance`, `resources` (`/zones` only), `media`,
+  `notifications` (+`/devices/*`),
   `location`, `admin`, `mobile`, `realtime` (Centrifugo JWT minting —
   `priv:emp:{employee_uid}` self-channel only).
 - `dependencies/auth.py` — `get_current_user` (Bearer→User, Redis `sid`
@@ -71,6 +72,7 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   `require_location_service` / `require_release_service` (shared bearer,
   constant-time, fail closed 503 when unset).
 - `services/` — business logic: `task.py` (lifecycle + recurrence),
+  `work_calendar.py` (scoped attendance + allocated-work timeline feed),
   `maintenance.py` (tickets, coverage, auto-allocation), `structure.py`
   (property/area/zone/room/dorm/washroom CRUD + occupancy-driven cleaning
   tasks — mostly for the wider product, employee API consumes it),
@@ -139,6 +141,9 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
 - `POST /auth/login|refresh|logout`, `GET|PATCH /auth/me` (login 10/min,
   refresh 30/min).
 - `GET /tasks`, `GET /tasks/{id}`, `POST /tasks/{id}/start|submit`.
+- `GET /work-calendar?date_from&date_to` — scoped Calendar tab feed
+  (attendance detail + leave requests + scheduled tasks/assigned tickets
+  with history events for an inclusive IST date range, ≤92 days).
 - `GET|POST /maintenance`, `GET /maintenance/eligible-locations`
   (coverage-scoped picklist for every target kind: `rooms`, `dorms`,
   `beds` (nested under their dorm), `washrooms` (zone- and
@@ -198,9 +203,10 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   zone-workspace | maintenance-new | maintenance-detail); `BottomNav` tabs:
   Tasks / Maintenance / Attendance / Profile. `UpdateManager` gates on
   forced updates.
-- `screens/employee/` — TasksScreen, TaskDetailScreen, MaintenanceScreen,
-  ZoneWorkspaceScreen, MaintenanceNewScreen, MaintenanceDetailScreen,
-  AttendanceScreen, ProfileScreen; `screens/auth/LoginScreen.tsx`.
+- `screens/employee/` — TasksScreen, TaskDetailScreen, CalendarScreen,
+  MaintenanceScreen, ZoneWorkspaceScreen, MaintenanceNewScreen,
+  MaintenanceDetailScreen, AttendanceScreen, ProfileScreen;
+  `screens/auth/LoginScreen.tsx`.
 - `services/` — `locationTracker.ts` (orchestrates native tracking;
   web no-op), `nativeLocation.ts` + `updateInstaller.ts` (Capacitor plugin
   bridges), `updateService.ts` (versionCode compare, 4h throttle, pending
@@ -209,8 +215,9 @@ ENVIRONMENT,API_VERSIONING,EXTRACTION_MANIFEST,FILE_MANIFEST}.md`.
   (45s feed poll + realtime/resume nudges), `pushRegistration.ts`
   (FCM token → `POST /devices/register`).
 - `api/` domains — `client.ts`, `wire.ts`, `auth.ts`, `tasks.ts`,
-  `attendance.ts`, `shift.ts`, `maintenance.ts`, `directory.ts` (zones),
-  `location.ts`, `media.ts`, `mobile.ts` (version check), `notifications.ts`.
+  `attendance.ts`, `calendar.ts`, `shift.ts`, `maintenance.ts`,
+  `directory.ts` (zones), `location.ts`, `media.ts`, `mobile.ts`
+  (version check), `notifications.ts`.
 - `android/app/src/main/java/com/airos/staff/` — `LocationTrackingService`
   (foreground FGS + Fused Location Provider + on-disk JSONL retry queue +
   self-refresh on 401 + session re-mint on INVALID_TRACKING_SESSION +

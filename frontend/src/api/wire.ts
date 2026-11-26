@@ -171,6 +171,7 @@ export interface TaskWire {
   priority: string;
   due_date: string | null;
   due_time: string | null;
+  operational_date?: string | null;
   start_time: string | null;
   end_time: string | null;
   break_start_time: string | null;
@@ -335,9 +336,17 @@ export interface WorkdayWire {
   state: 'not_started' | 'working' | 'on_break' | 'completed';
   /** Business date 'YYYY-MM-DD' (backend IST wall-clock convention). */
   date: string;
+  status?: 'present' | 'week_off' | 'leave' | 'absent' | null;
   started_at: string | null;
   break_started_at: string | null;
   ended_at: string | null;
+  work_seconds?: number | null;
+  break_seconds?: number;
+  breaks?: {
+    started_at: string;
+    ended_at: string | null;
+    duration_seconds: number | null;
+  }[];
 }
 
 /** Per-calendar-day record inside GET /attendance/calendar — real
@@ -379,6 +388,18 @@ export interface AttendanceRequestWire {
 export interface AttendanceMonthWire {
   days: AttendanceDayWire[];
   requests: AttendanceRequestWire[];
+}
+
+/** GET /work-calendar?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD — scoped
+ *  timeline feed for the Calendar tab. Days always cover the full range;
+ *  task/ticket rows include history for that range. */
+export interface WorkCalendarWire {
+  date_from: string;
+  date_to: string;
+  days: { date: string; attendance: WorkdayWire }[];
+  requests: AttendanceRequestWire[];
+  tasks: TaskWire[];
+  maintenance: MaintenanceTicketWire[];
 }
 
 /** One shift assignment inside GET /attendance/shift — times are IST
